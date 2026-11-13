@@ -1,4 +1,7 @@
-function pptText(zh, en) { return languageOf() === 'en' ? en : zh; }
+function pptText(zh, en) {
+  const language = languageOf();
+  return language === 'ru' ? (RU[zh] ?? en ?? zh) : language === 'en' ? en : zh;
+}
 
 function PptPages({ project, selected, busy, imagePending, onChoose, onDuplicate, dirty, dataDirty }) {
   return h('aside', { className: 'ppt-page-rail', 'aria-label': pptText('幻灯片目录', 'Slide outline') },

@@ -15,6 +15,23 @@
   <img src="https://raw.githubusercontent.com/STARDUSTLC666/dsh-ppt/master/docs/assets/intro/workflow-zh-light.svg" alt="给出材料，拿到可以交付的演示文稿。 · 流程示意" width="100%">
 </picture>
 
+## Форк с русской локалью
+
+Это форк [STARDUSTLC666/dsh-ppt](https://github.com/STARDUSTLC666/dsh-ppt) с русским интерфейсом рабочего стола (раздел настроек «Презентации»). При языке хоста `ru` клиентский UI берёт строки из `templates/client-ru.js` (ключ — китайский оригинал); непереведённые строки показываются по-английски, содержимое слайдов и язык плеера дек не меняются. Версии форка: `<версия апстрима>-ru.N`, теги `v<версия апстрима>-ru.N`.
+
+Как забрать изменения апстрима:
+
+```bash
+git remote add upstream https://github.com/STARDUSTLC666/dsh-ppt.git   # один раз
+git fetch upstream
+git checkout ru-locale            # рабочая ветка форка
+git merge upstream/master
+pnpm install && pnpm build        # пересобрать lib/ (tsc + клиент + updates-клиент)
+node --test "test/*.test.mjs"     # тесты; client-locale проверяет цепочку ru → en → zh
+```
+
+После мержа: новые zh-строки апстрима доперевести в `templates/client-ru.js` (терминология — в шапке файла; найти новые ключи можно, сравнив EN-словарь `templates/client.js` со словарём RU), затем закоммитить и поставить тег `vX.Y.Z-ru.N`. Пока строка не переведена — она показывается по-английски, ничего не ломается.
+
 ## 功能
 
 - 生成 HTML 放映、可编辑 PPTX 与工程包。

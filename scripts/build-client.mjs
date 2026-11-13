@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const normalize = value => value.replace(/\r\n/g, '\n')
 const kit = normalize(readFileSync(join(root, 'templates/workbench-ui.js'), 'utf8'))
+// Russian workbench UI dictionary (keys are the Chinese originals; see templates/client-ru.js).
+const ru = normalize(readFileSync(join(root, 'templates/client-ru.js'), 'utf8'))
 let client = normalize(readFileSync(join(root, 'templates/client.js'), 'utf8'))
 if (client.includes('__ENGINE__')) {
   const name = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name
@@ -16,4 +18,4 @@ const marker = 'const W = createWorkbenchUI(React);'
 if (!client.includes(marker)) throw new Error('Workbench source marker missing')
 client = client.replace(marker, marker + '\n' + parts)
 mkdirSync(join(root, 'lib'), { recursive: true })
-writeFileSync(join(root, 'lib/client.js'), '// Generated from templates/client.js, templates/panels/ and templates/workbench-ui.js. Edit the sources.\n(function () {\n' + kit + '\n' + client + '\n})();\n')
+writeFileSync(join(root, 'lib/client.js'), '// Generated from templates/client.js, templates/panels/, templates/client-ru.js and templates/workbench-ui.js. Edit the sources.\n(function () {\n' + kit + '\n' + ru + '\n' + client + '\n})();\n')

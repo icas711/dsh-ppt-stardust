@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.20.6-ru.1 (2026-11-13)
+
+- Форк: русская локаль интерфейса рабочего стола. Язык хоста `ru` теперь распознаётся (`languageOf`), строки клиента берутся из нового словаря `templates/client-ru.js` (318 записей, ключ — китайский оригинал), цепочка fallback: ru → en → zh; непереведённые строки апстрима показываются по-английски. EN-словарь и английские строки не менялись.
+- Fork: Russian locale for the workbench UI. A `ru` host locale is detected (`languageOf`), client strings resolve from the new `templates/client-ru.js` dictionary (318 entries keyed by the Chinese original) with the fallback chain ru → en → zh; untranslated upstream strings fall back to English. The EN dictionary and English strings are unchanged.
+- Сборка: `scripts/build-client.mjs` подключает `templates/client-ru.js`; в `pnpm-workspace.yaml` разрешён build-скрипт koffi (`allowBuilds: koffi: true` вместо заглушки), иначе `pnpm install && pnpm build` падает на pnpm 11.
+- Build: `scripts/build-client.mjs` includes `templates/client-ru.js`; `pnpm-workspace.yaml` approves the koffi build script (`allowBuilds: koffi: true` replacing the placeholder), which otherwise fails `pnpm install && pnpm build` on pnpm 11.
+
 ## 0.20.6 (2026-11-14)
 
 - 适配 DSH 0.2.2-rc.3：PPTX 渲染器接受宿主内置的 @deepseek-ai/libreoffice-kit 0.2.3（0.1.5 继续可用），并实测其 createConverter / renderImages / convert 接口；最低 Harness 声明提升至 0.2.2-rc.3。

@@ -1,4 +1,5 @@
 node_modules/
 .smoke-deck/
+.pnpm-store/
 *.tgz
 .test-output/
