@@ -28,7 +28,7 @@ export class PptVisual {
   constructor(readonly directory: string, model?: VisualModel) { this.model = model }
   setModel(model?: VisualModel): void { this.model = model }
   dispose(): void { for (const c of this.active.values()) c.abort(); this.active.clear(); this.model = undefined }
-  async options(signal?: AbortSignal) { return { available: !!this.model, routes: this.model ? await this.model.routes(signal) : [] } }
+  async options(signal?: AbortSignal, owner?: string) { return { available: !!this.model, routes: this.model ? await this.model.routes(signal, owner) : [] } }
   private path(id: unknown): string { if (!uuid(id)) throw new Error('视觉记录 ID 无效 / Invalid visual review ID'); return join(this.directory,id+'.json') }
   private read(id: unknown): Run {
     const run = JSON.parse(bytes(this.path(id),600_000).toString('utf8'))
@@ -94,11 +94,11 @@ export class PptVisual {
     return {...view,stale,canAdopt:!stale&&run.status==='complete'&&run.rounds.length>1,
       rounds:run.rounds.map(r=>({deckId:r.deckId,revision:r.revision,ids:r.ids,cursor:r.cursor,findings:r.findings,applied:r.applied,missingFonts:r.missingFonts,rendered:!!r.receipt,pptxHash:r.pptxHash}))}
   }
-  async create(context: VisualContext,body: Record<string,unknown>,signal?: AbortSignal) {
+  async create(context: VisualContext,body: Record<string,unknown>,signal?: AbortSignal,owner?: string) {
     signal?.throwIfAborted()
     if(body.confirmed!==true)throw new Error('请确认视觉检查会发送所选页面图片 / Confirm sending the selected slide images')
     if(!this.model)throw new Error('请配置 DSH 视觉模型和图片附件服务 / Configure a DSH vision model and image service')
-    const route={provider:text(body.provider,256),model:text(body.model,256)},routes=await this.model.routes(signal)
+    const route={provider:text(body.provider,256),model:text(body.model,256)},routes=await this.model.routes(signal,owner)
     if(!routes.some(r=>r.provider===route.provider&&r.model===route.model))throw new Error('请选择支持图片输入的模型 / Choose a model with image input')
     const repairs=body.repairs
     if(!Number.isInteger(repairs)||Number(repairs)<0||Number(repairs)>2)throw new Error('最多自动修复两轮 / Choose zero to two repair rounds')
@@ -135,7 +135,7 @@ export class PptVisual {
       })
     })
   }
-  async step(context: VisualContext,id: unknown,body: Record<string,unknown>,signal?: AbortSignal) {
+  async step(context: VisualContext,id: unknown,body: Record<string,unknown>,signal?: AbortSignal,owner?: string) {
     const before=this.bound(context,id,true)
     if(body.confirmed!==true)throw new Error('请确认本轮视觉检查 / Confirm this visual review')
     if(this.active.has(before.id))throw new Error('视觉检查正在进行 / Visual review is busy')
@@ -164,7 +164,7 @@ export class PptVisual {
           previousFindings:run.rounds.at(-2)?.findings.filter(f=>batch.includes(f.slideId))||[],imageFits:slides.map(s=>({slideId:s.id,fit:s.image?.fit}))})
         if(input.length>60000)throw new Error('所选页面内容过长 / Selected slide content is too long')
         run.usedCalls++;this.locked(run.id,()=>this.write(run))
-        const output=await this.model.inspect(run.route,POLICY,input,images,active)
+        const output=await this.model.inspect(run.route,POLICY,input,images,active,owner)
         active.throwIfAborted();this.unchanged(context,run);this.render(context,run,round)
         if(output.length>30000)throw new Error('视觉结果过长 / Visual output limit')
         let value: any

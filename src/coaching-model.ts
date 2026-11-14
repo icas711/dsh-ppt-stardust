@@ -1,8 +1,10 @@
 /** Bounded, tool-free calls through the official DSH llm service. */
+import { ownerListing } from './model-listing.js'
+
 export interface ModelRoute { provider: string; model: string }
 export interface CoachingModel {
-  routes(signal?: AbortSignal): Promise<Array<ModelRoute & { label: string }>>
-  generate(route: ModelRoute, system: string, input: string, signal: AbortSignal): Promise<string>
+  routes(signal?: AbortSignal, owner?: string): Promise<Array<ModelRoute & { label: string }>>
+  generate(route: ModelRoute, system: string, input: string, signal: AbortSignal, owner?: string): Promise<string>
 }
 
 async function bounded<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -14,13 +16,14 @@ async function bounded<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 
 export function nativeCoachingModel(llm: any): CoachingModel {
   return {
-    async routes(signal) {
+    async routes(signal, owner) {
       const result: Array<ModelRoute & { label: string }> = []
       const active = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)])
-      const groups = await Promise.all(llm.listProviders().slice(0, 20).map(async (provider: any) => {
+      const listing = ownerListing(llm, owner)
+      const groups = await Promise.all((listing ? listing.providers() : llm.listProviders()).slice(0, 20).map(async (provider: any) => {
         active.throwIfAborted()
         try {
-          const models: any[] = await bounded(llm.listModels(provider.id), active)
+          const models: any[] = await bounded(listing ? listing.models(provider.id) : llm.listModels(provider.id), active)
           const group = []
           for (const model of models.slice(0, 100)) {
             if (model.inputModalities && !model.inputModalities.includes('text')) continue
@@ -32,8 +35,9 @@ export function nativeCoachingModel(llm: any): CoachingModel {
       for (const group of groups) result.push(...group)
       return result
     },
-    async generate(route, system, input, signal) {
-      if (!llm.listProviders().some((p: any) => p.id === route.provider)) throw new Error('所选模型服务已停用，请重新选择 / Model provider is unavailable')
+    async generate(route, system, input, signal, owner) {
+      const listing = ownerListing(llm, owner)
+      if (!(listing ? listing.providers() : llm.listProviders()).some((p: any) => p.id === route.provider)) throw new Error('所选模型服务已停用，请重新选择 / Model provider is unavailable')
       const active = AbortSignal.any([signal, AbortSignal.timeout(120_000)])
       let rejectAbort!: (reason: unknown) => void
       const aborted = new Promise<never>((_, reject) => { rejectAbort = reject })

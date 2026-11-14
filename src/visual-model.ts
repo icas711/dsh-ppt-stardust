@@ -1,10 +1,11 @@
 /** Native image calls use durable DSH attachments and the exact prepared route. */
 import type { ModelRoute } from './coaching-model.js'
+import { ownerListing } from './model-listing.js'
 
 export interface VisualImage { data: Uint8Array; name: string }
 export interface VisualModel {
-  routes(signal?: AbortSignal): Promise<Array<ModelRoute & { label: string }>>
-  inspect(route: ModelRoute, system: string, input: string, images: VisualImage[], signal: AbortSignal): Promise<string>
+  routes(signal?: AbortSignal, owner?: string): Promise<Array<ModelRoute & { label: string }>>
+  inspect(route: ModelRoute, system: string, input: string, images: VisualImage[], signal: AbortSignal, owner?: string): Promise<string>
 }
 class VisualCallError extends Error {}
 
@@ -17,20 +18,22 @@ async function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 
 export function nativeVisualModel(llm: any, attachments: any): VisualModel {
   return {
-    async routes(signal) {
+    async routes(signal, owner) {
       const active = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)])
-      const groups = await Promise.all(llm.listProviders().slice(0,20).map(async (provider: any) => {
+      const listing = ownerListing(llm, owner)
+      const groups = await Promise.all((listing ? listing.providers() : llm.listProviders()).slice(0,20).map(async (provider: any) => {
         try {
-          const models: any[] = await abortable(llm.listModels(provider.id), active)
+          const models: any[] = await abortable(listing ? listing.models(provider.id) : llm.listModels(provider.id), active)
           return models.slice(0,100).filter(m => m.inputModalities?.includes('image') && m.inputModalities?.includes('text'))
             .map(m => ({ provider: provider.id, model: m.id, label: (provider.name || provider.id) + ' / ' + (m.name || m.id) }))
         } catch { active.throwIfAborted(); return [] }
       }))
       return groups.flat()
     },
-    async inspect(route, system, input, images, signal) {
+    async inspect(route, system, input, images, signal, owner) {
       if (!images.length || images.length > 2 || images.some(i => i.data.byteLength > 4 * 1024 * 1024)) throw new Error('每次视觉检查需 1–2 张、每张不超过 4 MiB / Image request limit')
-      if (!llm.listProviders().some((p: any) => p.id === route.provider)) throw new Error('模型服务已停用 / Model provider is unavailable')
+      const listing = ownerListing(llm, owner)
+      if (!(listing ? listing.providers() : llm.listProviders()).some((p: any) => p.id === route.provider)) throw new Error('模型服务已停用 / Model provider is unavailable')
       const active = AbortSignal.any([signal, AbortSignal.timeout(120_000)])
       let stream: AsyncIterator<any> | undefined
       try {

@@ -36,7 +36,7 @@ export class PptCoaching {
   get available(): boolean { return !!this.model }
   setModel(model?: CoachingModel): void { this.model = model }
   dispose(): void { for (const controller of this.active.values()) controller.abort(); this.active.clear(); this.model = undefined }
-  async options(signal?: AbortSignal) { return { available: this.available, routes: this.model ? await this.model.routes(signal) : [] } }
+  async options(signal?: AbortSignal, owner?: string) { return { available: this.available, routes: this.model ? await this.model.routes(signal, owner) : [] } }
   private path(id: unknown): string { if (!uuid(id)) throw new Error('请选择有效的演练记录 / Invalid rehearsal record'); return join(this.directory, id + '.json') }
   private read(id: unknown): Run {
     const path = this.path(id), stat = lstatSync(path)
@@ -83,14 +83,14 @@ export class PptCoaching {
     const { material, slides, ownerPid, signature: _signature, ...view } = run
     return { ...view, stale: run.signature !== signature(context), maxCalls: run.mode === 'review' ? run.limit : run.limit + 1 }
   }
-  async create(context: CoachingContext, body: Record<string, unknown>, signal?: AbortSignal) {
+  async create(context: CoachingContext, body: Record<string, unknown>, signal?: AbortSignal, owner?: string) {
     signal?.throwIfAborted()
     if (body.confirmed !== true || !['review','practice'].includes(String(body.mode))) throw new Error('请主动选择 AI 预审或模拟答辩 / Choose an optional AI mode')
     if (!this.model) throw new Error('DSH 模型服务不可用，请先配置模型 / Configure a DSH model first')
     if (!['gentle','normal','strict'].includes(String(body.difficulty))) throw new Error('请选择提问强度 / Choose a difficulty')
     const route = {provider:text(body.provider,256),model:text(body.model,256)}
     if (!route.provider || !route.model || /[\x00-\x1f]/.test(route.provider + route.model)) throw new Error('请选择 DSH 中已有的模型 / Choose an existing DSH model')
-    const routes = await this.model.routes(signal)
+    const routes = await this.model.routes(signal, owner)
     if (!routes.some(r => r.provider === route.provider && r.model === route.model)) throw new Error('模型列表已变化，请重新选择 / Model selection changed')
     const mode = body.mode as Run['mode'], limit=Number(body.limit)
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > (mode === 'review' ? 3 : 5)) throw new Error('预审最多 3 轮，答辩最多 5 题 / Review: 1–3 rounds; practice: 1–5 questions')
@@ -137,7 +137,7 @@ export class PptCoaching {
       return finding
     })
   }
-  async step(context:CoachingContext,id:unknown,body:Record<string,unknown>,signal?:AbortSignal) {
+  async step(context:CoachingContext,id:unknown,body:Record<string,unknown>,signal?:AbortSignal,owner?:string) {
     if(!this.model)throw new Error('DSH 模型服务不可用 / Model service unavailable')
     if(body.confirmed!==true)throw new Error('请确认本次模型调用 / Confirm the model call')
     const before=this.bound(context,id,true),controller=new AbortController()
@@ -159,7 +159,7 @@ export class PptCoaching {
       const task=run.mode==='review'?REVIEW:run.questions.length?ASSESS:QUESTION
       const input=JSON.stringify({language:run.language,audience:run.audience,difficulty:run.difficulty,slides:run.slides,material:run.material,
         priorFindings:run.findings,questions:run.questions,finalQuestion:run.questions.length>=run.limit})
-      const output=await this.model.generate(run.route,POLICY+'\n'+task,input,active);active.throwIfAborted()
+      const output=await this.model.generate(run.route,POLICY+'\n'+task,input,active,owner);active.throwIfAborted()
       const value=parse(output)
       this.locked(run.id,()=>{
         const current=this.read(run.id)

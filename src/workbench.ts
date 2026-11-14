@@ -11,6 +11,7 @@ import { PptCoaching } from './coaching.js'
 import type { CoachingModel, ModelRoute } from './coaching-model.js'
 import { PptVisual } from './visual.js'
 import type { VisualModel } from './visual-model.js'
+import { workbenchOwner } from './web-owner.js'
 
 export const PPT_WORKBENCH_ROUTE = '/api/dsh-ppt/workbench'
 export const PPT_DOWNLOAD_ROUTE = '/api/dsh-ppt/download'
@@ -149,7 +150,7 @@ export class PptWorkbench {
     }
     return result
   }
-  async action(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
+  async action(body: Record<string, unknown>, signal?: AbortSignal, owner?: string): Promise<unknown> {
     signal?.throwIfAborted()
     if (body.operation === 'list') return { ok: true, projects: this.catalog() }
     if (body.operation === 'open') return this.view(body.id)
@@ -157,13 +158,13 @@ export class PptWorkbench {
     signal?.throwIfAborted()
     const context = { id: entry.id, manifest, ...(manifest.dataModel?{dataNotes:Object.fromEntries(manifest.slides.map((s:any)=>[s.id,engine.dataNotes(manifest,s)]))}:{}) }
     const visualContext = { id: entry.id, path: entry.path, manifest, engine }
-    if (body.operation === 'visual-options') return { ok: true, ...await this.visual.options(signal) }
+    if (body.operation === 'visual-options') return { ok: true, ...await this.visual.options(signal, owner) }
     if (body.operation === 'visual-list') return { ok: true, runs: this.visual.list(visualContext) }
     if (body.operation === 'visual-get') return { ok: true, run: this.visual.get(visualContext, body.runId) }
     if (body.operation === 'visual-stop') return { ok: true, run: this.visual.stop(visualContext, body.runId) }
     if (body.operation === 'visual-delete') return { ok: true, ...this.visual.remove(visualContext, body.runId) }
     if (body.operation === 'visual-page') return this.visual.page(visualContext, body.runId, body.round, body.slideId)
-    if (body.operation === 'coach-options') return { ok: true, ...await this.coaching.options(signal) }
+    if (body.operation === 'coach-options') return { ok: true, ...await this.coaching.options(signal, owner) }
     if (body.operation === 'coach-list') return { ok: true, runs: this.coaching.list(context) }
     if (body.operation === 'coach-get') return { ok: true, run: this.coaching.get(context, body.runId) }
     if (body.operation === 'coach-stop') return { ok: true, run: this.coaching.stop(context, body.runId) }
@@ -183,8 +184,8 @@ export class PptWorkbench {
       return { ok: true, data: 'data:image/png;base64,' + bytes.toString('base64') }
     }
     this.revision(body, manifest)
-    if (body.operation === 'visual-create') return { ok: true, run: await this.visual.create(visualContext, body, signal) }
-    if (body.operation === 'visual-step') return { ok: true, run: await this.visual.step(visualContext, body.runId, body, signal) }
+    if (body.operation === 'visual-create') return { ok: true, run: await this.visual.create(visualContext, body, signal, owner) }
+    if (body.operation === 'visual-step') return { ok: true, run: await this.visual.step(visualContext, body.runId, body, signal, owner) }
     if (body.operation === 'visual-adopt') {
       if (body.confirmed !== true) throw new Error('请确认采用修复副本 / Confirm adopting the repaired copy')
       const { path, render } = this.visual.adoption(visualContext, body.runId)
@@ -202,9 +203,9 @@ export class PptWorkbench {
       await this.remember(result,args)
       return { ...await this.view(digest(result.jsonPath)), originalId:entry.id }
     }
-    if (body.operation === 'coach-create') return { ok: true, run: await this.coaching.create(context, body, signal) }
+    if (body.operation === 'coach-create') return { ok: true, run: await this.coaching.create(context, body, signal, owner) }
     if (body.operation === 'coach-step') {
-      await this.coaching.step(context, body.runId, body, signal)
+      await this.coaching.step(context, body.runId, body, signal, owner)
       const current = await this.project(entry.id)
       return { ok: true, run: this.coaching.get({ id: entry.id, manifest: current.manifest }, body.runId) }
     }
@@ -311,7 +312,7 @@ export class PptWorkbench {
       } })
     } catch (error) { return fail(400, error instanceof Error ? error.message : String(error)) }
   }
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, owner?: string): Promise<Response> {
     if (request.method !== 'POST') return fail(405, '请使用 POST')
     if (request.headers.get('x-dsh-ppt-action') !== '1' || request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return fail(403, '请从演示文稿面板操作')
     const denied = originVerdict(request)
@@ -323,7 +324,7 @@ export class PptWorkbench {
       try { for (;;) { const { value, done } = await reader.read(); if (done) break; size += value.byteLength; if (size > REQUEST_LIMIT) { await reader.cancel(); return fail(413, '图片或请求超过 12 MiB，请压缩后重试') } chunks.push(value) } } finally { reader.releaseLock() }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
       if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(400, '请求必须是对象')
-      return json(200, await this.action(body, request.signal))
+      return json(200, await this.action(body, request.signal, owner))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return fail(/修订号冲突|已被修改|工程已被修改|正在被另一次|其他操作修改/.test(message) ? 409 : 400, message)
@@ -333,7 +334,7 @@ export class PptWorkbench {
 
 export function installPptWorkbench(ctx: any, workbench: PptWorkbench): void {
   ctx.inject?.(['connection'], (host: any) => {
-    host.connection?.fetch?.register({ path: PPT_WORKBENCH_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetch(request) })
+    host.connection?.fetch?.register({ path: PPT_WORKBENCH_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetch(request, workbenchOwner(ctx, request)) })
     host.connection?.fetch?.register({ path: PPT_DOWNLOAD_ROUTE, methods: ['GET'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetchDownload(request) })
   })
 }
