@@ -32,9 +32,9 @@ export declare class PptWorkbench {
     private view;
     private revision;
     private patch;
-    action(body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown>;
+    action(body: Record<string, unknown>, signal?: AbortSignal, owner?: string): Promise<unknown>;
     fetchDownload(request: Request): Promise<Response>;
-    fetch(request: Request): Promise<Response>;
+    fetch(request: Request, owner?: string): Promise<Response>;
 }
 export declare function installPptWorkbench(ctx: any, workbench: PptWorkbench): void;
 export {};

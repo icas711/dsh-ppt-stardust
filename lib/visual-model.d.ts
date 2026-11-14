@@ -5,9 +5,9 @@ export interface VisualImage {
     name: string;
 }
 export interface VisualModel {
-    routes(signal?: AbortSignal): Promise<Array<ModelRoute & {
+    routes(signal?: AbortSignal, owner?: string): Promise<Array<ModelRoute & {
         label: string;
     }>>;
-    inspect(route: ModelRoute, system: string, input: string, images: VisualImage[], signal: AbortSignal): Promise<string>;
+    inspect(route: ModelRoute, system: string, input: string, images: VisualImage[], signal: AbortSignal, owner?: string): Promise<string>;
 }
 export declare function nativeVisualModel(llm: any, attachments: any): VisualModel;

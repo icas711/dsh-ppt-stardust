@@ -1,5 +1,10 @@
 # 更新记录
 
+## 0.20.6-ru.2 (2026-11-14)
+
+- Форк: выбор ИИ-модели в рабочем столе видит личные модели пользователя. Обработчик workbench-маршрута определяет владельца по cookie веб-запроса (`webAuth.identityFromCookie`) и пробрасывает его в операции `coach-*`/`visual-*` и вызовы генерации; если харнес предоставляет `listModelsForOwner`/`listProvidersForOwner`, списки моделей и проверка провайдера берутся из личной плоскости владельца, иначе (старый харнес) — из общего списка, как в апстриме. Инструменты `ppt_*` в чате не затронуты: владельца там резолвит сам харнес по сессии.
+- Fork: workbench model selection now sees the web user's personal models. The workbench route handler resolves the owner from the request cookie (`webAuth.identityFromCookie`) and threads it into `coach-*`/`visual-*` operations and generation calls; when the harness exposes `listModelsForOwner`/`listProvidersForOwner`, model listing and provider checks use the owner's personal plane, otherwise (an older harness) they keep the shared listing as upstream. Chat-path `ppt_*` tools are untouched: the harness resolves their owner from the session.
+
 ## 0.20.6-ru.1 (2026-11-13)
 
 - Форк: русская локаль интерфейса рабочего стола. Язык хоста `ru` теперь распознаётся (`languageOf`), строки клиента берутся из нового словаря `templates/client-ru.js` (318 записей, ключ — китайский оригинал), цепочка fallback: ru → en → zh; непереведённые строки апстрима показываются по-английски. EN-словарь и английские строки не менялись.

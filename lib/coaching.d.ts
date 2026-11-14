@@ -36,7 +36,7 @@ export declare class PptCoaching {
     get available(): boolean;
     setModel(model?: CoachingModel): void;
     dispose(): void;
-    options(signal?: AbortSignal): Promise<{
+    options(signal?: AbortSignal, owner?: string): Promise<{
         available: boolean;
         routes: (ModelRoute & {
             label: string;
@@ -78,7 +78,7 @@ export declare class PptCoaching {
         updatedAt: string;
         error?: string;
     };
-    create(context: CoachingContext, body: Record<string, unknown>, signal?: AbortSignal): Promise<{
+    create(context: CoachingContext, body: Record<string, unknown>, signal?: AbortSignal, owner?: string): Promise<{
         stale: boolean;
         maxCalls: number;
         version: 1;
@@ -105,7 +105,7 @@ export declare class PptCoaching {
     private evidence;
     private question;
     private findings;
-    step(context: CoachingContext, id: unknown, body: Record<string, unknown>, signal?: AbortSignal): Promise<{
+    step(context: CoachingContext, id: unknown, body: Record<string, unknown>, signal?: AbortSignal, owner?: string): Promise<{
         stale: boolean;
         maxCalls: number;
         version: 1;

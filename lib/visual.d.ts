@@ -31,7 +31,7 @@ export declare class PptVisual {
     constructor(directory: string, model?: VisualModel);
     setModel(model?: VisualModel): void;
     dispose(): void;
-    options(signal?: AbortSignal): Promise<{
+    options(signal?: AbortSignal, owner?: string): Promise<{
         available: boolean;
         routes: (ModelRoute & {
             label: string;
@@ -84,7 +84,7 @@ export declare class PptVisual {
         reason?: string;
         error?: string;
     };
-    create(context: VisualContext, body: Record<string, unknown>, signal?: AbortSignal): Promise<{
+    create(context: VisualContext, body: Record<string, unknown>, signal?: AbortSignal, owner?: string): Promise<{
         stale: boolean;
         canAdopt: boolean;
         rounds: {
@@ -117,7 +117,7 @@ export declare class PptVisual {
         error?: string;
     }>;
     private findings;
-    step(context: VisualContext, id: unknown, body: Record<string, unknown>, signal?: AbortSignal): Promise<{
+    step(context: VisualContext, id: unknown, body: Record<string, unknown>, signal?: AbortSignal, owner?: string): Promise<{
         stale: boolean;
         canAdopt: boolean;
         rounds: {
