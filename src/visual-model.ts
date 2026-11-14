@@ -21,7 +21,8 @@ export function nativeVisualModel(llm: any, attachments: any): VisualModel {
     async routes(signal, owner) {
       const active = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)])
       const listing = ownerListing(llm, owner)
-      const groups = await Promise.all((listing ? listing.providers() : llm.listProviders()).slice(0,20).map(async (provider: any) => {
+      // Owner-scoped listing: the personal provider plane arrives whole; no cap on providers.
+      const groups = await Promise.all((listing ? listing.providers() : llm.listProviders()).map(async (provider: any) => {
         try {
           const models: any[] = await abortable(listing ? listing.models(provider.id) : llm.listModels(provider.id), active)
           return models.slice(0,100).filter(m => m.inputModalities?.includes('image') && m.inputModalities?.includes('text'))
@@ -34,19 +35,38 @@ export function nativeVisualModel(llm: any, attachments: any): VisualModel {
       if (!images.length || images.length > 2 || images.some(i => i.data.byteLength > 4 * 1024 * 1024)) throw new Error('每次视觉检查需 1–2 张、每张不超过 4 MiB / Image request limit')
       const listing = ownerListing(llm, owner)
       if (!(listing ? listing.providers() : llm.listProviders()).some((p: any) => p.id === route.provider)) throw new Error('模型服务已停用 / Model provider is unavailable')
+      // Owner web logins stream on their own provider plane and key; prepareCall
+      // cannot resolve personal routes, so that path streams directly and keeps
+      // provider misses loud instead of falling back to the shared plane.
+      const personal = !!owner && typeof llm.streamForOwner === 'function'
       const active = AbortSignal.any([signal, AbortSignal.timeout(120_000)])
       let stream: AsyncIterator<any> | undefined
-      try {
-        const info: any = await abortable(llm.resolveModelInfo(route.provider, route.model, active), active)
-        const prepared: any = await abortable(llm.prepareCall({ ...route, maxTokens: 6000,
-          ...(info?.reasoning?.efforts?.some((v: any) => v.id === 'off') ? { reasoningEffort: 'off' } : {}) }, active), active)
-        if (!prepared.inputModalities?.includes('image') || !prepared.inputModalities?.includes('text')) throw new VisualCallError('所选模型不能读取图片，请选择视觉模型 / Choose a model with image input')
+      const attach = async () => {
         const refs: any = await abortable(attachments.saveImages(images.map(i => ({ data: i.data, mediaType: 'image/png', name: i.name }))), active)
         if (!Array.isArray(refs) || refs.length !== images.length) throw new VisualCallError('图片存储未完成 / Image admission failed')
-        active.throwIfAborted()
-        stream = prepared.stream({ ...prepared.config, system, tools: [], signal: active,
-          messages: [{ role: 'user', content: [{ type: 'text', text: input }, ...refs.map(attachment => ({ type: 'image', attachment }))] }],
-        })[Symbol.asyncIterator]()
+        return refs
+      }
+      const message = (refs: any[]) => [{ role: 'user', content: [{ type: 'text', text: input }, ...refs.map(attachment => ({ type: 'image', attachment }))] }]
+      try {
+        let reasoningEffort: string | undefined
+        if (typeof llm.resolveModelInfo === 'function') {
+          try {
+            const info: any = await abortable(llm.resolveModelInfo(route.provider, route.model, active), active)
+            if (info?.reasoning?.efforts?.some((v: any) => v.id === 'off')) reasoningEffort = 'off'
+          } catch { active.throwIfAborted() /* Personal routes can lack reasoning facts; that must not fail the call. */ }
+        }
+        const config: any = { ...route, maxTokens: 6000, ...(reasoningEffort ? { reasoningEffort: 'off' } : {}) }
+        if (personal) {
+          const refs = await attach()
+          active.throwIfAborted()
+          stream = llm.streamForOwner(owner, { ...config, system, tools: [], signal: active, owner, messages: message(refs) })[Symbol.asyncIterator]()
+        } else {
+          const prepared: any = await abortable(llm.prepareCall(config, active), active)
+          if (!prepared.inputModalities?.includes('image') || !prepared.inputModalities?.includes('text')) throw new VisualCallError('所选模型不能读取图片，请选择视觉模型 / Choose a model with image input')
+          const refs = await attach()
+          active.throwIfAborted()
+          stream = prepared.stream({ ...prepared.config, system, tools: [], signal: active, messages: message(refs) })[Symbol.asyncIterator]()
+        }
         const blocks = new Map<number,string>(); let complete = false
         for (;;) {
           const part: any = await abortable(stream!.next(), active)
@@ -75,6 +95,9 @@ export function nativeVisualModel(llm: any, attachments: any): VisualModel {
         const code=error?.failure?.code || error?.code
         if (code==='AUTH') throw new VisualCallError('视觉模型认证失败，请检查 DSH 中的凭据 / Vision model authentication failed; check the DSH credential')
         if (code==='RATE_LIMIT') throw new VisualCallError('视觉模型服务限流，未自动重试 / Vision model rate limited; no automatic retry')
+        // Personal-route misses are stable harness categories with a harness-authored
+        // message; show that detail instead of the generic fallback.
+        if (code==='NO_ADAPTER' || code==='MISSING_CREDENTIAL') throw new VisualCallError(String(error?.message || code))
         throw new VisualCallError('视觉模型请求失败，请检查模型、凭据与图片输入配置；未自动重试 / Vision model request failed; check model, credential and image input settings; no automatic retry')
       } finally { if (stream?.return) void Promise.resolve(stream.return()).catch(() => {}) }
     },

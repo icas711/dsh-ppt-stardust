@@ -65,6 +65,103 @@ test('visual inspect rejects a provider outside the owner plane', async () => {
   await assert.rejects(nativeVisualModel(llm, {}).inspect({ provider: 'shared', model: 'vision-model' }, 's', 'i', images, new AbortController().signal, 'alice'), /已停用/)
 })
 
+test('the personal provider plane arrives whole: 36 providers, no cap on the list', async () => {
+  const { calls, llm } = ownerLlm()
+  llm.listProvidersForOwner = owner => Array.from({ length: 36 }, (_, i) => ({ id: 'provider-' + String(i).padStart(2, '0'), name: 'Provider ' + i }))
+  const routes = await nativeCoachingModel(llm).routes(undefined, 'alice')
+  assert.equal(routes.length, 72)
+  assert.deepEqual(routes.at(-1), { provider: 'provider-35', model: 'vision-model', label: 'Provider 35 / Vision model' })
+  const visual = await nativeVisualModel(llm, {}).routes(undefined, 'alice')
+  assert.equal(visual.length, 36)
+  assert.deepEqual(visual.at(-1), { provider: 'provider-35', model: 'vision-model', label: 'Provider 35 / Vision model' })
+})
+
+/** Llm whose personal plane streams through the owner seam instead of the shared stream. */
+function ownerStreamLlm(options = {}) {
+  const seen = {}
+  const llm = ownerLlm().llm
+  delete llm.stream
+  llm.resolveModelInfo = options.resolveModelInfo === undefined ? async () => ({ reasoning: { efforts: [{ id: 'off' }] } }) : options.resolveModelInfo
+  llm.streamForOwner = (owner, streamOptions) => {
+    seen.owner = owner
+    seen.options = streamOptions
+    if (options.throwOnStream) throw options.throwOnStream
+    return { [Symbol.asyncIterator]: async function* () {
+      yield { type: 'text-delta', index: 0, text: options.text || 'ok' }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+    } }
+  }
+  return { seen, llm }
+}
+
+test('coaching generation with an owner goes through streamForOwner, never the shared stream', async () => {
+  const { seen, llm } = ownerStreamLlm()
+  const signal = new AbortController().signal
+  const output = await nativeCoachingModel(llm).generate({ provider: 'personal', model: 'text-model' }, 'system prompt', 'input text', signal, 'alice')
+  assert.equal(output, 'ok')
+  assert.equal(seen.owner, 'alice')
+  assert.equal(seen.options.provider, 'personal')
+  assert.equal(seen.options.model, 'text-model')
+  assert.equal(seen.options.system, 'system prompt')
+  assert.deepEqual(seen.options.tools, [])
+  assert.equal(seen.options.owner, 'alice')
+  assert.deepEqual(seen.options.messages, [{ role: 'user', content: [{ type: 'text', text: 'input text' }] }])
+  // reasoningEffort=off derives from the resolved personal model facts.
+  assert.equal(seen.options.reasoningEffort, 'off')
+  // A missing streamForOwner (older harness) keeps the shared stream: covered by the
+  // 'generate validates...' test above, which defines llm.stream only.
+})
+
+test('coaching generation survives missing personal reasoning facts', async () => {
+  const { seen, llm } = ownerStreamLlm({ resolveModelInfo: async () => { throw new Error('NO_MODEL_INFO: personal routes carry no reasoning facts') } })
+  const output = await nativeCoachingModel(llm).generate({ provider: 'personal', model: 'text-model' }, 's', 'i', new AbortController().signal, 'alice')
+  assert.equal(output, 'ok')
+  assert.equal(seen.options.reasoningEffort, undefined)
+})
+
+test('a personal-route stream error surfaces as-is instead of falling back', async () => {
+  const { llm } = ownerStreamLlm({ throwOnStream: Object.assign(new Error('NO_ADAPTER: no personal credential for provider-35'), { code: 'NO_ADAPTER' }) })
+  await assert.rejects(nativeCoachingModel(llm).generate({ provider: 'personal', model: 'text-model' }, 's', 'i', new AbortController().signal, 'alice'), /NO_ADAPTER/)
+})
+
+test('visual inspection with an owner streams through streamForOwner without prepareCall', async () => {
+  const { seen, llm } = ownerStreamLlm({ text: 'seen' })
+  const images = [{ data: new TextEncoder().encode('png-bytes'), name: 'slide-1.png' }]
+  const saved = []
+  const output = await nativeVisualModel(llm, { saveImages: async items => { saved.push(...items); return [{ path: 'slide-1.png' }] } })
+    .inspect({ provider: 'personal', model: 'vision-model' }, 'system prompt', 'input text', images, new AbortController().signal, 'alice')
+  assert.equal(output, 'seen')
+  assert.equal(seen.owner, 'alice')
+  assert.equal(seen.options.provider, 'personal')
+  assert.equal(seen.options.model, 'vision-model')
+  assert.equal(seen.options.system, 'system prompt')
+  assert.equal(seen.options.reasoningEffort, 'off')
+  assert.equal(seen.options.owner, 'alice')
+  assert.deepEqual(seen.options.messages, [{ role: 'user', content: [{ type: 'text', text: 'input text' }, { type: 'image', attachment: { path: 'slide-1.png' } }] }])
+  assert.deepEqual(saved, [{ data: new TextEncoder().encode('png-bytes'), mediaType: 'image/png', name: 'slide-1.png' }])
+})
+
+test('a personal visual route miss keeps its harness detail instead of the generic fallback', async () => {
+  const { llm } = ownerStreamLlm({ throwOnStream: Object.assign(new Error('MISSING_CREDENTIAL: no key for the personal provider'), { code: 'MISSING_CREDENTIAL' }) })
+  const images = [{ data: new TextEncoder().encode('png-bytes'), name: 'slide-1.png' }]
+  await assert.rejects(
+    nativeVisualModel(llm, { saveImages: async () => [{ path: 'slide-1.png' }] })
+      .inspect({ provider: 'personal', model: 'vision-model' }, 's', 'i', images, new AbortController().signal, 'alice'),
+    error => error instanceof Error && error.message === 'MISSING_CREDENTIAL: no key for the personal provider')
+})
+
+test('visual inspection still validates image input on the shared plane', async () => {
+  const { seen, llm } = ownerStreamLlm()
+  delete llm.streamForOwner
+  llm.prepareCall = async route => ({ inputModalities: ['text'], config: { provider: route.provider }, stream() { throw new Error('should not stream') } })
+  const images = [{ data: new TextEncoder().encode('png-bytes'), name: 'slide-1.png' }]
+  await assert.rejects(
+    nativeVisualModel(llm, { saveImages: async () => [] })
+      .inspect({ provider: 'shared', model: 'text-model' }, 's', 'i', images, new AbortController().signal, undefined),
+    /不能读取图片/)
+  assert.equal(seen.owner, undefined)
+})
+
 test('workbench operations thread the request owner into options and creation', async () => {
   const directory = mkdtempSync(join(work, 'owner-'))
   try {

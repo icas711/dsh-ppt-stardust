@@ -20,7 +20,8 @@ export function nativeCoachingModel(llm: any): CoachingModel {
       const result: Array<ModelRoute & { label: string }> = []
       const active = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(15_000)])
       const listing = ownerListing(llm, owner)
-      const groups = await Promise.all((listing ? listing.providers() : llm.listProviders()).slice(0, 20).map(async (provider: any) => {
+      // Owner-scoped listing: the personal provider plane arrives whole; no cap on providers.
+      const groups = await Promise.all((listing ? listing.providers() : llm.listProviders()).map(async (provider: any) => {
         active.throwIfAborted()
         try {
           const models: any[] = await bounded(listing ? listing.models(provider.id) : llm.listModels(provider.id), active)
@@ -48,13 +49,20 @@ export function nativeCoachingModel(llm: any): CoachingModel {
         active.throwIfAborted()
         let reasoningEffort: string | undefined
         if (typeof llm.resolveModelInfo === 'function') {
-          const info: any = await Promise.race([llm.resolveModelInfo(route.provider, route.model, active), aborted])
-          if (info?.reasoning?.efforts?.some((value: any) => value.id === 'off')) reasoningEffort = 'off'
+          try {
+            const info: any = await Promise.race([llm.resolveModelInfo(route.provider, route.model, active), aborted])
+            if (info?.reasoning?.efforts?.some((value: any) => value.id === 'off')) reasoningEffort = 'off'
+          } catch { active.throwIfAborted() /* Personal routes can lack reasoning facts; that must not fail the call. */ }
         }
-        stream = llm.stream({ ...route, system, tools: [], maxTokens: 6000, signal: active,
+        const options = { ...route, system, tools: [], maxTokens: 6000, signal: active,
           ...(reasoningEffort ? { reasoningEffort } : {}),
-          messages: [{ role: 'user', content: [{ type: 'text', text: input }] }],
-        })[Symbol.asyncIterator]()
+          messages: [{ role: 'user', content: [{ type: 'text', text: input }] }] }
+        // Owner web logins generate on their own provider plane and key; errors
+        // (NO_ADAPTER / MISSING_CREDENTIAL) surface as-is, never a silent host-key
+        // fallback. Without the seam the shared server stream stays, as before.
+        stream = (owner && typeof llm.streamForOwner === 'function'
+          ? llm.streamForOwner(owner, { ...options, owner })
+          : llm.stream(options))[Symbol.asyncIterator]()
         const blocks = new Map<number, string>()
         let stopped = false
         for (;;) {
