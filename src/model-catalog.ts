@@ -1,10 +1,13 @@
 /**
  * Browser RPC to the host model catalog: the same `llm.models` call the DSH
- * Models page and the prompt selector use. The host resolves the caller's
- * personal provider plane from the session cookie, so no owner value travels
- * through plugin code here. The workbench server listing
- * (`coach-options` / `visual-options`) stays for compatibility; the cascade
- * UI reads this catalog and surfaces failures instead of swallowing them.
+ * Models page and the prompt selector use. The gateway dispatches by URL path —
+ * the method is the segment after `/api/` — so the envelope goes to
+ * `/api/llm.models`, origin-absolute because the workbench page may live at
+ * any document path. The host resolves the caller's personal provider plane
+ * from the session cookie, so no owner value travels through plugin code
+ * here. The workbench server listing (`coach-options` / `visual-options`)
+ * stays for compatibility; the cascade UI reads this catalog and surfaces
+ * failures instead of swallowing them.
  */
 export interface CatalogModel { id: string; name?: string; inputModalities?: string[] }
 export interface CatalogGroup { id: string; name?: string; models: CatalogModel[] }
@@ -31,7 +34,7 @@ function endpointOf(explicit?: URL | string): URL | string {
   if (explicit) return explicit
   const base = (globalThis as { document?: { baseURI?: string } }).document?.baseURI
   if (!base) throw new ModelCatalogError('catalog-unavailable', 'The model catalog needs a browser document or an explicit endpoint')
-  return new URL('api', base)
+  return new URL('/api/llm.models', base)
 }
 
 function detailOf(error: unknown): string {
@@ -68,6 +71,9 @@ export async function fetchModelCatalog(request: CatalogRequest = {}): Promise<M
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ type: 'client-request', rpcId: rpcId(), method: 'llm.models', payload: {} }),
     })
+    // A non-JSON gateway answer (login page, plain-text 404/401 body) must name
+    // its HTTP status instead of crashing inside response.json().
+    if (!response.ok) throw new ModelCatalogError('catalog-http', 'HTTP ' + response.status)
     envelope = await response.json()
   } catch (error) {
     if (error instanceof ModelCatalogError) throw error

@@ -12,7 +12,7 @@ test('the catalog posts the llm.models RPC envelope and returns normalized group
   const original = globalThis.fetch
   globalThis.fetch = async (url, init) => {
     seen.push({ url: String(url), init })
-    return { json: async () => envelope({ groups: [
+    return { ok: true, status: 200, json: async () => envelope({ groups: [
       { id: 'zai-coding-cn', name: 'Zai Coding', models: [textModel, visionModel, { id: '', name: 'Broken' }, null] },
       { id: 'empty-provider', models: [] },
       { noId: true },
@@ -35,7 +35,7 @@ test('the catalog posts the llm.models RPC envelope and returns normalized group
 
 test('provider names fill in when the catalog omits the display name', async () => {
   const original = globalThis.fetch
-  globalThis.fetch = async () => ({ json: async () => envelope({ groups: [{ id: 'zai-coding-cn', models: [{ id: 'glm-4.6' }] }] }) })
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => envelope({ groups: [{ id: 'zai-coding-cn', models: [{ id: 'glm-4.6' }] }] }) })
   try {
     assert.deepEqual(catalogRoutes((await fetchModelCatalog({ endpoint: 'http://hub.test/api' })).groups, acceptsText),
       [{ provider: 'zai-coding-cn', model: 'glm-4.6', label: 'zai-coding-cn / glm-4.6' }])
@@ -44,7 +44,7 @@ test('provider names fill in when the catalog omits the display name', async () 
 
 test('a refused catalog call is loud and keeps the harness detail', async () => {
   const original = globalThis.fetch
-  globalThis.fetch = async () => ({ json: async () => ({ type: 'server-response', result: { ok: false, error: { message: 'NO_ADAPTER: provider missing on the personal plane' } } }) })
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ type: 'server-response', result: { ok: false, error: { message: 'NO_ADAPTER: provider missing on the personal plane' } } }) })
   try {
     await assert.rejects(fetchModelCatalog({ endpoint: 'http://hub.test/api' }), error => {
       assert.ok(error instanceof ModelCatalogError)
@@ -58,15 +58,28 @@ test('a refused catalog call is loud and keeps the harness detail', async () => 
 test('a wrong envelope, an unreadable answer and a body without groups all fail loudly', async () => {
   const original = globalThis.fetch
   const cases = [
-    { json: async () => ({ type: 'server-response', result: { ok: true } }), message: 'catalog-shape' },
-    { json: async () => ({ hello: true }), message: 'catalog-protocol' },
-    { json: async () => { throw new Error('unexpected end of JSON') }, message: 'catalog-unreachable' },
+    { response: { ok: true, status: 200, json: async () => ({ type: 'server-response', result: { ok: true } }) }, message: 'catalog-shape' },
+    { response: { ok: true, status: 200, json: async () => ({ hello: true }) }, message: 'catalog-protocol' },
+    { response: { ok: true, status: 200, json: async () => { throw new Error('unexpected end of JSON') } }, message: 'catalog-unreachable' },
   ]
   try {
-    for (const response of cases) {
-      globalThis.fetch = async () => response
-      await assert.rejects(fetchModelCatalog({ endpoint: 'http://hub.test/api' }), error => error instanceof ModelCatalogError && error.message === response.message)
+    for (const caseRow of cases) {
+      globalThis.fetch = async () => caseRow.response
+      await assert.rejects(fetchModelCatalog({ endpoint: 'http://hub.test/api' }), error => error instanceof ModelCatalogError && error.message === caseRow.message)
     }
+  } finally { globalThis.fetch = original }
+})
+
+test('a non-JSON gateway answer (404/401 text body) names the HTTP status instead of a JSON parse crash', async () => {
+  const original = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: false, status: 404, json: async () => { throw new Error('Unexpected token o, "not found" is not valid JSON') } })
+  try {
+    await assert.rejects(fetchModelCatalog({ endpoint: 'http://hub.test/api' }), error => {
+      assert.ok(error instanceof ModelCatalogError)
+      assert.equal(error.message, 'catalog-http')
+      assert.equal(error.detail, 'HTTP 404')
+      return true
+    })
   } finally { globalThis.fetch = original }
 })
 
@@ -120,7 +133,7 @@ test('the cascade renders provider groups from the RPC and picks a route key', a
   // The RPC fetch lives in the VM sandbox globals, not the Node ones.
   const rpcFetch = async (url, init) => {
     calls.push({ url: String(url), body: JSON.parse(init.body) })
-    return { json: async () => ({ type: 'server-response', result: { ok: true, value: { groups: [
+    return { ok: true, status: 200, json: async () => ({ type: 'server-response', result: { ok: true, value: { groups: [
       { id: 'zai-coding-cn', name: 'Zai Coding', models: [{ id: 'glm-4.6', name: 'GLM-4.6' }] },
       { id: 'empty', name: 'Empty', models: [] },
     ], failures: [{ provider: 'off', message: 'timeout' }] } } } ) }
@@ -158,7 +171,7 @@ test('the cascade renders provider groups from the RPC and picks a route key', a
   await new Promise(resolve => setImmediate(resolve))
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(calls.length, 1, 'opening the cascade fetched the catalog once')
-  assert.equal(calls[0].url, 'http://hub.test/desktop/api')
+  assert.equal(calls[0].url, 'http://hub.test/api/llm.models')
   assert.equal(calls[0].body.type, 'client-request')
   assert.equal(calls[0].body.method, 'llm.models')
   assert.deepEqual(calls[0].body.payload, {})

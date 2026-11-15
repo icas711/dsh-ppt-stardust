@@ -1,10 +1,13 @@
 /**
  * Browser RPC to the host model catalog: the same `llm.models` call the DSH
- * Models page and the prompt selector use. The host resolves the caller's
- * personal provider plane from the session cookie, so no owner value travels
- * through plugin code here. The workbench server listing
- * (`coach-options` / `visual-options`) stays for compatibility; the cascade
- * UI reads this catalog and surfaces failures instead of swallowing them.
+ * Models page and the prompt selector use. The gateway dispatches by URL path —
+ * the method is the segment after `/api/` — so the envelope goes to
+ * `/api/llm.models`, origin-absolute because the workbench page may live at
+ * any document path. The host resolves the caller's personal provider plane
+ * from the session cookie, so no owner value travels through plugin code
+ * here. The workbench server listing (`coach-options` / `visual-options`)
+ * stays for compatibility; the cascade UI reads this catalog and surfaces
+ * failures instead of swallowing them.
  */
 export interface CatalogModel {
     id: string;

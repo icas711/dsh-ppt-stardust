@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.20.6-ru.4 (2026-11-15)
+
+- Совместимость с харнесом: RPC каталога моделей теперь уходит на `/api/llm.models` (абсолютный путь от origin, `src/model-catalog.ts`). Шлюз форка диспетчеризует вызовы по пути — метод обязан быть сегментом после `/api/` — а прежний относительный `new URL('api', baseURI)` давал POST ровно на `/api`, откуда хост отвечал 404 с телом `not found`, и каскад падал с «Unexpected token 'o', "not found" is not valid JSON». Остальные вызовы мастерской (`api/dsh-ppt/workbench`) не менялись — они и работали.
+- Harness compatibility: the model catalog RPC now posts to `/api/llm.models` (origin-absolute path, `src/model-catalog.ts`). The fork's gateway dispatches by URL path — the method must be the segment after `/api/` — while the old relative `new URL('api', baseURI)` POSTed exactly `/api`, where the host answered 404 with the body `not found` and the cascade crashed with "Unexpected token 'o', "not found" is not valid JSON". The other workbench calls (`api/dsh-ppt/workbench`) never broke and stay unchanged.
+- Клиент: не-JSON ответ шлюза (страница логина, текстовая 401/404) показывается как `catalog-http: HTTP <статус>` с кнопкой «Повторить» вместо сырого падения `response.json()`.
+- Client: a non-JSON gateway answer (login page, plain-text 401/404) surfaces as `catalog-http: HTTP <status>` with a retry instead of a raw `response.json()` crash.
+
 ## 0.20.6-ru.3 (2026-11-14)
 
 - Форк: каскад выбора модели в рабочем столе (репетиция и визуальная проверка) — «кнопка → активные провайдеры → модели» на общем компоненте ModelCascade. Каталог читается RPC-вызовом хоста `llm.models` (новый `src/model-catalog.ts`, собирается в `lib/client.js`): хост сам резолвит личные группы по cookie веб-сессии. Перезапрос — при открытии флааута и по кнопке «Обновить модели»; недоступный RPC — явная ошибка с «Повторить», не немой пустой список; `failures` каталога показываются уведомлением. Серверный листинг `coach-options`/`visual-options` оставлен для совместимости, формат ключа `project.modelRoute` (`JSON.stringify([provider, model])`) не менялся.
