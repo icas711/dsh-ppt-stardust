@@ -40,7 +40,7 @@ const HELP = `dsh-ppt —— 一句话 / 一篇文档 → HTML 放映 + PPTX 导
   --revision <n>     编辑 / 撤销预期修订号，防止覆盖他人修改
   --list-templates  列出场景结构参考
   --theme <id>        视觉主题：${THEME_IDS.join(' / ')}（默认 ${DEFAULT_THEME}）
-  --lang <id>         界面语言：zh / en / bilingual（默认 zh）
+  --lang <id>         界面语言：zh / en / bilingual / ru（默认 zh）
   --motion <on|off>   页间转场与要点入场动画（默认 on；off 产出纯静态）
   --out <dir>         输出目录（默认当前目录）
   --file <name>       文件名前缀（默认取标题）

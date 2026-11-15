@@ -1,6 +1,6 @@
 /** dsh-ppt 的公共类型。 */
 export type PptThemeId = 'swiss' | 'velvet' | 'data' | 'soft' | 'bold';
-export type PptLanguage = 'zh' | 'en' | 'bilingual';
+export type PptLanguage = 'zh' | 'en' | 'bilingual' | 'ru';
 export type PptSlideLayout = 'cover' | 'section' | 'bullets' | 'statement' | 'quote' | 'table' | 'closing' | 'image' | 'image-left' | 'image-right' | 'chart';
 export type PptTemplateId = 'weekly' | 'defense' | 'project' | 'pitch';
 export interface PptImageSpec {
@@ -37,6 +37,10 @@ export interface PptQualityIssue {
     code: string;
     message: string;
     suggestion: string;
+    messageEn?: string;
+    suggestionEn?: string;
+    messageRu?: string;
+    suggestionRu?: string;
 }
 export interface PptQualityResult {
     ok: boolean;
@@ -45,6 +49,8 @@ export interface PptQualityResult {
     warningCount: number;
     issues: PptQualityIssue[];
     note: string;
+    noteEn?: string;
+    noteRu?: string;
 }
 export interface PptVerification {
     static: 'checked';

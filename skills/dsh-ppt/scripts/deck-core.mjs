@@ -179,7 +179,33 @@ export const LANGUAGES = {
       popupBlocked: '浏览器拦截了演讲者窗口，请允许弹出窗口后按 V 重试',
       fullscreenUnavailable: '当前窗口无法进入全屏，请在浏览器中独立打开演示文件后重试。',
       notesCloseLabel: '关闭备注',
-      overviewHint: '点击缩略图跳页，方向键切换，Enter 进入，Esc 退出'
+      overviewHint: '点击缩略图跳页，方向键切换，Enter 进入，Esc 退出',
+      fullscreenToggle: '全屏',
+      helpNav: '翻页',
+      helpFirstLast: '首末页',
+      helpFullscreen: '全屏',
+      helpPrint: '打印',
+      helpBlank: '黑屏',
+      helpWhite: '白屏',
+      presenterShortHint: '← → 翻页 · P 暂停 · T 重置 · +/- 字号 · B/W 黑/白屏 · Esc 结束',
+      blankBlack: '黑屏',
+      blankWhite: '白屏',
+      blankBlackOff: '取消黑屏',
+      blankWhiteOff: '取消白屏',
+      pauseResume: '继续',
+      pausePause: '暂停',
+      presenterTimer: '计时',
+      presenterTitle: '演讲者视图',
+      prevTitle: '上一页',
+      nextTitle: '下一页',
+      pauseTitle: '暂停',
+      resumeTitle: '继续',
+      resetTimerTitle: '重置计时',
+      notesFontDown: '备注字号减小',
+      notesFontUp: '备注字号增大',
+      endShowTitle: '结束放映',
+      endShowLabel: '结束放映',
+      presenterClockTitle: '本地时间',
     },
   },
   en: {
@@ -215,7 +241,95 @@ export const LANGUAGES = {
       popupBlocked: 'The presenter window was blocked. Allow pop-ups and press V to retry.',
       fullscreenUnavailable: 'Fullscreen is unavailable here. Open the presentation in a browser tab and try again.',
       notesCloseLabel: 'Close notes',
-      overviewHint: 'Click a thumbnail to jump; arrows move, Enter opens, Esc exits'
+      overviewHint: 'Click a thumbnail to jump; arrows move, Enter opens, Esc exits',
+      fullscreenToggle: 'Fullscreen',
+      helpNav: 'navigate',
+      helpFirstLast: 'first / last',
+      helpFullscreen: 'fullscreen',
+      helpPrint: 'print',
+      helpBlank: 'black screen',
+      helpWhite: 'white screen',
+      presenterShortHint: '← → navigate · P pause · T reset · +/- text size · B/W black/white · Esc close',
+      blankBlack: 'Black',
+      blankWhite: 'White',
+      blankBlackOff: 'Back to slides',
+      blankWhiteOff: 'Back to slides',
+      pauseResume: 'Resume',
+      pausePause: 'Pause',
+      presenterTimer: 'Timer',
+      presenterTitle: 'Presenter view',
+      prevTitle: 'Previous slide',
+      nextTitle: 'Next slide',
+      pauseTitle: 'Pause',
+      resumeTitle: 'Resume',
+      resetTimerTitle: 'Reset timer',
+      notesFontDown: 'Smaller notes text',
+      notesFontUp: 'Larger notes text',
+      endShowTitle: 'End show',
+      endShowLabel: 'End show',
+      presenterClockTitle: 'Local time',
+    },
+  },
+  ru: {
+    id: 'ru',
+    attr: 'ru-RU',
+    ui: {
+      slide: 'Слайд',
+      of: 'из',
+      theme: 'Тема',
+      help: '← → листать · F во весь экран · G обзор · S заметки · P печать',
+      coverKicker: 'Вступление',
+      pointKicker: 'Тезис',
+      statementKicker: 'Главная мысль',
+      quoteKicker: 'Цитата',
+      tableKicker: 'Данные',
+      continuation: ' (продолжение)',
+      notesLabel: 'Заметки докладчика',
+      notesToggle: 'Заметки',
+      closingTitle: 'Спасибо',
+      closingSubtitle: 'Вопросы и обсуждение',
+      generatedBy: 'Создано в dsh-ppt',
+      overviewToggle: 'Обзор',
+      presenterToggle: 'Докладчик',
+      presenterLabel: 'Режим докладчика',
+      helpTitle: 'Горячие клавиши',
+      noNotes: '(На этом слайде нет заметок)',
+      closeLabel: 'Закрыть',
+      currentLabel: 'Текущий',
+      nextLabel: 'Следующий',
+      timerLabel: 'Таймер',
+      presenterHint: 'Заметки: клавиша S показывает их сверху, пока не открыт режим докладчика; после открытия — только в окне докладчика.',
+      wrapHint: 'Переход к слайду',
+      popupBlocked: 'Окно докладчика заблокировано. Разрешите всплывающие окна и нажмите V повторно.',
+      fullscreenUnavailable: 'Полноэкранный режим недоступен. Откройте презентацию в отдельной вкладке браузера и повторите.',
+      notesCloseLabel: 'Закрыть заметки',
+      overviewHint: 'Нажмите на миниатюру, чтобы перейти; стрелки листают, Enter открывает, Esc выходит',
+      fullscreenToggle: 'Во весь экран',
+      helpNav: 'листать',
+      helpFirstLast: 'начало / конец',
+      helpFullscreen: 'во весь экран',
+      helpPrint: 'печать',
+      helpBlank: 'чёрный экран',
+      helpWhite: 'белый экран',
+      presenterShortHint: '← → листать · P пауза · T сброс · +/- размер заметок · B/W чёрный/белый · Esc закрыть',
+      blankBlack: 'Чёрный',
+      blankWhite: 'Белый',
+      blankBlackOff: 'Вернуть слайды',
+      blankWhiteOff: 'Вернуть слайды',
+      pauseResume: 'Продолжить',
+      pausePause: 'Пауза',
+      presenterTimer: 'Таймер',
+      presenterTitle: 'Режим докладчика',
+      prevTitle: 'Предыдущий слайд',
+      nextTitle: 'Следующий слайд',
+      pauseTitle: 'Пауза',
+      resumeTitle: 'Продолжить',
+      resetTimerTitle: 'Сбросить таймер',
+      notesFontDown: 'Мельче текст заметок',
+      notesFontUp: 'Крупнее текст заметок',
+      endShowTitle: 'Завершить показ',
+      endShowLabel: 'Завершить показ',
+      presenterClockTitle: 'Местное время',
     },
   },
   bilingual: {
@@ -251,7 +365,33 @@ export const LANGUAGES = {
       popupBlocked: '浏览器拦截了演讲者窗口 · Presenter window blocked; allow pop-ups and press V',
       fullscreenUnavailable: '当前窗口无法全屏，请独立打开演示文件 · Open this presentation in a browser tab for fullscreen.',
       notesCloseLabel: '关闭备注 · Close notes',
-      overviewHint: '点击缩略图跳页 · Click to jump, arrows move, Enter opens, Esc exits'
+      overviewHint: '点击缩略图跳页 · Click to jump, arrows move, Enter opens, Esc exits',
+      fullscreenToggle: '全屏 · Fullscreen',
+      helpNav: '翻页 · navigate',
+      helpFirstLast: '首末页 · first / last',
+      helpFullscreen: '全屏 · fullscreen',
+      helpPrint: '打印 · print',
+      helpBlank: '黑屏 · black',
+      helpWhite: '白屏 · white',
+      presenterShortHint: '← → 翻页/navigate · P 暂停/pause · T 重置/reset · +/- 字号/text size · B/W 黑/白屏 · Esc 结束/close',
+      blankBlack: '黑屏 · Black',
+      blankWhite: '白屏 · White',
+      blankBlackOff: '取消黑屏 · Back to slides',
+      blankWhiteOff: '取消白屏 · Back to slides',
+      pauseResume: '继续 · Resume',
+      pausePause: '暂停 · Pause',
+      presenterTimer: '计时 · Timer',
+      presenterTitle: '演讲者视图 · Presenter view',
+      prevTitle: '上一页 · Previous slide',
+      nextTitle: '下一页 · Next slide',
+      pauseTitle: '暂停 · Pause',
+      resumeTitle: '继续 · Resume',
+      resetTimerTitle: '重置计时 · Reset timer',
+      notesFontDown: '备注字号减小 · Smaller notes',
+      notesFontUp: '备注字号增大 · Larger notes',
+      endShowTitle: '结束放映 · End show',
+      endShowLabel: '结束放映 · End show',
+      presenterClockTitle: '本地时间 · Local time',
     },
   },
 }
@@ -261,7 +401,7 @@ export const LANGUAGES = {
 // ---------------------------------------------------------------------------
 
 function themePages(lang) {
-  return lang === 'en'
+  return lang === 'en' || lang === 'ru'
     ? { title: 'dsh-ppt theme gallery', hint: 'Pick a theme id for ppt_create', usage: 'theme', dark: 'dark', light: 'light', palette: 'Palette' }
     : { title: 'dsh-ppt 主题预览', hint: '把 id 填给 ppt_create 的 theme 参数', usage: 'theme', dark: '深色', light: '浅色', palette: '色板' }
 }
@@ -269,9 +409,9 @@ function themePages(lang) {
 /** 单套主题的 960x540 SVG 色板卡：可直接放进 README / npm 首屏。 */
 export function renderThemeSvg(input, lang = 'zh') {
   const theme = typeof input === 'string' ? resolveTheme(input) : input
-  const pick = (pair) => (lang === 'en' ? pair.en : pair.zh)
+  const pick = (pair) => (lang === 'en' || lang === 'ru' ? pair.en : pair.zh)
   const p = theme.palette
-  const L = themePages(lang === 'en' ? 'en' : 'zh')
+  const L = themePages(lang === 'en' || lang === 'ru' ? 'en' : 'zh')
   const font = theme.fonts.heading.replace(/"/g, "'")
   const bodyFont = theme.fonts.body.replace(/"/g, "'")
   const out = []
@@ -305,14 +445,14 @@ export function renderThemeSvg(input, lang = 'zh') {
 
 /** 自包含主题对比页：5 套主题并排，含色板与用法。 */
 export function renderThemePreviewHtml(lang = 'zh') {
-  const L = themePages(lang === 'en' ? 'en' : 'zh')
+  const L = themePages(lang === 'en' || lang === 'ru' ? 'en' : 'zh')
   const cards = THEME_IDS.map((id) => {
     const theme = THEMES[id]
-    const pick = (pair) => (lang === 'en' ? pair.en : pair.zh)
+    const pick = (pair) => (lang === 'en' || lang === 'ru' ? pair.en : pair.zh)
     const chips = Object.keys(theme.palette).map((key) =>
       '<span class="chip"><i style="background:' + theme.palette[key] + '"></i>' + escapeHtml(String(theme.palette[key]).toUpperCase()) + '</span>').join('')
     return '<figure class="card" id="theme-' + escapeHtml(id) + '">' +
-      renderThemeSvg(theme, lang === 'en' ? 'en' : 'zh') +
+      renderThemeSvg(theme, lang === 'en' || lang === 'ru' ? 'en' : 'zh') +
       '<figcaption><div class="row"><strong>' + escapeHtml(id) + '</strong><span class="badge">' + escapeHtml(pick(theme.name)) + '</span></div>' +
       '<p class="muted">' + escapeHtml(pick(theme.mood)) + ' · ' + escapeHtml(pick(theme.bestFor)) + '</p>' +
       '<p class="chips">' + chips + '</p>' +
@@ -378,7 +518,7 @@ export function resolveLanguage(input) {
   const id = String(input ?? 'zh').trim().toLowerCase()
   const language = LANGUAGES[id]
   if (!language) {
-    throw new Error('dsh-ppt：未知语言 "' + id + '"，可选：zh / en / bilingual')
+    throw new Error('dsh-ppt：未知语言 "' + id + '"，可选：zh / en / bilingual / ru')
   }
   return language
 }
@@ -391,7 +531,7 @@ export function resolveMotion(input) {
 }
 
 export function listThemes(lang = 'zh') {
-  const pick = (pair) => (lang === 'en' ? pair.en : pair.zh)
+  const pick = (pair) => (lang === 'en' || lang === 'ru' ? pair.en : pair.zh)
   return THEME_IDS.map((id) => {
     const theme = THEMES[id]
     return {
@@ -1264,7 +1404,7 @@ ${slides}
   <button id="presenter-toggle" type="button" title="V · ${escapeHtml(ui.presenterToggle)}">${escapeHtml(ui.presenterToggle)}</button>
   <button id="overview-toggle" type="button" title="G · ${escapeHtml(ui.overviewToggle)}" aria-pressed="false">${escapeHtml(ui.overviewToggle)}</button>
   <button id="help-toggle" type="button" title="?" aria-label="${escapeHtml(ui.helpTitle)}">?</button>
-  <button id="fullscreen" type="button" title="F · Fullscreen" aria-label="Fullscreen">⛶</button>
+  <button id="fullscreen" type="button" title="F · ${escapeHtml(ui.fullscreenToggle)}" aria-label="${escapeHtml(ui.fullscreenToggle)}">⛶</button>
 </div>
 <div id="notes-panel" role="region" aria-label="${escapeHtml(ui.notesLabel)}">
   <div class="notes-head">
@@ -1275,7 +1415,7 @@ ${slides}
 </div>
 <div id="help-panel" hidden>
   <div class="notes-label">${escapeHtml(ui.helpTitle)}</div>
-  <p><kbd>←</kbd> <kbd>→</kbd> / <kbd>Space</kbd> 翻页 · <kbd>Home</kbd> / <kbd>End</kbd> 首末页 · <kbd>S</kbd> ${escapeHtml(ui.notesToggle)} · <kbd>V</kbd> ${escapeHtml(ui.presenterToggle)} · <kbd>G</kbd> ${escapeHtml(ui.overviewToggle)} · <kbd>F</kbd> 全屏 · <kbd>P</kbd> 打印 · <kbd>B</kbd> 黑屏 · <kbd>W</kbd> 白屏 · <kbd>Esc</kbd> ${escapeHtml(ui.closeLabel)} · <kbd>?</kbd> ${escapeHtml(ui.helpTitle)}</p>
+  <p><kbd>←</kbd> <kbd>→</kbd> / <kbd>Space</kbd> ${escapeHtml(ui.helpNav)} · <kbd>Home</kbd> / <kbd>End</kbd> ${escapeHtml(ui.helpFirstLast)} · <kbd>S</kbd> ${escapeHtml(ui.notesToggle)} · <kbd>V</kbd> ${escapeHtml(ui.presenterToggle)} · <kbd>G</kbd> ${escapeHtml(ui.overviewToggle)} · <kbd>F</kbd> ${escapeHtml(ui.helpFullscreen)} · <kbd>P</kbd> ${escapeHtml(ui.helpPrint)} · <kbd>B</kbd> ${escapeHtml(ui.helpBlank)} · <kbd>W</kbd> ${escapeHtml(ui.helpWhite)} · <kbd>Esc</kbd> ${escapeHtml(ui.closeLabel)} · <kbd>?</kbd> ${escapeHtml(ui.helpTitle)}</p>
   <p>${escapeHtml(ui.presenterHint)}</p>
   <p>${escapeHtml(ui.overviewHint)}</p>
 </div>
@@ -1417,7 +1557,7 @@ ${slides}
     const labelNext = ${JSON.stringify(ui.nextLabel)};
     const labelNotes = ${JSON.stringify(ui.notesLabel)};
     const noNotes = ${JSON.stringify(ui.noNotes)};
-    const hintText = ${JSON.stringify('← → 翻页 · P 暂停 · T 重置 · +/- 字号 · B/W 黑/白屏 · Esc 结束')};
+    const hintText = ${JSON.stringify(ui.presenterShortHint)};
     const deckTitle = ${JSON.stringify(manifest.title).replace(/</g, '\\u003c')};
     const langAttr = ${JSON.stringify(lang.attr)};
     const cs = getComputedStyle(document.documentElement);
@@ -1462,8 +1602,8 @@ ${slides}
       'function fit(){fitBox(q("pv-cur"));fitBox(q("pv-next"));var th=q("thumbs").children;for(var i=0;i<th.length;i++){fitBox(th[i])}}',
       'function setSlide(box,html){box.innerHTML="";var f=document.createElement("div");f.className="pv-slide";f.innerHTML=html;box.appendChild(f)}',
       'function buildThumbs(){var box=q("thumbs");box.innerHTML="";slides.forEach(function(html,i){var t=document.createElement("div");t.className="thumb";var f=document.createElement("div");f.className="pv-slide";f.innerHTML=html;t.appendChild(f);t.addEventListener("click",function(){post({__dshPpt:"cmd",kind:"go",index:i})});box.appendChild(t)});fit()}',
-      'function renderState(st){index=st.index;total=st.total||total;q("pcounter").textContent=(index+1)+" / "+total;setSlide(q("pv-cur"),slides[index]||"");setSlide(q("pv-next"),slides[(index+1)%total]||"");q("pnotes").textContent=st.notes||' + JSON.stringify(ui.noNotes) + ';q("pprog").style.width=((index+1)/total*100)+"%";curBlank=st.blank||null;q("pv-black").setAttribute("aria-pressed",curBlank==="black"?"true":"false");q("pv-white").setAttribute("aria-pressed",curBlank==="white"?"true":"false");q("pv-black").textContent=curBlank==="black"?"取消黑屏":"黑屏";q("pv-white").textContent=curBlank==="white"?"取消白屏":"白屏";var th=q("thumbs").children;for(var i=0;i<th.length;i++){th[i].classList.toggle("is-current",i===index)}fit()}',
-      'function togglePause(){paused=!paused;if(!paused)started=Date.now()-elapsed;var b=q("pause");b.setAttribute("aria-pressed",paused?"true":"false");b.textContent=paused?"继续":"暂停"}',
+      'function renderState(st){index=st.index;total=st.total||total;q("pcounter").textContent=(index+1)+" / "+total;setSlide(q("pv-cur"),slides[index]||"");setSlide(q("pv-next"),slides[(index+1)%total]||"");q("pnotes").textContent=st.notes||' + JSON.stringify(ui.noNotes) + ';q("pprog").style.width=((index+1)/total*100)+"%";curBlank=st.blank||null;q("pv-black").setAttribute("aria-pressed",curBlank==="black"?"true":"false");q("pv-white").setAttribute("aria-pressed",curBlank==="white"?"true":"false");q("pv-black").textContent=curBlank==="black"?${JSON.stringify(ui.blankBlackOff)}:${JSON.stringify(ui.blankBlack)};q("pv-white").textContent=curBlank==="white"?${JSON.stringify(ui.blankWhiteOff)}:${JSON.stringify(ui.blankWhite)};var th=q("thumbs").children;for(var i=0;i<th.length;i++){th[i].classList.toggle("is-current",i===index)}fit()}',
+      'function togglePause(){paused=!paused;if(!paused)started=Date.now()-elapsed;var b=q("pause");b.setAttribute("aria-pressed",paused?"true":"false");b.textContent=paused?${JSON.stringify(ui.pauseResume)}:${JSON.stringify(ui.pausePause)}}',
       'function resetTimer(){started=Date.now();elapsed=0}',
       'function applyNotesSize(){document.documentElement.style.setProperty("--notes-size",notesSize+"px")}',
       'window.addEventListener("message",function(e){var d=e.data||{};if(d.__dshPpt==="init"&&!initialized){initialized=true;slides=d.slides||[];total=d.total||slides.length;cssText=d.css||"";var st=document.createElement("style");st.textContent=cssText;document.head.appendChild(st);q("ptitle").textContent=d.title||"";buildThumbs()}else if(d.__dshPpt==="state"){renderState(d)}else if(d.__dshPpt==="close"){window.close()}});',
@@ -1481,14 +1621,14 @@ ${slides}
       'q("end").addEventListener("click",function(){post({__dshPpt:"cmd",kind:"end"});window.close()});',
       'applyNotesSize();tick();function ready(){if(initialized)return;post({__dshPpt:"ready"});readyTries++;if(readyTries<5)setTimeout(ready,700)}setTimeout(ready,250);',
     ].join('');
-    return '<!DOCTYPE html><html lang="' + langAttr + '"><head><meta charset="UTF-8"><title>' + deckTitle + ' · 演讲者视图</title><style>' + css + '</style></head><body>'
-      + '<header><div id="ptitle"></div><div id="pcounter"></div><div id="pclock" title="本地时间"></div></header>'
+    return '<!DOCTYPE html><html lang="' + langAttr + '"><head><meta charset="UTF-8"><title>' + deckTitle + ' · ${ui.presenterTitle}</title><style>' + css + '</style></head><body>'
+      + '<header><div id="ptitle"></div><div id="pcounter"></div><div id="pclock" title="${ui.presenterClockTitle}"></div></header>'
       + '<main><div class="col">'
       + '<div class="card"><div class="lbl">' + labelCurrent + '</div><div class="pv" id="pv-cur"></div></div>'
       + '<div class="card"><div class="lbl">' + labelNext + '</div><div class="pv" id="pv-next"></div></div>'
       + '<div class="card"><div class="lbl">SLIDES</div><div id="thumbs"></div></div>'
       + '</div><div class="col"><div class="card card-notes"><div class="lbl">' + labelNotes + '</div><div id="pnotes"></div></div></div></main>'
-      + '<footer><button id="prev" title="上一页 (←)">◀</button><button id="next" title="下一页 (→)">▶</button><button id="pause" title="暂停 (P)" aria-pressed="false">暂停</button><button id="reset" title="重置计时 (T)">重置计时</button><button id="font-minus" title="备注字号减小 (-)">A−</button><button id="font-plus" title="备注字号增大 (+)">A+</button><button id="pv-black" title="黑屏 (B)">黑屏</button><button id="pv-white" title="白屏 (W)">白屏</button><button id="end" title="结束放映 (Esc)">结束放映</button><div id="ptimer">00:00</div><div class="bar"><div id="pprog"></div></div><div class="hint">' + hintText + '</div></footer>'
+      + '<footer><button id="prev" title="${ui.prevTitle} (←)">◀</button><button id="next" title="${ui.nextTitle} (→)">▶</button><button id="pause" title="${ui.pauseTitle} (P)" aria-pressed="false">${ui.pausePause}</button><button id="reset" title="${ui.resetTimerTitle} (T)">${ui.resetTimerTitle}</button><button id="font-minus" title="${ui.notesFontDown} (-)">A−</button><button id="font-plus" title="${ui.notesFontUp} (+)">A+</button><button id="pv-black" title="${ui.blankBlack} (B)">${ui.blankBlack}</button><button id="pv-white" title="${ui.blankWhite} (W)">${ui.blankWhite}</button><button id="end" title="${ui.endShowTitle} (Esc)">${ui.endShowLabel}</button><div id="ptimer">00:00</div><div class="bar"><div id="pprog"></div></div><div class="hint">' + hintText + '</div></footer>'
       + '<scr' + 'ipt>' + js + '</scr' + 'ipt></body></html>';
   }
 

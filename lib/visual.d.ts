@@ -72,7 +72,7 @@ export declare class PptVisual {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         route: ModelRoute;
         repairs: number;
         maxCalls: number;
@@ -104,7 +104,7 @@ export declare class PptVisual {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         route: ModelRoute;
         repairs: number;
         maxCalls: number;
@@ -137,7 +137,7 @@ export declare class PptVisual {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         route: ModelRoute;
         repairs: number;
         maxCalls: number;
@@ -169,7 +169,7 @@ export declare class PptVisual {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         route: ModelRoute;
         repairs: number;
         maxCalls: number;

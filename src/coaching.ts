@@ -8,9 +8,44 @@ export type CoachingContext = { id: string; manifest: any; dataNotes?: Record<st
 type Kind = 'expression' | 'logic' | 'evidence'
 type Finding = { id: string; slideId: string; kind: Kind; question: string; answer: string; issue: string; suggestion: string; reference: string; quote: string; grounded: boolean; patch?: Record<string, string | string[]> }
 type Question = { id: string; slideId: string; question: string; answer?: string; feedback?: string; needsEvidence?: boolean; reference: string; quote: string }
-type Run = { version: 1; id: string; projectId: string; deckId: string; revision: number; signature: string; title: string; language: 'zh' | 'en';
+type Run = { version: 1; id: string; projectId: string; deckId: string; revision: number; signature: string; title: string; language: 'zh' | 'en' | 'ru';
   mode: 'review' | 'practice'; difficulty: 'gentle' | 'normal' | 'strict'; audience: string; limit: number; usedCalls: number; completedRounds: number; route: ModelRoute;
   status: 'ready' | 'busy' | 'paused' | 'complete'; ownerPid?: number; material: string; slides: any[]; findings: Finding[]; questions: Question[]; createdAt: string; updatedAt: string; error?: string }
+type CoachingTexts = { backup: string; answerExcerpt: string; toPrepare: string; evidence: string; missingEvidence: string; rehearsalNote: string; disclaimer: string; stale: string; evidenceNeeded: string; notAnswered: string; evidenceHeading: string; noGaps: string }
+const COACHING_TEXTS: Record<'zh' | 'en' | 'ru', CoachingTexts> = {
+  zh: {
+    backup: '备用问答：', answerExcerpt: '回答节选：', toPrepare: '待补充',
+    evidence: '依据：', missingEvidence: '缺少依据，展示前需补充',
+    rehearsalNote: '彩排记录，不代表事实已验证。\n',
+    disclaimer: 'AI 演练建议，不代表事实核验通过，也不预测真实评委或听众表现。',
+    stale: '工程已更新，此报告基于旧修订。',
+    evidenceNeeded: '待补充依据', notAnswered: '未作答',
+    evidenceHeading: '待补充材料清单',
+    noGaps: '本次未列出其他缺口，仍需自行核对事实与来源。',
+  },
+  en: {
+    backup: 'Backup: ', answerExcerpt: 'Answer excerpt: ', toPrepare: 'To prepare',
+    evidence: 'Evidence: ', missingEvidence: 'Missing; verify before presenting',
+    rehearsalNote: 'Rehearsal record, not fact certification.\n',
+    disclaimer: 'AI rehearsal suggestions; not factual verification or a prediction of real audience performance.',
+    stale: 'The project has changed since this report.',
+    evidenceNeeded: 'Evidence needed', notAnswered: 'Not answered',
+    evidenceHeading: 'Evidence to prepare',
+    noGaps: 'No additional gaps identified by this rehearsal; verify sources yourself.',
+  },
+  ru: {
+    backup: 'Резервный вопрос-ответ: ', answerExcerpt: 'Ответ (фрагмент): ', toPrepare: 'Ответ подготовить отдельно',
+    evidence: 'Доказательство: ', missingEvidence: 'Доказательство отсутствует; проверить перед показом',
+    rehearsalNote: 'Запись репетиции; это не проверка фактов.\n',
+    disclaimer: 'Советы ИИ-репетиции; это не проверка фактов и не прогноз реакции реальной аудитории.',
+    stale: 'Проект изменился после составления этого отчёта.',
+    evidenceNeeded: 'Нужны доказательства', notAnswered: 'Нет ответа',
+    evidenceHeading: 'Что подготовить (доказательства)',
+    noGaps: 'Других пробелов репетиция не назвала; факты и источники всё равно проверьте сами.',
+  },
+}
+const coachingTexts = (language: 'zh' | 'en' | 'ru'): CoachingTexts => COACHING_TEXTS[language] ?? COACHING_TEXTS.zh
+const coachingLanguage = (value: unknown): 'zh' | 'en' | 'ru' => value === 'en' ? 'en' : value === 'ru' ? 'ru' : 'zh'
 const norm = (text: string) => text.normalize('NFC').replace(/\s+/g, ' ').trim()
 const hash = (text: string) => createHash('sha256').update(text).digest('hex')
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
@@ -103,7 +138,7 @@ export class PptCoaching {
     mkdirSync(this.directory,{recursive:true,mode:0o700})
     if (this.list(context).length >= 20 || readdirSync(this.directory).filter(f => f.endsWith('.json')).length >= 200) throw new Error('请删除旧记录后再开始（每个工程 20 次，本机共 200 次） / Delete old records first (20 per project, 200 total)')
     const run: Run={version:1,id:randomUUID(),projectId:context.id,deckId:context.manifest.deckId,revision:context.manifest.revision,signature:signature(context),title:context.manifest.title,
-      language:body.language==='en'?'en':'zh',mode,difficulty:body.difficulty as Run['difficulty'],audience:text(body.audience,100)||'general',limit,usedCalls:0,completedRounds:0,route,status:'ready',material,slides,findings:[],questions:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}
+      language:coachingLanguage(body.language),mode,difficulty:body.difficulty as Run['difficulty'],audience:text(body.audience,100)||'general',limit,usedCalls:0,completedRounds:0,route,status:'ready',material,slides,findings:[],questions:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}
     this.locked(run.id,()=>this.write(run)); return this.get(context,run.id)
   }
   private evidence(run: Run, value: any) {
@@ -206,16 +241,16 @@ export class PptCoaching {
       if(Object.keys(verified.patch).some(k=>Object.hasOwn(patch,k)))throw new Error('同一字段有多项建议，请分次选择 / Conflicting suggestions for the same field')
       Object.assign(patch,verified.patch);bySlide.set(verified.slideId,patch)
     }
-    const append=backup.map(id=>{const card=run.mode==='review'?run.findings.find(f=>f.id===id):run.questions.find(q=>q.id===id);if(!card)throw new Error('备用问答不存在 / Unknown backup card');const english=run.language==='en',answer=card.answer||'';return {layout:'bullets',title:(english?'Backup: ':'备用问答：')+card.question.slice(0,70),bullets:[(english?'Answer excerpt: ':'回答节选：')+(answer.slice(0,360)||(english?'To prepare':'待补充')),(english?'Evidence: ':'依据：')+(card.quote?.slice(0,180)||(english?'Missing; verify before presenting':'缺少依据，展示前需补充'))],notes:(english?'Rehearsal record, not fact certification.\n':'彩排记录，不代表事实已验证。\n')+card.question+'\n\n'+answer+'\n\n'+('suggestion'in card?card.suggestion:card.feedback||'')+(card.reference?'\n'+card.reference+': '+card.quote:'')}})
+    const append=backup.map(id=>{const card=run.mode==='review'?run.findings.find(f=>f.id===id):run.questions.find(q=>q.id===id);if(!card)throw new Error('备用问答不存在 / Unknown backup card');const t=coachingTexts(run.language),answer=card.answer||'';return {layout:'bullets',title:t.backup+card.question.slice(0,70),bullets:[t.answerExcerpt+(answer.slice(0,360)||t.toPrepare),t.evidence+(card.quote?.slice(0,180)||t.missingEvidence)],notes:t.rehearsalNote+card.question+'\n\n'+answer+'\n\n'+('suggestion'in card?card.suggestion:card.feedback||'')+(card.reference?'\n'+card.reference+': '+card.quote:'')}})
     return {edits:[...bySlide].map(([slide,patch])=>({slide,patch})),append}
   }
   markdown(context:CoachingContext,id:unknown):string {
-    const run=this.bound(context,id),english=run.language==='en',lines=['# '+run.title.replace(/[\r\n]/g,' '),`Revision: ${run.revision} · Model: ${run.route.provider}/${run.route.model} · Calls: ${run.usedCalls}`,
-      english?'AI rehearsal suggestions; not factual verification or a prediction of real audience performance.':'AI 演练建议，不代表事实核验通过，也不预测真实评委或听众表现。',run.signature!==signature(context)?(english?'The project has changed since this report.':'工程已更新，此报告基于旧修订。'):'']
-    for(const f of run.findings)lines.push('## '+f.kind+' · '+f.slideId,f.issue,f.question,f.answer,f.suggestion,f.reference?f.reference+': '+f.quote:(english?'Evidence needed':'待补充依据'))
-    for(const q of run.questions)lines.push('## '+q.question,q.answer||(english?'Not answered':'未作答'),q.feedback||'',q.reference?q.reference+': '+q.quote:(english?'Evidence needed':'待补充依据'))
+    const run=this.bound(context,id),t=coachingTexts(run.language),lines=['# '+run.title.replace(/[\r\n]/g,' '),`Revision: ${run.revision} · Model: ${run.route.provider}/${run.route.model} · Calls: ${run.usedCalls}`,
+      t.disclaimer,run.signature!==signature(context)?t.stale:'']
+    for(const f of run.findings)lines.push('## '+f.kind+' · '+f.slideId,f.issue,f.question,f.answer,f.suggestion,f.reference?f.reference+': '+f.quote:t.evidenceNeeded)
+    for(const q of run.questions)lines.push('## '+q.question,q.answer||t.notAnswered,q.feedback||'',q.reference?q.reference+': '+q.quote:t.evidenceNeeded)
     const missing=[...run.findings.filter(f=>f.kind==='evidence'||!f.grounded).map(f=>f.question||f.issue),...run.questions.filter(q=>q.needsEvidence||!q.answer).map(q=>q.question)]
-    lines.push('## '+(english?'Evidence to prepare':'待补充材料清单'),...(missing.length?missing.map(item=>'- [ ] '+item):(english?['No additional gaps identified by this rehearsal; verify sources yourself.']:['本次未列出其他缺口，仍需自行核对事实与来源。'])))
+    lines.push('## '+t.evidenceHeading,...(missing.length?missing.map(item=>'- [ ] '+item):[t.noGaps]))
     return lines.join('\n\n')+'\n'
   }
 }

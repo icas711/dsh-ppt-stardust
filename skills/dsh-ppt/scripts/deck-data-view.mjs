@@ -15,59 +15,59 @@ export function renderDataView(manifest, theme) {
 
 /** Embedded verbatim. All material text is written with DOM text APIs. */
 function initDataView(data, math, chartRenderer) {
-  const en=data.language==='en',L=(zh,english)=>en?english:zh,byId=new Map(data.metrics.map(m=>[m.id,m]));
+  const en=data.language==='en',ru=data.language==='ru',L=(zh,english,ruText)=>ru?(ruText??english):en?english:zh,byId=new Map(data.metrics.map(m=>[m.id,m]));
   const panel=document.getElementById('data-panel'),controls=[],baseline=Object.fromEntries(data.metrics.filter(m=>m.kind==='input').map(m=>[m.id,m.value]));
   let parameters={...baseline},values=math.solve(data.metrics),valid=true,dirty=false,selection=data.metrics[0]?.id;
   for(const metric of data.metrics)if(metric.ast)math.inspect(metric.ast,new Set(byId.keys()));
   function el(tag,text,parent,attributes={}){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;for(const[key,value]of Object.entries(attributes))node.setAttribute(key,String(value));if(parent)parent.append(node);return node;}
   function button(text,parent,click){const node=el('button',text,parent,{type:'button'});node.addEventListener('click',event=>{event.stopPropagation();click(event);});return node;}
-  const header=el('div',undefined,panel,{class:'data-head'});el('h2',L('数字溯源与现场推演','Data lineage and what-if'),header,{id:'data-title'});button(L('关闭','Close'),header,()=>panel.close());
-  el('p',L('来源表示数字如何得到，不代表事实已核验。推演参数均为用户假设。','Lineage explains how numbers were obtained, not whether they are true. Adjustable parameters are assumptions.'),panel,{class:'data-muted'});
+  const header=el('div',undefined,panel,{class:'data-head'});el('h2',L('数字溯源与现场推演','Data lineage and what-if','Происхождение чисел и сценарии'),header,{id:'data-title'});button(L('关闭','Close','Закрыть'),header,()=>panel.close());
+  el('p',L('来源表示数字如何得到，不代表事实已核验。推演参数均为用户假设。','Lineage explains how numbers were obtained, not whether they are true. Adjustable parameters are assumptions.','Происхождение объясняет, как получены числа, но не подтверждает их истинность. Настраиваемые параметры — допущения.'),panel,{class:'data-muted'});
   const notice=el('div','',panel,{role:'status',class:'data-notice'}),error=el('div','',panel,{role:'alert',class:'data-error'});error.hidden=true;
-  const scenario=el('section',undefined,panel);el('h3',L('现场推演','What-if assumptions'),scenario);
+  const scenario=el('section',undefined,panel);el('h3',L('现场推演','What-if assumptions','Сценарии «что если»'),scenario);
   for(const metric of data.metrics.filter(m=>m.kind==='input')){
     const row=el('div',undefined,scenario,{class:'data-control'}),label=el('label',metric.label,row,{for:'data-input-'+metric.id}),formatted=el('output','',label);
-    const range=el('input',undefined,row,{type:'range',min:metric.min,max:metric.max,step:metric.step,value:metric.value,'aria-label':metric.label+' '+L('滑杆','slider')}),number=el('input',undefined,row,{type:'number',id:'data-input-'+metric.id,min:metric.min,max:metric.max,step:metric.step,value:metric.value});
+    const range=el('input',undefined,row,{type:'range',min:metric.min,max:metric.max,step:metric.step,value:metric.value,'aria-label':metric.label+' '+L('滑杆','slider','ползунок')}),number=el('input',undefined,row,{type:'number',id:'data-input-'+metric.id,min:metric.min,max:metric.max,step:metric.step,value:metric.value});
     controls.push({metric,range,number,formatted});
     function change(event){const raw=event.target.value;const next={...parameters,[metric.id]:raw===''?NaN:Number(raw)};update(next);}
     range.addEventListener('input',change);number.addEventListener('input',change);
     if(metric.note)el('p',metric.note,row,{class:'data-muted'});
   }
-  if(!controls.length)el('p',L('本工程没有可调假设，原始事实不会被滑杆修改。','No adjustable assumptions. Source facts cannot be changed with sliders.'),scenario);
-  const actions=el('div',undefined,scenario,{class:'data-actions'});button(L('恢复已保存参数','Reset to saved values'),actions,()=>update({...baseline}));
-  const save=button(L('保存推演参数','Save scenario parameters'),actions,()=>download('scenario.json',JSON.stringify({schemaVersion:1,deckId:data.deckId,revision:data.revision,fingerprint:data.fingerprint,parameters},null,2),'application/json'));
-  if(window.parent!==window){save.disabled=true;save.title=L('在 DSH 工作台中确认并保存静态 PPTX','Confirm and save the static PPTX in the DSH workbench');}
-  el('p',L('HTML 可离线推演。要生成对应的可编辑 PPTX，请在 DSH 工作台导入参数并确认保存。未保存推演时，旧 PPTX 的下载会暂缓。','HTML supports offline what-if. Import saved parameters into the DSH workbench and confirm to create the matching editable PPTX. Older PPTX downloads are blocked while values are unsaved.'),scenario,{class:'data-muted'});
-  el('h3',L('追问数字出处','Inspect a number'),panel);
-  const chooser=el('select',undefined,panel,{'aria-label':L('溯源指标','Trace metric')});data.metrics.forEach(m=>el('option',m.label,chooser,{value:m.id}));chooser.addEventListener('change',()=>{selection=chooser.value;showEvidence();});
+  if(!controls.length)el('p',L('本工程没有可调假设，原始事实不会被滑杆修改。','No adjustable assumptions. Source facts cannot be changed with sliders.','В проекте нет настраиваемых допущений; исходные факты ползунками не меняются.'),scenario);
+  const actions=el('div',undefined,scenario,{class:'data-actions'});button(L('恢复已保存参数','Reset to saved values','Вернуть сохранённые значения'),actions,()=>update({...baseline}));
+  const save=button(L('保存推演参数','Save scenario parameters','Сохранить параметры сценария'),actions,()=>download('scenario.json',JSON.stringify({schemaVersion:1,deckId:data.deckId,revision:data.revision,fingerprint:data.fingerprint,parameters},null,2),'application/json'));
+  if(window.parent!==window){save.disabled=true;save.title=L('在 DSH 工作台中确认并保存静态 PPTX','Confirm and save the static PPTX in the DSH workbench','Подтвердите и сохраните статичный PPTX в рабочей области DSH');}
+  el('p',L('HTML 可离线推演。要生成对应的可编辑 PPTX，请在 DSH 工作台导入参数并确认保存。未保存推演时，旧 PPTX 的下载会暂缓。','HTML supports offline what-if. Import saved parameters into the DSH workbench and confirm to create the matching editable PPTX. Older PPTX downloads are blocked while values are unsaved.','HTML поддерживает сценарии офлайн. Чтобы создать соответствующий редактируемый PPTX, импортируйте параметры в рабочую область DSH и подтвердите сохранение. Пока сценарий не сохранён, загрузка старого PPTX приостанавливается.'),scenario,{class:'data-muted'});
+  el('h3',L('追问数字出处','Inspect a number','Проверить происхождение числа'),panel);
+  const chooser=el('select',undefined,panel,{'aria-label':L('溯源指标','Trace metric','Показатель для проверки')});data.metrics.forEach(m=>el('option',m.label,chooser,{value:m.id}));chooser.addEventListener('change',()=>{selection=chooser.value;showEvidence();});
   const evidence=el('section',undefined,panel,{class:'data-evidence'});
-  const toggle=button(L('数字来源 / 推演','Sources / what-if'),document.getElementById('delivery-bar'),()=>open());toggle.id='data-toggle';
+  const toggle=button(L('数字来源 / 推演','Sources / what-if','Источники / сценарии'),document.getElementById('delivery-bar'),()=>open());toggle.id='data-toggle';
   function open(id,missing){if(id&&byId.has(id)){selection=id;chooser.value=id;}showEvidence(missing);if(!panel.open)panel.showModal();if(id||missing)evidence.scrollIntoView({block:'nearest'});}
   function showEvidence(missing){
     evidence.replaceChildren();
-    if(missing){el('h3',L('此数字未关联原始材料','This number has no linked source'),evidence);el('p',L('请在 DSH 中提供来源，并用指标绑定替换固定数字。不能将相同数值自动当作同一来源。','Provide the source in DSH and bind a metric. Matching numeric values alone do not establish a common source.'),evidence);return;}
+    if(missing){el('h3',L('此数字未关联原始材料','This number has no linked source','Это число не связано с исходными материалами'),evidence);el('p',L('请在 DSH 中提供来源，并用指标绑定替换固定数字。不能将相同数值自动当作同一来源。','Provide the source in DSH and bind a metric. Matching numeric values alone do not establish a common source.','Укажите источник в DSH и привяжите показатель вместо фиксированного числа. Совпадение значений само по себе не доказывает общий источник.'),evidence);return;}
     const metric=byId.get(selection);if(!metric)return;
     el('h3',metric.label+' = '+math.format(values[metric.id],metric,data.language),evidence);
     if(metric.kind==='source'){
       el('strong',metric.evidence.name+' · '+metric.evidence.locator,evidence);el('pre',metric.evidence.excerpt,evidence);
-      const more=el('details',undefined,evidence);el('summary',L('来源快照校验值','Source snapshot checksum'),more);el('code','SHA-256: '+metric.evidence.sha256,more);
-    }else if(metric.kind==='input')el('p',L('用户假设；不是从源材料证明的事实。','User assumption, not a fact established by source material.')+(metric.note?' '+metric.note:''),evidence);
+      const more=el('details',undefined,evidence);el('summary',L('来源快照校验值','Source snapshot checksum','Контрольная сумма снимка источника'),more);el('code','SHA-256: '+metric.evidence.sha256,more);
+    }else if(metric.kind==='input')el('p',L('用户假设；不是从源材料证明的事实。','User assumption, not a fact established by source material.','Пользовательское допущение; не факт, установленный исходными материалами.')+(metric.note?' '+metric.note:''),evidence);
     else{
-      el('pre','= '+metric.formula,evidence);el('p',L('计算输入（点击继续追问）：','Inputs (click to trace further):'),evidence);
+      el('pre','= '+metric.formula,evidence);el('p',L('计算输入（点击继续追问）：','Inputs (click to trace further):','Входные данные расчёта (нажмите, чтобы проследить):'),evidence);
       for(const id of metric.dependencies){const dependency=byId.get(id);button(dependency.label+' = '+math.format(values[id],dependency,data.language),evidence,()=>open(id));}
     }
   }
   function fragment(template){
     const result=document.createDocumentFragment(),pattern=/\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g;let end=0;
-    for(const match of template.matchAll(pattern)){result.append(document.createTextNode(template.slice(end,match.index)));const metric=byId.get(match[1]);const number=el('button',math.format(values[metric.id],metric,data.language),result,{type:'button',class:'data-number','data-metric':metric.id,title:L('查看数字出处','Inspect source')});end=match.index+match[0].length;}
+    for(const match of template.matchAll(pattern)){result.append(document.createTextNode(template.slice(end,match.index)));const metric=byId.get(match[1]);const number=el('button',math.format(values[metric.id],metric,data.language),result,{type:'button',class:'data-number','data-metric':metric.id,title:L('查看数字出处','Inspect source','Показать происхождение числа')});end=match.index+match[0].length;}
     result.append(document.createTextNode(template.slice(end)));return result;
   }
   function fill(node,template){if(node&&typeof template==='string')node.replaceChildren(fragment(template));}
-  function graphFor(template,solved){const graph=structuredClone(template),text=value=>typeof value==='string'?value.replace(/\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g,(_,id)=>math.format(solved[id],byId.get(id),data.language)):value;graph.categories=graph.categories.map(text);graph.series=graph.series.map(s=>({...s,name:text(s.name),values:s.values.map(v=>typeof v==='string'&&/^\{\{[A-Za-z][A-Za-z0-9]*\}\}$/.test(v)?solved[v.slice(2,-2)]:Number(v))}));graph.unit=text(graph.unit);graph.caption=text(graph.caption);if(graph.kind==='pie'&&(graph.series[0].values.some(v=>v<0)||graph.series[0].values.reduce((a,b)=>a+b,0)<=0))throw new Error(L('饼图数值需非负且总和大于零','Pie values must be non-negative with a positive total'));return graph;}
+  function graphFor(template,solved){const graph=structuredClone(template),text=value=>typeof value==='string'?value.replace(/\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g,(_,id)=>math.format(solved[id],byId.get(id),data.language)):value;graph.categories=graph.categories.map(text);graph.series=graph.series.map(s=>({...s,name:text(s.name),values:s.values.map(v=>typeof v==='string'&&/^\{\{[A-Za-z][A-Za-z0-9]*\}\}$/.test(v)?solved[v.slice(2,-2)]:Number(v))}));graph.unit=text(graph.unit);graph.caption=text(graph.caption);if(graph.kind==='pie'&&(graph.series[0].values.some(v=>v<0)||graph.series[0].values.reduce((a,b)=>a+b,0)<=0))throw new Error(L('饼图数值需非负且总和大于零','Pie values must be non-negative with a positive total','Значения круговой диаграммы должны быть неотрицательными, а сумма — больше нуля'));return graph;}
   function missingNumbers(root){
     const targets=root.querySelectorAll('h1,h2,.statement-title,.quote-text,.subtitle,.quote-attr,.deck-table th,.deck-table td,li,.media-body p,.media-caption');
     const texts=[];for(const target of targets){const walker=document.createTreeWalker(target,NodeFilter.SHOW_TEXT);while(walker.nextNode()){const node=walker.currentNode;if(node.parentElement?.closest('.data-number,svg,.chart-data'))continue;texts.push(node);}}
-    for(const node of new Set(texts)){const pattern=/[-+]?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?[%％]?/g,content=node.textContent,matches=[...content.matchAll(pattern)];if(!matches.length)continue;const output=document.createDocumentFragment();let end=0;for(const match of matches){output.append(document.createTextNode(content.slice(end,match.index)));el('button',match[0],output,{type:'button',class:'data-number data-unlinked','data-unlinked':'1',title:L('未关联来源','Source not linked')});end=match.index+match[0].length;}output.append(document.createTextNode(content.slice(end)));node.replaceWith(output);}
+    for(const node of new Set(texts)){const pattern=/[-+]?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?[%％]?/g,content=node.textContent,matches=[...content.matchAll(pattern)];if(!matches.length)continue;const output=document.createDocumentFragment();let end=0;for(const match of matches){output.append(document.createTextNode(content.slice(end,match.index)));el('button',match[0],output,{type:'button',class:'data-number data-unlinked','data-unlinked':'1',title:L('未关联来源','Source not linked','Источник не связан')});end=match.index+match[0].length;}output.append(document.createTextNode(content.slice(end)));node.replaceWith(output);}
   }
   function redraw(){
     for(const slide of data.slides){const root=document.querySelectorAll('.slide')[slide.page-1];if(!root)continue;const template=slide.template;
@@ -77,11 +77,11 @@ function initDataView(data, math, chartRenderer) {
       if(template.rows)root.querySelectorAll('.deck-table tr').forEach((row,r)=>Array.from(row.children).forEach((cell,c)=>fill(cell,template.rows[r]?.[c])));
       if(template.notes)root.dataset.notes=template.notes.replace(/\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g,(_,id)=>math.format(values[id],byId.get(id),data.language));
       if(template.chart){const graph=graphFor(template.chart,values),area=root.querySelector('.media-chart');if(area)area.innerHTML=chartRenderer(graph,data.theme);fill(root.querySelector('.media-caption'),template.chart.caption);}
-      if(slide.chart&&!root.querySelector('.data-chart-trace')){const link=button(L('图表数字来源','Chart sources'),root.querySelector('.media-canvas'),()=>{const id=Object.keys(template.chart||{}).length?[...JSON.stringify(template.chart).matchAll(/\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g)][0]?.[1]:null;open(id,!id);});link.className='data-chart-trace';}
+      if(slide.chart&&!root.querySelector('.data-chart-trace')){const link=button(L('图表数字来源','Chart sources','Источники чисел диаграммы'),root.querySelector('.media-canvas'),()=>{const id=Object.keys(template.chart||{}).length?[...JSON.stringify(template.chart).matchAll(/\{\{([A-Za-z][A-Za-z0-9]*)\}\}/g)][0]?.[1]:null;open(id,!id);});link.className='data-chart-trace';}
       missingNumbers(root);
     }
     for(const {metric,range,number,formatted}of controls){range.value=String(parameters[metric.id]);number.value=String(parameters[metric.id]);formatted.textContent=' '+math.format(values[metric.id],metric,data.language);}
-    notice.textContent=dirty?L('当前为未保存推演，PPTX 尚未更新。','Unsaved what-if values. The PPTX has not been updated.'):L('当前显示已保存的静态基线；公式和假设随 PPTX 附上。','Showing saved values; formulas and assumptions accompany the PPTX.');
+    notice.textContent=dirty?L('当前为未保存推演，PPTX 尚未更新。','Unsaved what-if values. The PPTX has not been updated.','Сценарий не сохранён; PPTX ещё не обновлён.'):L('当前显示已保存的静态基线；公式和假设随 PPTX 附上。','Showing saved values; formulas and assumptions accompany the PPTX.','Показаны сохранённые значения; формулы и допущения приложены к PPTX.');
     downloadState();
     showEvidence();window.dispatchEvent(new Event('dsh-data-change'));
   }
@@ -89,7 +89,7 @@ function initDataView(data, math, chartRenderer) {
   function notifyState(){window.__dshData.onChange?.({...parameters},dirty,valid);}
   function update(next,notify=true){
     try{const complete={...baseline,...next},solved=math.solve(data.metrics,complete);for(const slide of data.slides)if(slide.template.chart)graphFor(slide.template.chart,solved);parameters=complete;values=solved;valid=true;dirty=Object.keys(baseline).some(id=>parameters[id]!==baseline[id]);error.hidden=true;redraw();if(notify)notifyState();return true;}
-    catch(reason){valid=false;error.hidden=false;error.textContent=L('无法计算，请检查数值或恢复已保存参数：','Cannot calculate. Check values or reset: ')+reason.message;downloadState();if(notify)notifyState();return false;}
+    catch(reason){valid=false;error.hidden=false;error.textContent=L('无法计算，请检查数值或恢复已保存参数：','Cannot calculate. Check values or reset: ','Не удалось вычислить; проверьте значения или верните сохранённые: ')+reason.message;downloadState();if(notify)notifyState();return false;}
   }
   function download(name,text,type){if(!valid)return;const url=URL.createObjectURL(new Blob([text],{type})),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   document.getElementById('stage').addEventListener('click',event=>{const target=event.target.closest('[data-metric],[data-unlinked]');if(target){event.preventDefault();event.stopImmediatePropagation();open(target.dataset.metric,!!target.dataset.unlinked);}},true);

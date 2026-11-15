@@ -63,7 +63,7 @@ export declare class PptCoaching {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         mode: "review" | "practice";
         difficulty: "gentle" | "normal" | "strict";
         audience: string;
@@ -87,7 +87,7 @@ export declare class PptCoaching {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         mode: "review" | "practice";
         difficulty: "gentle" | "normal" | "strict";
         audience: string;
@@ -114,7 +114,7 @@ export declare class PptCoaching {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         mode: "review" | "practice";
         difficulty: "gentle" | "normal" | "strict";
         audience: string;
@@ -138,7 +138,7 @@ export declare class PptCoaching {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         mode: "review" | "practice";
         difficulty: "gentle" | "normal" | "strict";
         audience: string;
@@ -162,7 +162,7 @@ export declare class PptCoaching {
         deckId: string;
         revision: number;
         title: string;
-        language: "zh" | "en";
+        language: "zh" | "en" | "ru";
         mode: "review" | "practice";
         difficulty: "gentle" | "normal" | "strict";
         audience: string;

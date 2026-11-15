@@ -19,23 +19,23 @@ function abort(signal) { signal?.throwIfAborted() }
 function fail(message) { throw new Error('dsh-ppt：' + message) }
 
 const scenarios = [
-  { id: 'weekly', name: { zh: '工作周报', en: 'Weekly report' }, theme: 'data', sections: [['本周工作', 'This week'], ['完成情况', 'Progress'], ['问题与风险', 'Risks'], ['下周计划', 'Next week']] },
-  { id: 'defense', name: { zh: '论文答辩', en: 'Thesis defense' }, theme: 'soft', sections: [['研究问题', 'Research question'], ['相关研究', 'Related work'], ['研究方法', 'Method'], ['研究结果', 'Results'], ['结论与局限', 'Conclusions and limitations']] },
-  { id: 'project', name: { zh: '项目汇报', en: 'Project update' }, theme: 'swiss', sections: [['目标与范围', 'Goals and scope'], ['进度与交付', 'Progress and delivery'], ['数据与证据', 'Evidence'], ['风险与决策', 'Risks and decisions'], ['下一步', 'Next steps']] },
-  { id: 'pitch', name: { zh: '项目路演', en: 'Pitch deck' }, theme: 'velvet', sections: [['用户问题', 'Customer problem'], ['解决方案', 'Solution'], ['产品与证据', 'Product and evidence'], ['商业模式', 'Business model'], ['计划与需求', 'Plan and ask']] },
+  { id: 'weekly', name: { zh: '工作周报', en: 'Weekly report', ru: 'Рабочая неделя' }, theme: 'data', sections: [['本周工作', 'This week', 'Текущая неделя'], ['完成情况', 'Progress', 'Статус'], ['问题与风险', 'Risks', 'Проблемы и риски'], ['下周计划', 'Next week', 'Планы на неделю']] },
+  { id: 'defense', name: { zh: '论文答辩', en: 'Thesis defense', ru: 'Защита работы' }, theme: 'soft', sections: [['研究问题', 'Research question', 'Исследовательский вопрос'], ['相关研究', 'Related work', 'Связанные работы'], ['研究方法', 'Method', 'Метод'], ['研究结果', 'Results', 'Результаты'], ['结论与局限', 'Conclusions and limitations', 'Выводы и ограничения']] },
+  { id: 'project', name: { zh: '项目汇报', en: 'Project update', ru: 'Отчёт по проекту' }, theme: 'swiss', sections: [['目标与范围', 'Goals and scope', 'Цели и охват'], ['进度与交付', 'Progress and delivery', 'Ход и поставка'], ['数据与证据', 'Evidence', 'Данные и доказательства'], ['风险与决策', 'Risks and decisions', 'Риски и решения'], ['下一步', 'Next steps', 'Дальнейшие шаги']] },
+  { id: 'pitch', name: { zh: '项目路演', en: 'Pitch deck', ru: 'Питч-презентация' }, theme: 'velvet', sections: [['用户问题', 'Customer problem', 'Проблема клиента'], ['解决方案', 'Solution', 'Решение'], ['产品与证据', 'Product and evidence', 'Продукт и доказательства'], ['商业模式', 'Business model', 'Бизнес-модель'], ['计划与需求', 'Plan and ask', 'План и запрос']] },
 ]
 
 export function listTemplates(lang = 'zh') {
-  const language = resolveLanguage(lang).id === 'en' ? 'en' : 'zh'
+  const id = resolveLanguage(lang).id, language = id === 'en' || id === 'ru' ? id : 'zh'
   return scenarios.map(s => ({ id: s.id, name: s.name[language], theme: s.theme,
-    outline: s.sections.map(p => p[language === 'en' ? 1 : 0]),
+    outline: s.sections.map(p => p[language === 'en' ? 1 : language === 'ru' ? 2 : 0]),
     slides: templateSlides(s, s.name[language], language) }))
 }
 function templateSlides(scenario, title, lang) {
-  const en = lang === 'en'
-  return [{ layout: 'cover', title, subtitle: en ? 'To fill: presenter and date' : '待填写：汇报人和日期' },
-    ...scenario.sections.map(section => ({ layout: 'bullets', title: section[en ? 1 : 0], bullets: [en ? 'To fill: specific facts, evidence and next action' : '待填写：具体事实、依据与下一步行动'] })),
-    { layout: 'closing', title: en ? 'Next action' : '下一步行动', subtitle: en ? 'To fill: owner and deadline' : '待填写：负责人和时间' }]
+  const en = lang === 'en', ru = lang === 'ru', L = (zh, english, ruText) => ru ? (ruText ?? english) : en ? english : zh
+  return [{ layout: 'cover', title, subtitle: L('待填写：汇报人和日期', 'To fill: presenter and date', 'Заполнить: докладчик и дата') },
+    ...scenario.sections.map(section => ({ layout: 'bullets', title: section[en ? 1 : ru ? 2 : 0], bullets: [L('待填写：具体事实、依据与下一步行动', 'To fill: specific facts, evidence and next action', 'Заполнить: конкретные факты, доказательства и следующий шаг')] })),
+    { layout: 'closing', title: L('下一步行动', 'Next action', 'Следующее действие'), subtitle: L('待填写：负责人和时间', 'To fill: owner and deadline', 'Заполнить: ответственный и срок') }]
 }
 
 function imageInfo(bytes, page) {
@@ -189,6 +189,32 @@ function contrast(a, b) {
   }
   const x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05)
 }
+// Fixed translations for embedded-image validator messages (exact matches and
+// “嵌入图片 <suffix>” combinations produced by imageInfo / embeddedAssetError).
+const ASSET_ERROR_TEXT = {
+  '嵌入图片数据缺失或过大': { en: 'Embedded image data is missing or too large.', ru: 'Данные внедрённого изображения отсутствуют или слишком велики.' },
+  '嵌入图片格式无效': { en: 'Embedded image format is invalid.', ru: 'Недопустимый формат внедрённого изображения.' },
+  '嵌入图片编码无效或过大': { en: 'Embedded image encoding is invalid or too large.', ru: 'Кодирование внедрённого изображения недопустимо или слишком велико.' },
+  '嵌入图片尺寸或内容摘要不匹配': { en: 'Embedded image size or content digest mismatch.', ru: 'Размер или контрольная сумма внедрённого изображения не совпадают.' },
+}
+const ASSET_ERROR_SUFFIXES = [
+  ['PNG 文件不完整', { en: 'Embedded PNG file is incomplete.', ru: 'Внедрённый файл PNG неполон.' }],
+  ['PNG 数据截断', { en: 'Embedded PNG data is truncated.', ru: 'Данные внедрённого PNG усечены.' }],
+  ['PNG 缺少图像数据', { en: 'Embedded PNG has no image data.', ru: 'Во внедрённом PNG нет данных изображения.' }],
+  ['PNG 图像数据无法解码或过大', { en: 'Embedded PNG image data cannot be decoded or is too large.', ru: 'Данные изображения внедрённого PNG не декодируются или слишком велики.' }],
+  ['JPEG 数据截断', { en: 'Embedded JPEG data is truncated.', ru: 'Данные внедрённого JPEG усечены.' }],
+  ['JPEG 文件不完整', { en: 'Embedded JPEG file is incomplete.', ru: 'Внедрённый файл JPEG неполон.' }],
+]
+function localizeAssetError(text) {
+  if (typeof text !== 'string') return undefined
+  const exact = ASSET_ERROR_TEXT[text]
+  if (exact) return exact
+  if (text.startsWith('嵌入图片')) {
+    const suffix = ASSET_ERROR_SUFFIXES.find(([key]) => text.includes(key))
+    if (suffix) return suffix[1]
+  }
+  return undefined
+}
 export function checkManifest(manifest) {
   const issues = [], theme = brandedTheme(manifest)
   const invalidAssets = new Map()
@@ -196,43 +222,166 @@ export function checkManifest(manifest) {
     if (!invalidAssets.has(id)) invalidAssets.set(id, embeddedAssetError(manifest.assets?.[id], id))
     return invalidAssets.get(id)
   }
-  const issue = (index, code, message, suggestion, severity = 'warning') => issues.push({ slide: index + 1, slideId: manifest.slides[index]?.id, severity, code, message, suggestion })
+  // Static-check texts in three languages. zh stays the canonical message/suggestion;
+  // messageEn/suggestionEn/messageRu/suggestionRu are parallel fields for the GUI,
+  // the deck review panel and localized tool output.
+  const TEXT = {
+    'missing-title': {
+      zh: ['页面没有标题', '补充能说明本页内容的标题'],
+      en: ['This slide has no title.', 'Add a title that explains the slide.'],
+      ru: ['На слайде нет заголовка', 'Добавьте заголовок, который поясняет его содержание'],
+    },
+    'title-overflow': {
+      zh: ['标题可能换行过多或超过标题区域', '缩短标题，把解释移入正文'],
+      en: ['The title may wrap too much or exceed its area.', 'Shorten the title and move explanations into the body.'],
+      ru: ['Заголовок может не поместиться из-за переносов', 'Сократите заголовок, объяснение перенесите в текст слайда'],
+    },
+    'dense-bullets': {
+      zh: ({ count }) => `本页有 ${count} 条要点，放映时过密`,
+      en: ({ count }) => `This slide has ${count} bullets — too dense when presenting.`,
+      ru: ({ count }) => `На слайде ${count} тезисов — при показе это слишком плотно`,
+    },
+    'dense-bullets-suggestion': {
+      zh: ['减少要点或拆成多页'],
+      en: ['Reduce the bullets or split them across slides.'],
+      ru: ['Уменьшите число тезисов или разнесите их на несколько слайдов'],
+    },
+    'body-overflow': {
+      zh: ['正文估计超过可用高度', '先精简文字，再分拆页面，避免继续缩小字体'],
+      en: ['The body may exceed the available height.', 'Shorten or split the text before reducing font size.'],
+      ru: ['Текст, по оценке, не помещается по высоте', 'Сначала сократите текст и разнесите его по слайдам, не уменьшая шрифт дальше'],
+    },
+    'template-unfilled': {
+      zh: ['模板中还有待填写内容', '提供实际事实、依据和行动，填完后重新检查'],
+      en: ['Template placeholders remain.', 'Fill in actual facts, evidence and actions, then check again.'],
+      ru: ['В шаблоне остались незаполненные места', 'Внесите фактические данные, основания и действия, затем проверьте снова'],
+    },
+    'small-font': {
+      zh: ['表格超过 6 列，使用 14pt，小屏放映可能难以阅读', '减少列数或把重点数据改成图表，导出后检查可读性'],
+      en: ['This table uses more than 6 columns at 14pt and may be hard to read.', 'Reduce the columns or use a chart; check readability after export.'],
+      ru: ['В таблице больше 6 колонок при 14pt — на небольшом экране читать трудно', 'Уменьшите число колонок или замените ключевые данные диаграммой; проверьте читаемость после экспорта'],
+    },
+    'table-density': {
+      zh: ['表格单元格文字较长，可能换行拥挤', '精简单元格或减少列数'],
+      en: ['Long table cells may cause crowded wrapping.', 'Shorten the cells or reduce the columns.'],
+      ru: ['Текст в ячейках таблицы длинный — перенос может стать тесным', 'Сократите текст ячеек или уменьшите число колонок'],
+    },
+    'missing-image': {
+      zh: ['找不到本页的嵌入图片', '重新指定图片路径后编辑本页'],
+      en: ['The embedded image of this slide is missing.', 'Edit the slide with a valid image.'],
+      ru: ['Внедрённое изображение этого слайда не найдено', 'Отредактируйте слайд, указав корректное изображение'],
+    },
+    'invalid-image-suggestion': {
+      zh: ['重新提供本地图片后编辑该页'],
+      en: ['Replace it with a valid local image and edit the slide.'],
+      ru: ['Замените изображение корректным локальным файлом и отредактируйте слайд'],
+    },
+    'low-resolution': {
+      zh: ({ w, h }) => `图片为 ${w}×${h}，放大后可能模糊`,
+      en: ({ w, h }) => `The image is ${w}×${h} and may look blurry when enlarged.`,
+      ru: ({ w, h }) => `Изображение ${w}×${h} — при увеличении может быть размытым`,
+    },
+    'low-resolution-suggestion': {
+      zh: ['换成更高分辨率图片；Logo 等小图可忽略此提示'],
+      en: ['Use a higher-resolution image. Small logos may be acceptable.'],
+      ru: ['Используйте изображение с бо́льшим разрешением; для мелких логотипов это некритично'],
+    },
+    'missing-alt': {
+      zh: ['图片没有说明文字', '填写 image.alt，方便读屏及理解图片'],
+      en: ['The image has no description.', 'Fill in image.alt for accessibility and context.'],
+      ru: ['У изображения нет описания', 'Заполните image.alt — это нужно для читалок и понимания картинки'],
+    },
+    'invalid-chart': {
+      zh: ['图表数据无效'],
+      en: ['The chart data is invalid.'],
+      ru: ['Данные диаграммы недопустимы'],
+    },
+    'invalid-chart-suggestion': {
+      zh: ['修正图表类别和数值'],
+      en: ['Check the chart categories, series and numeric values.'],
+      ru: ['Проверьте категории, ряды и числовые значения диаграммы'],
+    },
+    'chart-density': {
+      zh: ['图表类别较多或标签较长，可能相互遮挡', '减少类别，或使用横向条形图'],
+      en: ['Chart categories or labels may overlap.', 'Reduce categories or use a horizontal bar chart.'],
+      ru: ['Категорий диаграммы много или подписи длинные — они могут перекрываться', 'Уменьшите число категорий или используйте горизонтальные полосы'],
+    },
+    'chart-legend': {
+      zh: ['图例名称较长', '精简系列名称并检查渲染'],
+      en: ['Chart legend labels are long.', 'Shorten the series names and check the render.'],
+      ru: ['Подписи легенды длинные', 'Сократите названия рядов и проверьте рендер'],
+    },
+    'low-contrast': {
+      zh: ['正文与背景对比度低于 4.5:1', '调整品牌背景色或文字色'],
+      en: ['Body text and background contrast is below 4.5:1.', 'Adjust the brand background or text colour.'],
+      ru: ['Контраст текста и фона ниже 4.5:1', 'Скорректируйте цвет фона или текста бренда'],
+    },
+    'missing-logo': {
+      zh: ['品牌 Logo 资产不存在', '重新提供 Logo'],
+      en: ['The brand logo asset is missing.', 'Provide the logo again.'],
+      ru: ['Внедрённый логотип бренда отсутствует', 'Предоставьте логотип снова'],
+    },
+    'invalid-logo-suggestion': {
+      zh: ['重新提供 Logo'],
+      en: ['Replace the logo with a valid image.'],
+      ru: ['Замените логотип корректным изображением'],
+    },
+  }
+  const text = (code, lang, field = 0, args) => {
+    const entry = TEXT[code]?.[lang] ?? TEXT[code]?.zh ?? TEXT[code]?.en ?? TEXT[code]?.ru
+    const value = Array.isArray(entry) ? entry[field] : entry
+    return typeof value === 'function' ? value(args ?? {}) : String(value ?? '')
+  }
+  const issue = (index, code, { severity = 'warning', detail, suggestionCode, args } = {}) => {
+    const assetText = detail === undefined ? undefined : localizeAssetError(detail)
+    issues.push({
+      slide: index + 1, slideId: manifest.slides[index]?.id, severity, code,
+      message: detail ?? text(code, 'zh', 0, args),
+      suggestion: suggestionCode ? text(suggestionCode, 'zh') : text(code, 'zh', 1, args),
+      messageEn: detail === undefined ? text(code, 'en', 0, args) : (assetText?.en ?? text(code, 'en', 0, args)),
+      suggestionEn: suggestionCode ? text(suggestionCode, 'en') : (TEXT[code + '-suggestion'] ? text(code + '-suggestion', 'en') : text(code, 'en', 1, args)),
+      messageRu: detail === undefined ? text(code, 'ru', 0, args) : (assetText?.ru ?? text(code, 'ru', 0, args)),
+      suggestionRu: suggestionCode ? text(suggestionCode, 'ru') : (TEXT[code + '-suggestion'] ? text(code + '-suggestion', 'ru') : text(code, 'ru', 1, args)),
+    })
+  }
   manifest.slides.forEach((slide, i) => {
-    if (!slide.title?.trim()) issue(i, 'missing-title', '页面没有标题', '补充能说明本页内容的标题')
+    if (!slide.title?.trim()) issue(i, 'missing-title')
     const titleLimit = ['cover', 'closing', 'statement', 'quote', 'section'].includes(slide.layout) ? 40 : 24
-    if (textWidth(slide.title) > titleLimit) issue(i, 'title-overflow', '标题可能换行过多或超过标题区域', '缩短标题，把解释移入正文')
+    if (textWidth(slide.title) > titleLimit) issue(i, 'title-overflow')
     const mixed = ['image-left', 'image-right'].includes(slide.layout), bullets = slide.bullets ?? []
-    if (bullets.length > (mixed ? 5 : 8)) issue(i, 'dense-bullets', `本页有 ${bullets.length} 条要点，放映时过密`, '减少要点或拆成多页')
+    if (bullets.length > (mixed ? 5 : 8)) issue(i, 'dense-bullets', { args: { count: bullets.length }, suggestionCode: 'dense-bullets-suggestion' })
     const width = mixed ? 19 : 37
     const lines = bullets.reduce((sum, b) => sum + Math.max(1, Math.ceil(textWidth(b) / width)), 0)
       + (slide.subtitle ? Math.ceil(textWidth(slide.subtitle) / width) : 0)
-    if (lines > (mixed ? 9 : 11)) issue(i, 'body-overflow', '正文估计超过可用高度', '先精简文字，再分拆页面，避免继续缩小字体')
-    if ([slide.title, slide.subtitle, ...bullets].some(s => /待填写|To fill:/i.test(String(s)))) issue(i, 'template-unfilled', '模板中还有待填写内容', '提供实际事实、依据和行动，填完后重新检查')
+    if (lines > (mixed ? 9 : 11)) issue(i, 'body-overflow')
+    if ([slide.title, slide.subtitle, ...bullets].some(s => /待填写|To fill:|Заполнить:/i.test(String(s)))) issue(i, 'template-unfilled')
     if (slide.layout === 'table') {
-      if ((slide.rows?.[0]?.length ?? 0) > 6) issue(i, 'small-font', '表格超过 6 列，使用 14pt，小屏放映可能难以阅读', '减少列数或把重点数据改成图表，导出后检查可读性')
-      if (slide.rows?.some(row => row.some(c => textWidth(c) > 18))) issue(i, 'table-density', '表格单元格文字较长，可能换行拥挤', '精简单元格或减少列数')
+      if ((slide.rows?.[0]?.length ?? 0) > 6) issue(i, 'small-font')
+      if (slide.rows?.some(row => row.some(c => textWidth(c) > 18))) issue(i, 'table-density')
     }
     if (slide.image) {
       const asset = manifest.assets?.[slide.image.assetId], box = mediaBoxes(slide.layout).image
-      if (!asset) issue(i, 'missing-image', '找不到本页的嵌入图片', '重新指定图片路径后编辑本页', 'error')
+      if (!asset) issue(i, 'missing-image', { severity: 'error' })
       else {
-        if (assetError(slide.image.assetId)) issue(i, 'invalid-image', assetError(slide.image.assetId), '重新提供本地图片后编辑该页', 'error')
-        if (asset.width < box.w * 100 || asset.height < box.h * 100) issue(i, 'low-resolution', `图片为 ${asset.width}×${asset.height}，放大后可能模糊`, '换成更高分辨率图片；Logo 等小图可忽略此提示')
+        if (assetError(slide.image.assetId)) issue(i, 'invalid-image', { severity: 'error', detail: assetError(slide.image.assetId), suggestionCode: 'invalid-image-suggestion' })
+        if (asset.width < box.w * 100 || asset.height < box.h * 100) issue(i, 'low-resolution', { args: { w: asset.width, h: asset.height }, suggestionCode: 'low-resolution-suggestion' })
       }
-      if (!slide.image.alt?.trim()) issue(i, 'missing-alt', '图片没有说明文字', '填写 image.alt，方便读屏及理解图片')
+      if (!slide.image.alt?.trim()) issue(i, 'missing-alt')
     }
     if (slide.chart) {
-      try { normalizeChart(slide.chart, i + 1) } catch (error) { issue(i, 'invalid-chart', error.message, '修正图表类别和数值', 'error') }
-      if (slide.chart.categories?.length > 10 || slide.chart.categories?.some(c => textWidth(c) > 10)) issue(i, 'chart-density', '图表类别较多或标签较长，可能相互遮挡', '减少类别，或使用横向条形图')
-      if (slide.chart.series?.some(s => textWidth(s.name) > 14)) issue(i, 'chart-legend', '图例名称较长', '精简系列名称并检查渲染')
+      try { normalizeChart(slide.chart, i + 1) } catch (error) { issue(i, 'invalid-chart', { severity: 'error', detail: error.message, suggestionCode: 'invalid-chart-suggestion' }) }
+      if (slide.chart.categories?.length > 10 || slide.chart.categories?.some(c => textWidth(c) > 10)) issue(i, 'chart-density')
+      if (slide.chart.series?.some(s => textWidth(s.name) > 14)) issue(i, 'chart-legend')
     }
-    if (contrast(theme.palette.bg, theme.palette.fg) < 4.5) issue(i, 'low-contrast', '正文与背景对比度低于 4.5:1', '调整品牌背景色或文字色')
+    if (contrast(theme.palette.bg, theme.palette.fg) < 4.5) issue(i, 'low-contrast')
   })
-  if (manifest.brand?.logoAssetId && !manifest.assets?.[manifest.brand.logoAssetId]) issue(0, 'missing-logo', '品牌 Logo 资产不存在', '重新提供 Logo', 'error')
-  else if (manifest.brand?.logoAssetId && assetError(manifest.brand.logoAssetId)) issue(0, 'invalid-logo', assetError(manifest.brand.logoAssetId), '重新提供 Logo', 'error')
+  if (manifest.brand?.logoAssetId && !manifest.assets?.[manifest.brand.logoAssetId]) issue(0, 'missing-logo', { severity: 'error' })
+  else if (manifest.brand?.logoAssetId && assetError(manifest.brand.logoAssetId)) issue(0, 'invalid-logo', { severity: 'error', detail: assetError(manifest.brand.logoAssetId), suggestionCode: 'invalid-logo-suggestion' })
   return { ok: !issues.some(i => i.severity === 'error'), slideCount: manifest.slides.length,
     errorCount: issues.filter(i => i.severity === 'error').length, warningCount: issues.filter(i => i.severity === 'warning').length,
-    issues, note: '文字尺寸与溢出为静态估算；最终请检查 HTML 放映和 PowerPoint / WPS 实际显示。页脚和页码的小字号不计入正文检查。' }
+    issues, note: '文字尺寸与溢出为静态估算；最终请检查 HTML 放映和 PowerPoint / WPS 实际显示。页脚和页码的小字号不计入正文检查。',
+    noteEn: 'Text size and overflow are static estimates; verify the actual HTML playback and PowerPoint / WPS rendering. Small footer and page-number text is not counted as body text.',
+    noteRu: 'Размеры текста и переполнение — статическая оценка; итоговую вёрстку проверяйте в HTML-показе и в PowerPoint / WPS. Мелкий текст колонтитула и номеров страниц телом слайда не считается.' }
 }
 
 async function exportPptx(manifest, theme, language, signal) {

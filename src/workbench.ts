@@ -40,11 +40,11 @@ function ordinaryFile(path: string): Buffer {
 }
 function pathsFor(path: string) { const base = path.slice(0, -5); return { json: path, html: base + '.html', pptx: base + '.pptx' } }
 function speakerNotes(manifest: any): string {
-  const label = (zh: string, en: string): string => manifest.language === 'en' ? en : manifest.language === 'bilingual' ? zh + ' / ' + en : zh
+  const label = (zh: string, en: string, ru?: string): string => manifest.language === 'en' ? en : manifest.language === 'ru' ? (ru ?? en) : manifest.language === 'bilingual' ? zh + ' / ' + en : zh
   const heading = (value: unknown): string => String(value ?? '').replace(/[\r\n]+/g, ' ').trim()
   const sections = manifest.slides.map((slide: any, index: number) => {
-    const title = heading(slide.title) || label('第 ' + (index + 1) + ' 页', 'Slide ' + (index + 1))
-    const notes = typeof slide.notes === 'string' && slide.notes.trim() ? slide.notes : label('（本页未填写演讲备注。）', '(No speaker notes for this slide.)')
+    const title = heading(slide.title) || label('第 ' + (index + 1) + ' 页', 'Slide ' + (index + 1), 'Слайд ' + (index + 1))
+    const notes = typeof slide.notes === 'string' && slide.notes.trim() ? slide.notes : label('（本页未填写演讲备注。）', '(No speaker notes for this slide.)', '(На этом слайде нет заметок докладчика.)')
     return '## ' + (index + 1) + '. ' + title + '\n\n' + notes
   })
   return '# ' + heading(manifest.title) + '\n\n' + sections.join('\n\n---\n\n') + '\n'

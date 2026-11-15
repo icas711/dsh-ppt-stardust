@@ -152,7 +152,7 @@ No required configuration. Optional:
     outputDir: E:\decks   # optional; defaults to the session working directory
     maxSlides: 40         # optional; default 60 (3–120)
     defaultTheme: data    # optional; used when ppt_create has no theme
-    defaultLang: en       # optional; used when ppt_create has no lang (zh/en/bilingual)
+    defaultLang: en       # optional; used when ppt_create has no lang (zh/en/bilingual/ru)
 ```
 
 The `DSH_PPT_OUTPUT_DIR` env var can also set the default output directory; the `ppt_create` `outputDir`/`theme`/`lang` arguments have the highest priority.
@@ -161,7 +161,7 @@ Relative paths and configured output directories resolve per session cwd without
 
 ## Bilingual support
 
-- `lang` argument: `zh` (default) / `en` / `bilingual` controls the player UI, page numbers, and closing defaults.
+- `lang` argument: `zh` (default) / `en` / `bilingual` / `ru` controls the player UI, page numbers, and closing defaults.
 - Content language is up to the author: for a bilingual deck, prefer "Chinese title + English subtitle" or generate two decks from the same outline.
 - Plugin docs come in Chinese (README.md) and English (this file); CLI and skill error messages are in Chinese.
 

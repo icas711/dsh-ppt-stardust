@@ -10,7 +10,7 @@ export type VisualContext = { id: string; path: string; manifest: any; engine: D
 type Action = { slideId: string; type: string; value?: number }
 type Finding = { slideId: string; kind: string; region: string; issue: string; box: number[]; action?: Action }
 type Round = { file: string | null; deckId: string; revision: number; jsonHash: string; pptxHash: string; ids: string[]; cursor: number; receipt?: string; findings: Finding[]; applied: Action[]; missingFonts: string[] }
-type Run = { version: 1; id: string; projectId: string; deckId: string; signature: string; sourcePptxHash: string; revision: number; title: string; language: 'zh'|'en'; route: ModelRoute; repairs: number; maxCalls: number; usedCalls: number; status: 'ready'|'busy'|'paused'|'complete'; phase: 'render'|'inspect'|'repair'|'done'; rounds: Round[]; createdAt: string; updatedAt: string; ownerPid?: number; reason?: string; error?: string }
+type Run = { version: 1; id: string; projectId: string; deckId: string; signature: string; sourcePptxHash: string; revision: number; title: string; language: 'zh'|'en'|'ru'; route: ModelRoute; repairs: number; maxCalls: number; usedCalls: number; status: 'ready'|'busy'|'paused'|'complete'; phase: 'render'|'inspect'|'repair'|'done'; rounds: Round[]; createdAt: string; updatedAt: string; ownerPid?: number; reason?: string; error?: string }
 const digest = (bytes: string|Buffer) => createHash('sha256').update(bytes).digest('hex')
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
 const text = (v: unknown, cap = 1000): string => typeof v === 'string' ? v.trim().slice(0,cap) : ''
@@ -110,7 +110,7 @@ export class PptVisual {
     if(this.list(context).length>=20||readdirSync(this.directory).filter(n=>n.endsWith('.json')).length>=200)throw new Error('请先删除旧视觉记录（工程 20 次、本机 200 次） / Delete old visual records first (20 per project, 200 total)')
     const signature=digest(bytes(context.path)),count=ids.length,maxCalls=Array.from({length:Number(repairs)+1},(_,i)=>Math.ceil(count*2**i/2)).reduce((a,b)=>a+b,0)
     const now=new Date().toISOString(),run:Run={version:1,id:randomUUID(),projectId:context.id,deckId:context.manifest.deckId,signature,sourcePptxHash,revision:context.manifest.revision,title:context.manifest.title,
-      language:body.language==='en'?'en':'zh',route,repairs:Number(repairs),maxCalls,usedCalls:0,status:'ready',phase:'render',rounds:[{file:null,deckId:context.manifest.deckId,revision:context.manifest.revision,jsonHash:signature,pptxHash:sourcePptxHash,ids,cursor:0,findings:[],applied:[],missingFonts:[]}],createdAt:now,updatedAt:now}
+      language:body.language==='en'?'en':body.language==='ru'?'ru':'zh',route,repairs:Number(repairs),maxCalls,usedCalls:0,status:'ready',phase:'render',rounds:[{file:null,deckId:context.manifest.deckId,revision:context.manifest.revision,jsonHash:signature,pptxHash:sourcePptxHash,ids,cursor:0,findings:[],applied:[],missingFonts:[]}],createdAt:now,updatedAt:now}
     this.locked(run.id,()=>this.write(run));return this.get(context,run.id)
   }
   private findings(value: any,slides: any[]): Finding[] {
@@ -235,9 +235,11 @@ export class PptVisual {
     this.locked(run.id,()=>unlinkSync(this.path(run.id)));return {removed:true}
   }
   markdown(context: VisualContext,id: unknown){
-    const run=this.bound(context,id),en=run.language==='en',lines=['# '+run.title.replace(/[\r\n]/g,' '),en?'AI visual review, not human verification.':'AI 视觉检查记录，不等于人工验收。','Revision: '+run.revision+' · Model: '+run.route.provider+'/'+run.route.model+' · Calls: '+run.usedCalls+'/'+run.maxCalls,'Status: '+run.status+' · '+run.phase+' · '+(run.reason||''),run.error||'']
-    run.rounds.forEach((r,i)=>{lines.push('## '+(en?'Inspection pass ':'检查轮次 ')+i,'PPTX SHA256: '+r.pptxHash,'Pages: '+r.cursor+'/'+r.ids.length,'Missing fonts: '+(r.missingFonts.join(', ')||'—'));for(const f of r.findings)lines.push('- '+f.slideId+' / '+f.region+': '+f.issue+(f.action?' · '+JSON.stringify(f.action):' · '+(en?'Manual review':'需人工处理')));for(const a of r.applied)lines.push('Applied: '+JSON.stringify(a))})
-    try{this.unchanged(context,run)}catch{lines.push(en?'The source changed after this review.':'源工程已变化，此记录基于旧版本。')}
+    const run=this.bound(context,id),en=run.language==='en',ru=run.language==='ru',
+      L=(zh:string,enText:string,ruText?:string)=>ru?(ruText??enText):en?enText:zh,
+      lines=['# '+run.title.replace(/[\r\n]/g,' '),L('AI 视觉检查记录，不等于人工验收。','AI visual review, not human verification.','Запись ИИ-проверки изображений; это не ручная приёмка.'),'Revision: '+run.revision+' · Model: '+run.route.provider+'/'+run.route.model+' · Calls: '+run.usedCalls+'/'+run.maxCalls,'Status: '+run.status+' · '+run.phase+' · '+(run.reason||''),run.error||'']
+    run.rounds.forEach((r,i)=>{lines.push('## '+(L('检查轮次 ','Inspection pass ','Раунд проверки '))+i,'PPTX SHA256: '+r.pptxHash,'Pages: '+r.cursor+'/'+r.ids.length,'Missing fonts: '+(r.missingFonts.join(', ')||'—'));for(const f of r.findings)lines.push('- '+f.slideId+' / '+f.region+': '+f.issue+(f.action?' · '+JSON.stringify(f.action):' · '+L('需人工处理','Manual review','Требуется ручная проверка')));for(const a of r.applied)lines.push('Applied: '+JSON.stringify(a))})
+    try{this.unchanged(context,run)}catch{lines.push(L('源工程已变化，此记录基于旧版本。','The source changed after this review.','Исходный проект изменился после проверки; запись основана на старой версии.'))}
     return lines.join('\n\n')+'\n'
   }
 }

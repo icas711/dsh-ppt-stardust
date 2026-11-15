@@ -167,7 +167,7 @@ CLI 支持 `--slides @slides.json`、`--brand @brand.json`、`--template weekly`
     outputDir: E:\decks   # 可选；默认会话工作目录
     maxSlides: 40         # 可选；默认 60（3–120）
     defaultTheme: data    # 可选；ppt_create 未指定 theme 时使用
-    defaultLang: zh       # 可选；ppt_create 未指定 lang 时使用（zh/en/bilingual）
+    defaultLang: zh       # 可选；ppt_create 未指定 lang 时使用（zh/en/bilingual/ru）
 ```
 
 也可用环境变量 `DSH_PPT_OUTPUT_DIR` 指定默认输出目录；`ppt_create` 的 `outputDir`/`theme`/`lang` 参数优先级最高。
@@ -184,7 +184,7 @@ dsh plugin --profile web remove dsh-ppt
 
 ## 中英双语
 
-- `lang` 参数：`zh`（默认）/ `en` / `bilingual`，控制播放器界面、页码与结束页默认文案。
+- `lang` 参数：`zh`（默认）/ `en` / `bilingual` / `ru`，控制播放器界面、页码与结束页默认文案。
 - 内容语言由你撰写：双语 deck 推荐「中文标题 + 英文副标题」，或同一大纲分别生成中英两份。
 - 插件文档提供中英两版（README.md / README.en.md）；CLI 与技能的报错提示为中文。
 

@@ -70,7 +70,7 @@ export function createDataMath() {
   }
   function format(value, metric, language = 'zh') {
     const style = metric.format?.style || 'number', digits = metric.format?.digits ?? 2;
-    return new Intl.NumberFormat(language === 'en' ? 'en-US' : 'zh-CN', { style:style==='number'?'decimal':style, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value) + (metric.format?.unit || '');
+    return new Intl.NumberFormat(language === 'ru' ? 'ru-RU' : language === 'en' ? 'en-US' : 'zh-CN', { style:style==='number'?'decimal':style, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value) + (metric.format?.unit || '');
   }
   return { inspect, solve, format, finite, inputValue };
 }

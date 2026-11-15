@@ -32,8 +32,8 @@ export function resolvePptConfig(config: PptConfig | undefined | null): Resolved
   if (defaultTheme !== '' && !['swiss', 'velvet', 'data', 'soft', 'bold'].includes(defaultTheme)) {
     throw new Error('defaultTheme 只支持 swiss / velvet / data / soft / bold。')
   }
-  if (defaultLang !== '' && defaultLang !== 'zh' && defaultLang !== 'en' && defaultLang !== 'bilingual') {
-    throw new Error('defaultLang 只支持 zh / en / bilingual。')
+  if (defaultLang !== '' && defaultLang !== 'zh' && defaultLang !== 'en' && defaultLang !== 'bilingual' && defaultLang !== 'ru') {
+    throw new Error('defaultLang 只支持 zh / en / bilingual / ru。')
   }
   let maxSlides = DEFAULT_MAX_SLIDES
   if (raw.maxSlides !== undefined) {

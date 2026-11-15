@@ -164,12 +164,12 @@ export function dataDependencies(model, ids) {
 }
 export function dataNotes(manifest, slide) {
   if(!manifest.dataModel||!slide.dataTemplate)return slide.notes||''
-  const model=manifest.dataModel,en=manifest.language==='en',metrics=dataDependencies(model,dataReferences(slide))
-  const lines=[slide.notes||'',en?'--- Data and assumptions (confirmed static snapshot) ---':'--- 数据、公式与假设（已确认的静态快照） ---',...metrics.map(m=>m.label+' ['+m.id+'] = '+math.format(model.values[m.id],m,manifest.language)+'\n'+(m.kind==='formula'?'= '+m.formula:m.kind==='input'?(en?'User assumption':'用户假设')+(m.note?': '+m.note:''):m.evidence.name+' · '+m.evidence.locator+'\n'+m.evidence.excerpt+'\nSHA-256: '+m.evidence.sha256))]
+  const model=manifest.dataModel,ru=manifest.language==='ru',en=manifest.language==='en',L=(zh,english,ruText)=>ru?(ruText??english):en?english:zh,metrics=dataDependencies(model,dataReferences(slide))
+  const lines=[slide.notes||'',L('--- 数据、公式与假设（已确认的静态快照） ---','--- Data and assumptions (confirmed static snapshot) ---','--- Данные и допущения (подтверждённый статичный снимок) ---'),...metrics.map(m=>m.label+' ['+m.id+'] = '+math.format(model.values[m.id],m,manifest.language)+'\n'+(m.kind==='formula'?'= '+m.formula:m.kind==='input'?L('用户假设','User assumption','Пользовательское допущение')+(m.note?': '+m.note:''):m.evidence.name+' · '+m.evidence.locator+'\n'+m.evidence.excerpt+'\nSHA-256: '+m.evidence.sha256))]
   return lines.join('\n\n')
 }
 export function dataReport(manifest) {
-  const en=manifest.language==='en',heading=String(manifest.title).replace(/[\r\n]/g,' '),lines=['# '+heading,en?'Data lineage and assumptions; source links are not factual verification.':'数据溯源与假设；关联到原文不代表事实已被核验。']
+  const ru=manifest.language==='ru',en=manifest.language==='en',heading=String(manifest.title).replace(/[\r\n]/g,' '),lines=['# '+heading,en?'Data lineage and assumptions; source links are not factual verification.':ru?'Происхождение данных и допущения; связь с оригиналом не означает проверку факта.':'数据溯源与假设；关联到原文不代表事实已被核验。']
   manifest.slides.forEach((slide,i)=>{if(slide.dataTemplate)lines.push('## '+(i+1)+'. '+slide.title,dataNotes(manifest,slide))})
   return lines.join('\n\n')+'\n'
 }
