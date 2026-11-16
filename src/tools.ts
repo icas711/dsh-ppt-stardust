@@ -1,5 +1,5 @@
 import type { ResolvedPptConfig } from './config.js'
-import { createPptExecutors, type PptExecution } from './execution.js'
+import { createPptExecutors, type PptExecution, type ExecutorOptions } from './execution.js'
 import type { PptCreateResult, PptThemesResult, PptQualityResult, PptCheckResult, PptRenderResult } from './types.js'
 
 export interface ToolDefinition {
@@ -130,6 +130,29 @@ function renderThemes(value: PptThemesResult): TextBlock[] {
   return oneText(summary + '\n\n想要并排对比：ppt_themes { preview: true, outputDir: "..." } 会生成 themes-preview.html 和每套主题的 SVG 色板卡。')
 }
 
+/** Human output for ppt_template results; structured value carries the details. */
+function renderTemplate(value: unknown): string {
+  const v = value as Record<string, any>
+  const templates: any[] = Array.isArray(v.templates) ? v.templates : []
+  if (v.templates) {
+    const scopeLabel: Record<string, string> = { builtin: 'встроенный', public: 'общий', user: 'личный' }
+    const lines = templates.map((tpl) =>
+      '- [' + scopeLabel[tpl.scope] + '] ' + (tpl.key ?? tpl.scope + ':' + tpl.id) + ' — ' + tpl.name +
+      (tpl.theme ? '（тема ' + tpl.theme + '）' : '') + (tpl.outlineCount ? '，каркас ' + tpl.outlineCount + ' стр.' : ''))
+    return 'Библиотека шаблонов dsh-ppt：\n\n' + (lines.join('\n') || '（пусто — создайте шаблон из pptx или проекта）') +
+      '\n\nppt_create принимает templateId; редизайн готового проекта — ppt_template { operation: "apply-to-project", deckPath, templateId }.'
+  }
+  if (v.template && v.manifest) return 'Шаблон ' + v.template.key + ' (ревизия ' + v.template.revision + ')：' + v.template.name +
+    '\nКаркас: ' + (v.template.outlineTitles ?? []).join(' → ')
+  if (v.key && v.template) return 'Шаблон сохранён: ' + v.key + ' (ревизия ' + v.template.revision + ')' +
+    (v.report ? '\nОтчёт извлечения: ' + JSON.stringify(v.report) : '')
+  if (v.deleted) return 'Шаблон удалён: ' + v.deleted
+  if (v.path && v.bytes !== undefined) return 'Bundle записан: ' + v.path + ' (' + v.bytes + ' байт)'
+  if (v.template && v.files) return 'Редизайн применён: шаблон ' + v.template.id + ' v' + v.template.revision +
+    (v.changed ? '，ревизия ' + v.revision : '，изменений не потребовалось') + '\nОбновлённый проект: ' + v.files.json
+  return JSON.stringify(value, null, 2)
+}
+
 function renderCreate(value: PptCreateResult): TextBlock[] {
   return oneText(
     'dsh-ppt 已生成 ' + value.slideCount + ' 页' + (value.deliveryStatus === 'draft' ? '草稿（还有待填写内容，不能作为成品交付）' : '演示文稿') + '（主题 ' + value.theme + '，语言 ' + value.language + '）：\n' +
@@ -149,7 +172,9 @@ function qualityText(value: PptQualityResult): string {
 }
 
 function renderCheck(value: PptCheckResult): TextBlock[] {
-  return oneText(qualityText(value) + '\nPPTX 渲染：' + (value.verification?.pptxRender === 'rendered' ? '已核验当前文件的渲染输出' : '尚未验证') +
+  const lineage = (value as unknown as Record<string, unknown>).template
+  const lineageText = lineage && typeof lineage === 'object' ? '\nШаблон：' + (lineage as any).id + ' v' + (lineage as any).revision : lineage && typeof lineage === 'string' ? '\nСценарий：' + lineage : ''
+  return oneText(qualityText(value) + lineageText + '\nPPTX 渲染：' + (value.verification?.pptxRender === 'rendered' ? '已核验当前文件的渲染输出' : '尚未验证') +
     '；视觉检查：需查看实际画面。' + (value.render?.message ? '\n' + value.render.message : '') +
     (value.render?.missingFonts?.length ? '\n缺失字体：' + value.render.missingFonts.join('、') + '。请替换为可用字体，重新生成并检查每页；解决前需标注字体问题。' : ''))
 }
@@ -206,8 +231,8 @@ const metricProperties = {
 }
 
 /** Assemble presentation schemas, rendering and the session-aware executors. */
-export function buildPptTools(config: ResolvedPptConfig): ToolDefinition[] {
-  const executors = createPptExecutors(config)
+export function buildPptTools(config: ResolvedPptConfig, options: ExecutorOptions = {}): ToolDefinition[] {
+  const executors = createPptExecutors(config, undefined, options)
   return [
     {
       name: 'ppt_themes',
@@ -235,7 +260,9 @@ export function buildPptTools(config: ResolvedPptConfig): ToolDefinition[] {
         motion: { type: 'string', enum: ['on', 'off'], description: 'Slide transitions plus bullet entrance animations: on (default) or off for a fully static deck.' },
         slides: { type: 'array', items: { type: 'object', properties: slideProperties, additionalProperties: true }, description: 'Structured slides including image/image-left/image-right and chart. Images: {src, alt, fit: contain|cover, caption}. Charts: {kind: column|bar|line|pie, categories, series:[{name,values}]} or rows with header. Tables paginate at 8 data rows. Keep full content editable; use images only for actual photos/screenshots/logos.' },
         template: { type: 'string', enum: ['weekly', 'defense', 'project', 'pitch'], description: 'Scenario reference from ppt_templates. Provide finished content/slides following its outline. Template alone creates a clearly marked draft with unfilled slots, never a finished presentation.' },
-        brand: { type: 'object', properties: brandProperties, additionalProperties: false, description: 'Shared brand: #RRGGBB primary/background/text colors, fontFamily, logo and footer. Applied to HTML and PPTX.' },
+        templateId: { type: 'string', description: 'Library template key (builtin:<id> / public:<id> / user:<id>) from ppt_template list. Style + outline skeleton + optional sample slides are applied under title; content/slides are then not needed.' },
+        templateSamples: { type: 'boolean', description: 'Include the template sample slides after the outline; default true.' },
+        brand: { type: 'object', properties: brandProperties, additionalProperties: false, description: 'Shared brand: #RRGGBB primary/background/text colors, fontFamily, logo and footer. Applied to HTML and PPTX. A templateId brand is applied on top unless overridden here.' },
         dataModel: {type:'object',properties:{schemaVersion:{type:'integer',enum:[1]},sources:{type:'array',items:{type:'object',properties:sourceProperties,required:['id']}},metrics:{type:'array',items:{type:'object',properties:metricProperties,required:['id','kind']}}},additionalProperties:false,description:'Optional explicit lineage and what-if model. Use with structured slides containing {{metricId}} in text/tables or an exact token as chart values. Source facts reference a real cell or text line; assumptions require value/min/max/step. Formulas compute derived metrics. HTML offers live sliders; PPTX includes confirmed static values, formulas and assumptions in speaker notes. Leave absent for ordinary finished decks.'},
         outputDir: { type: 'string', description: 'Directory to write the files into. Default: session working directory (or the plugin outputDir config).' },
         fileName: { type: 'string', description: 'Base file name for the three artifacts. Default: sanitized deck title.' },
@@ -253,6 +280,33 @@ export function buildPptTools(config: ResolvedPptConfig): ToolDefinition[] {
       parameters: compileParameters({ lang: { type: 'string', description: 'zh / en / bilingual, default zh.' } }),
       output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => oneText(JSON.stringify(value, null, 2)) },
       execute: executors.templates,
+    },
+    {
+      name: 'ppt_template',
+      description: 'Template library: list builtin/public/private templates, create templates from example PPTX files or existing projects, import/export template bundles (.zip/.json), publish to public (admin), delete, and restyle an existing project with a template (apply-to-project keeps content, swaps theme/brand/backgrounds, undoable). Admin checks follow the host webAuth with a config `admins` fallback; fail-closed. 中文：模板库：列出/创建（来自 pptx 或工程）/导入导出/发布（管理员）/删除模板；apply-to-project 用模板重设计现有工程（只换外观，内容不变，可撤销）。',
+      parameters: compileParameters({
+        operation: { type: 'string', required: true, enum: ['list', 'get', 'create-from-pptx', 'create-from-project', 'save', 'delete', 'export', 'import', 'publish', 'apply-to-project'], description: 'Library operation.' },
+        templateId: { type: 'string', description: 'Template key: builtin:<id> / public:<id> / user:<id>. For create-from-* this is NOT needed; use newTemplateId.' },
+        newTemplateId: { type: 'string', description: 'New template slug for create-from-pptx / create-from-project (2-49 lowercase letters/digits/hyphens).' },
+        name: { type: 'string', description: 'Human template name for create-from-*.' },
+        description: { type: 'string', description: 'Optional template description.' },
+        pptxPath: { type: 'string', description: 'Example PPTX path for create-from-pptx (session-relative or absolute).' },
+        deckPath: { type: 'string', description: 'dsh-ppt .json project path for create-from-project or apply-to-project.' },
+        bundlePath: { type: 'string', description: 'Template bundle (.zip/.json) for apply-to-project without the library.' },
+        path: { type: 'string', description: 'Template bundle file for import.' },
+        data: { type: 'string', description: 'Base64 zip/json template for import (panel uploads).' },
+        manifest: { type: 'object', additionalProperties: true, description: 'Template manifest for save (schemaVersion 1).' },
+        assets: { type: 'object', additionalProperties: true, description: 'Assets for save: name → local path / data URI.' },
+        scope: { type: 'string', enum: ['user', 'public'], description: 'Target scope for save/import; public requires admin.' },
+        owner: { type: 'string', description: 'Admin only: publish a named user\'s own template (their login).' },
+        outputDir: { type: 'string', description: 'Directory for export (default: session cwd).' },
+        samples: { type: 'boolean', description: 'create-from-project: include up to 3 sample slides; default true.' },
+        expectedRevision: { type: 'integer', description: 'apply-to-project: expected deck revision.' },
+        saveAs: { type: 'boolean', description: 'apply-to-project: save as a separate copy instead of in-place undoable edit.' },
+        lang: { type: 'string', description: 'Summary language: zh / en / ru (default zh).' },
+      }),
+      output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => oneText(renderTemplate(value)) },
+      execute: executors.template,
     },
     {
       name: 'ppt_edit',

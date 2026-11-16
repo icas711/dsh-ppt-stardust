@@ -6,6 +6,8 @@ export interface ResolvedPptConfig {
     maxSlides: number;
     defaultTheme: string;
     defaultLang: string;
+    /** Admin logins for template management (fallback when the host cannot answer). */
+    admins: string[];
 }
 /** 解析并校验插件行配置。本插件无必填项，空配置永远可用。 */
 export declare function resolvePptConfig(config: PptConfig | undefined | null): ResolvedPptConfig;

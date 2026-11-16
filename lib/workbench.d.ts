@@ -4,6 +4,8 @@ import { PptCoaching } from './coaching.js';
 import type { CoachingModel } from './coaching-model.js';
 import { PptVisual } from './visual.js';
 import type { VisualModel } from './visual-model.js';
+import type { PptTemplateStore } from './templates.js';
+import type { WorkbenchIdentity } from './web-owner.js';
 export declare const PPT_WORKBENCH_ROUTE = "/api/dsh-ppt/workbench";
 export declare const PPT_DOWNLOAD_ROUTE = "/api/dsh-ppt/download";
 type WorkbenchEngine = DeckEngine & {
@@ -24,7 +26,12 @@ export declare class PptWorkbench {
     readonly visual: PptVisual;
     private readonly loadEngine;
     private readonly renders;
+    private templates?;
     constructor(options?: Options);
+    /** Attach the template library (index.ts); identity comes from the auth cookie. */
+    attachTemplateStore(store: PptTemplateStore): void;
+    private templatesModule;
+    private needTemplates;
     private catalog;
     /** Recording a completed tool never turns a successful generation into an error. */
     remember(result: any, args: unknown, exec?: PptExecution): Promise<void>;
@@ -32,9 +39,9 @@ export declare class PptWorkbench {
     private view;
     private revision;
     private patch;
-    action(body: Record<string, unknown>, signal?: AbortSignal, owner?: string): Promise<unknown>;
-    fetchDownload(request: Request): Promise<Response>;
-    fetch(request: Request, owner?: string): Promise<Response>;
+    action(body: Record<string, unknown>, signal?: AbortSignal, identity?: WorkbenchIdentity): Promise<unknown>;
+    fetchDownload(request: Request, identity?: WorkbenchIdentity): Promise<Response>;
+    fetch(request: Request, identity?: WorkbenchIdentity): Promise<Response>;
 }
 export declare function installPptWorkbench(ctx: any, workbench: PptWorkbench): void;
 export {};

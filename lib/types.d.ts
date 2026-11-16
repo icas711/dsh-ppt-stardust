@@ -167,6 +167,8 @@ export interface PptConfig {
     defaultTheme?: string;
     /** 默认播放器界面语言，调用 ppt_create 时可用 lang 覆盖。 */
     defaultLang?: string;
+    /** 模板管理（公共模板导入/删除/发布）的备用管理员登录名列表；webAuth 可用时以宿主为准。 */
+    admins?: string[];
 }
 export interface PptCreateArgs {
     title: string;
@@ -183,6 +185,10 @@ export interface PptCreateArgs {
     /** 是否覆盖同名三件套；默认 false，同名时自动选择唯一后缀。 */
     overwrite?: boolean;
     template?: PptTemplateId;
+    /** Library template key (builtin:<id> / public:<id> / user:<id>) applied on top of content/slides. */
+    templateId?: string;
+    /** Apply template sample slides in addition to the outline skeleton; default true. */
+    templateSamples?: boolean;
     brand?: PptBrand;
     /** Optional explicit source facts, assumptions and safe arithmetic; bind slides with {{metricId}}. */
     dataModel?: PptDataModel;
@@ -232,8 +238,55 @@ export interface PptCreateResult {
     revision?: number;
     undoAvailable?: number;
     deliveryStatus?: 'draft' | 'ready-for-review';
+    changed?: boolean;
     quality?: PptQualityResult;
     verification?: PptVerification;
+}
+/** Library template manifest (schemaVersion 1) summary as shown in lists. */
+export interface PptTemplateSummary {
+    id: string;
+    name: string;
+    description?: string;
+    author?: string;
+    revision: number;
+    createdAt?: string;
+    updatedAt?: string;
+    scope?: string;
+    theme?: string | null;
+    brand?: Record<string, string> | null;
+    hasLogo?: boolean;
+    backgrounds?: Array<{
+        layoutType: string;
+        fit?: string;
+    }>;
+    outlineCount?: number;
+    sampleCount?: number;
+    outlineTitles?: string[];
+    assetCount?: number;
+}
+export interface PptTemplateImportReport {
+    colors?: unknown;
+    fonts?: unknown;
+    masterBackground?: boolean;
+    layoutBackgrounds?: number;
+    logo?: {
+        bytes: number;
+    } | null;
+    warnings?: string[];
+}
+export interface PptTemplateApplyResult {
+    ok: true;
+    template: {
+        id: string;
+        revision: number;
+    };
+    changed: boolean;
+    applied: {
+        theme?: string;
+        brand: string[];
+        backgrounds: string[];
+    };
+    warnings: string[];
 }
 /** Shared generator and optional renderer exposed to the plugin. */
 export interface DeckEngine {
@@ -244,6 +297,10 @@ export interface DeckEngine {
     dataReport(manifest: any): string;
     dataNotes(manifest: any, slide: any): string;
     buildDeckAsync?(options: Record<string, unknown>): Promise<PptCreateResult>;
+    readDeckProject(options: Record<string, unknown>): {
+        manifest: any;
+        path: string;
+    };
     listTemplates(lang?: string): unknown[];
     editDeck(options: Record<string, unknown>): Promise<PptCreateResult>;
     undoDeck(options: Record<string, unknown>): Promise<PptCreateResult>;

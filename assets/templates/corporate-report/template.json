@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "corporate-report",
+  "name": "Корпоративный отчёт (синий)",
+  "author": "cli",
+  "revision": 1,
+  "createdAt": "2026-11-16T01:45:42.804Z",
+  "updatedAt": "2026-11-16T01:45:42.804Z",
+  "style": {
+    "theme": "data",
+    "brand": {
+      "primaryColor": "#1B4FD8",
+      "backgroundColor": "#F5F8FF",
+      "textColor": "#10224A",
+      "fontFamily": "Liberation Sans"
+    }
+  },
+  "outline": [
+    {
+      "layout": "cover",
+      "title": "{{deck.title}}",
+      "subtitle": "Заполнить: докладчик и дата"
+    },
+    {
+      "layout": "bullets",
+      "title": "Ключевые результаты",
+      "bullets": [
+        "Заполнить: конкретные факты, доказательства и следующий шаг"
+      ]
+    },
+    {
+      "layout": "bullets",
+      "title": "Планы",
+      "bullets": [
+        "Заполнить: конкретные факты, доказательства и следующий шаг"
+      ]
+    },
+    {
+      "layout": "closing",
+      "title": "Спасибо за внимание",
+      "subtitle": "Заполнить: следующий шаг и ответственный"
+    }
+  ]
+}

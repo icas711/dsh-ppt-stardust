@@ -21,6 +21,11 @@ import { registerPptSkill, type SkillsService } from './skill.js'
 import type { PptConfig } from './types.js'
 import { buildPptTools, type ToolDefinition } from './tools.js'
 import { PptWorkbench, installPptWorkbench } from './workbench.js'
+import { PptTemplateStore } from './templates.js'
+import { loadTemplatesModule } from './execution.js'
+import { homedir } from 'node:os'
+import { join, resolve as resolvePath } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { nativeCoachingModel } from './coaching-model.js'
 import { nativeVisualModel } from './visual-model.js'
 export type { ToolDefinition } from './tools.js'
@@ -45,9 +50,18 @@ export function apply(ctx: PptPluginContext, config: Config = {}): void {
   const resolved = resolvePptConfig(config)
   const warn = (message: string): void => { ctx.logger?.warn?.(message) }
   const disposers: Array<() => void> = []
+  const catalogDir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'plugins', 'dsh-ppt')
   const workbench = typeof ctx.inject === 'function' ? new PptWorkbench() : undefined
+  // Template library: builtin bundles ship in the package, user/public live in DSH_HOME.
+  const templateStore = new PptTemplateStore({
+    root: join(catalogDir, 'templates'),
+    builtinDir: resolvePath(fileURLToPath(new URL('../assets/templates', import.meta.url))),
+    templatesModuleLoader: loadTemplatesModule,
+    admins: resolved.admins,
+  })
   if (workbench) {
     installPptWorkbench(ctx, workbench)
+    workbench.attachTemplateStore(templateStore)
     ctx.inject?.(['llm'], host => {
       workbench.coaching.setModel(nativeCoachingModel(host.llm))
       host.effect?.(() => () => workbench.coaching.setModel())
@@ -66,7 +80,7 @@ export function apply(ctx: PptPluginContext, config: Config = {}): void {
     warn('[dsh-ppt] 技能加载失败：' + (error instanceof Error ? error.message : String(error)))
   }
 
-  for (const definition of buildPptTools(resolved)) {
+  for (const definition of buildPptTools(resolved, { templateStore })) {
     const execute = definition.execute
     disposers.push(ctx.tools.register({ ...definition, async execute(args, exec) {
       const result = await execute(args, exec)

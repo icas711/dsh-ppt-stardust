@@ -8,6 +8,8 @@ export interface ResolvedPptConfig {
   maxSlides: number
   defaultTheme: string
   defaultLang: string
+  /** Admin logins for template management (fallback when the host cannot answer). */
+  admins: string[]
 }
 
 /** 解析并校验插件行配置。本插件无必填项，空配置永远可用。 */
@@ -42,11 +44,19 @@ export function resolvePptConfig(config: PptConfig | undefined | null): Resolved
     }
     maxSlides = raw.maxSlides
   }
+  let admins: string[] = []
+  if (raw.admins !== undefined) {
+    if (!Array.isArray(raw.admins) || raw.admins.some(item => typeof item !== 'string')) {
+      throw new Error('admins 必须是字符串数组。')
+    }
+    admins = [...new Set((raw.admins as string[]).map(item => item.trim()).filter(item => item !== ''))]
+  }
   return {
     outputDir,
     maxSlides,
     defaultTheme,
     defaultLang,
+    admins,
   }
 }
 

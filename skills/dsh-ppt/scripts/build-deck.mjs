@@ -12,10 +12,12 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve as resolvePath } from 'node:path'
+import { homedir } from 'node:os'
+import { join as joinPath, resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { listThemes, THEME_IDS, DEFAULT_THEME } from './deck-core.mjs'
 import { buildDeckAsync, listTemplates, editDeck, undoDeck, checkDeckAsync, renderDeck } from './deck-advanced.mjs'
+import * as deckTemplates from './deck-templates.mjs'
 
 const HELP = `dsh-ppt —— 一句话 / 一篇文档 → HTML 放映 + PPTX 导出
 
@@ -27,6 +29,17 @@ const HELP = `dsh-ppt —— 一句话 / 一篇文档 → HTML 放映 + PPTX 导
   --content <text|@path>  Markdown 正文；或文件路径（自动读取）；或 @- 从 stdin 读
   --slides <json>     结构化 slides JSON（可选，与 --content 二选一）
   --template <id>    weekly / defense / project / pitch；仅模板会生成草稿
+  --template-file <path.zip|json> 模板 bundle：按其骨架与样式生成（与 --title 配合）
+  --template-id <slug>   --create-template-* 的新模板 id（2-49 位小写字母/数字/连字符）
+  --template-name <text> --create-template-* 的模板名
+  --no-template-samples  --template-file 不带示例页（默认带）
+  --restyle <deck.json>  用模板重设计已有工程（配合 --template-file / --template-key）
+  --template-key <scope:id> 从 DSH 模板库取模板（配合 --restyle / --export-template）
+  --create-template-from-pptx <file.pptx> 从 PPTX 示例提取模板（配合 --save-template）
+  --create-template-from-deck <deck.json> 从工程提取模板（配合 --save-template）
+  --save-template <dir>  写出 <id>-template-vN.zip 的目录
+  --export-template <key|path> 导出模板 bundle 到 --to 目录（库键或文件路径）
+  --to <dir>         --export-template 的输出目录
   --brand <json|@path> 品牌颜色、字体、Logo、页脚
   --data-model <json|@path> 可选数字来源、公式与推演假设；配合 --slides
   --edit <deck.json> 修改指定页，配合 --edits <json|@path>
@@ -76,6 +89,17 @@ export function parseArgv(argv) {
     else if (key === '--content') args.content = nextValue()
     else if (key === '--slides') args.slides = readJson(nextValue())
     else if (key === '--template') args.template = nextValue()
+    else if (key === '--template-file') args.templateFile = nextValue()
+    else if (key === '--template-id') args.templateId = nextValue()
+    else if (key === '--template-name') args.templateName = nextValue()
+    else if (key === '--no-template-samples') args.noTemplateSamples = true
+    else if (key === '--restyle') args.restyle = nextValue()
+    else if (key === '--template-key') args.templateKey = nextValue()
+    else if (key === '--create-template-from-pptx') args.fromPptx = nextValue()
+    else if (key === '--create-template-from-deck') args.fromDeck = nextValue()
+    else if (key === '--save-template') args.saveTemplate = nextValue()
+    else if (key === '--export-template') args.exportTemplate = nextValue()
+    else if (key === '--to') args.to = nextValue()
     else if (key === '--brand') args.brand = readJson(nextValue())
     else if (key === '--data-model') args.dataModel = readJson(nextValue())
     else if (key === '--edit') args.edit = nextValue()
@@ -101,6 +125,30 @@ export function parseArgv(argv) {
 
 function readJson(value) { return JSON.parse(value.startsWith('@') ? readFileSync(resolvePath(value.slice(1)), 'utf8') : value) }
 
+/** Load a template (bundle file or library key) as {manifest, assets}. */
+function loadTemplateSource(source) {
+  if (/^[a-z]+:/.test(source)) {
+    const colon = source.indexOf(':')
+    const scope = source.slice(0, colon), id = source.slice(colon + 1)
+    const dshHome = process.env.DSH_HOME || joinPath(homedir(), '.dsh')
+    const dir = scope === 'builtin'
+      ? joinPath(fileURLToPath(new URL('../../..', pathToFileURL(import.meta.url))), 'assets', 'templates', id)
+      : scope === 'public'
+        ? joinPath(dshHome, 'plugins', 'dsh-ppt', 'templates', 'public', id)
+        : joinPath(dshHome, 'plugins', 'dsh-ppt', 'templates', 'users', process.env.DSH_USER || 'local', id)
+    return deckTemplates.readTemplateDir(dir)
+  }
+  return deckTemplates.readTemplateBundle(source)
+}
+
+/** Restyle options from --template-file / --template-key. */
+async function readTemplateForRestyle(args) {
+  const source = args.templateFile ?? args.templateKey
+  if (!source) throw new Error('dsh-ppt CLI：--restyle 需要 --template-file / --template-key (укажите источник шаблона)')
+  const read = loadTemplateSource(String(source))
+  return deckTemplates.templateRestyleOptions(read.manifest, read.assets)
+}
+
 async function readStdin(stream) {
   let text = ''
   stream.setEncoding('utf8')
@@ -123,6 +171,36 @@ export async function main(argv = process.argv.slice(2), io = {}) {
     return 0
   }
   if (args.listTemplates) { log(JSON.stringify({ templates: listTemplates(args.lang) }, null, 2)); return 0 }
+
+  // ---- Шаблоны: извлечение, экспорт, редизайн (создание из шаблона — ниже в обычном потоке) ----
+  const templateOps = [args.fromPptx, args.fromDeck, args.restyle, args.exportTemplate].filter(Boolean).length
+  if (templateOps > 1) throw new Error('dsh-ppt CLI：--create-template-from-pptx / --create-template-from-deck / --restyle / --export-template 只能选择一项')
+  if (args.fromPptx || args.fromDeck) {
+    if (!args.saveTemplate) throw new Error('dsh-ppt CLI：--save-template 需要一个输出目录')
+    const base = { templateId: args.templateId ?? '', name: args.templateName ?? '', lang: args.lang, author: 'cli' }
+    const extracted = args.fromPptx
+      ? await deckTemplates.templateFromPptx(resolvePath(args.fromPptx), base)
+      : deckTemplates.templateFromDeckManifest(JSON.parse(readFileSync(resolvePath(args.fromDeck), 'utf8')), { ...base, lang: args.lang })
+    const written = deckTemplates.writeTemplateBundle(args.saveTemplate, extracted.manifest, extracted.assets)
+    log(JSON.stringify({ ok: true, id: extracted.manifest.id, revision: extracted.manifest.revision, bundle: written.path, bytes: written.bytes, report: extracted.report ?? undefined }, null, 2))
+    return 0
+  }
+  if (args.exportTemplate) {
+    if (!args.to) throw new Error('dsh-ppt CLI：--to 需要一个输出目录')
+    const read = loadTemplateSource(args.exportTemplate)
+    const written = deckTemplates.writeTemplateBundle(args.to, read.manifest, read.assets)
+    log(JSON.stringify({ ok: true, bundle: written.path, bytes: written.bytes }, null, 2))
+    return 0
+  }
+  if (args.restyle) {
+    const { restyle, lineage } = await readTemplateForRestyle(args)
+    const result = await editDeck({
+      deckPath: args.restyle, theme: restyle.theme, brand: restyle.brand, style: restyle.style,
+      templateLineage: lineage, expectedRevision: args.revision,
+    })
+    log(JSON.stringify({ ok: true, template: lineage, revision: result.revision, files: result.files }, null, 2))
+    return 0
+  }
   if ([args.edit, args.undo, args.check, args.render].filter(Boolean).length > 1) throw new Error('dsh-ppt CLI：--edit / --undo / --check / --render 只能选择一项')
   if (args.renderReceipt !== undefined && !args.check) throw new Error('dsh-ppt CLI：--render-receipt 需配合 --check')
   if (!args.render && [args.format, args.width, args.timeoutMs].some(v => v !== undefined)) throw new Error('dsh-ppt CLI：--format / --width / --timeout 需配合 --render')
@@ -149,22 +227,38 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   } else if (content.trim() !== '' && existsSync(resolvePath(content.trim()))) {
     // README / SKILL.md 的示例直接传文件路径（不带 @）时也按文件读取
     content = readFileSync(resolvePath(content.trim()), 'utf8')
-  } else if (content.trim() === '' && slides === null && !args.template) {
-    throw new Error('dsh-ppt CLI：--content 不能为空（或用 --slides 传结构化幻灯片）')
+  } else if (content.trim() === '' && slides === null && !args.template && !args.templateFile) {
+    throw new Error('dsh-ppt CLI：--content 不能为空（或用 --slides / --template / --template-file 传结构化幻灯片）')
+  }
+
+  // 模板 bundle → 骨架 + 样式（或 --template-key 从 DSH 库）
+  let templateApply = {}
+  if (args.templateFile) {
+    const read = loadTemplateSource(args.templateFile)
+    const prepared = deckTemplates.templateCreateOptions(read.manifest, read.assets, { title: args.title ?? '', includeSamples: !args.noTemplateSamples })
+    templateApply = { slides: prepared.create.slides, theme: prepared.create.theme, brand: prepared.create.brand, style: prepared.create.style, templateLineage: prepared.lineage }
+  } else if (args.templateKey) {
+    const read = loadTemplateSource(args.templateKey)
+    const prepared = deckTemplates.templateRestyleOptions(read.manifest, read.assets)
+    templateApply = { theme: prepared.restyle.theme, brand: prepared.restyle.brand, style: prepared.restyle.style, templateLineage: prepared.lineage }
+    if (!args.title) throw new Error('dsh-ppt CLI：--template-key 需配合 --title（库中模板无骨架页）')
+    slides = undefined
   }
 
   const options = {
     title: args.title,
     content,
-    slides,
-    theme: args.theme,
+    slides: templateApply.slides ?? slides,
+    theme: templateApply.theme ?? args.theme,
     lang: args.lang,
     motion: args.motion,
     outputDir: resolvePath(args.out || '.'),
     fileName: args.file,
     overwrite: args.overwrite,
     template: args.template,
-    brand: args.brand,
+    brand: templateApply.brand ?? args.brand,
+    style: templateApply.style,
+    templateLineage: templateApply.templateLineage,
     dataModel: args.dataModel,
   }
   const result = await buildDeckAsync(options)

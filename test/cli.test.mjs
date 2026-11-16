@@ -71,3 +71,66 @@ test('CLI --motion off 产出纯静态放映页', async () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+// ---- Шаблоны: --template-file, --restyle, --create-template-from-* ----
+
+test('CLI: create-template-from-deck → bundle → создание из шаблона → restyle', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ppt-cli-tpl-'))
+  try {
+    const log = () => {}
+    // 1) базовый дек с брендом
+    await main(['--title', 'База', '--lang', 'ru', '--out', dir, '--file', 'base-deck',
+      '--slides', JSON.stringify([
+        { layout: 'cover', title: 'База' },
+        { layout: 'bullets', title: 'Итоги', bullets: ['Пункт один'] },
+        { layout: 'closing', title: 'Спасибо' },
+      ]), '--brand', JSON.stringify({ primaryColor: '#102030', footer: 'ACME' })], { log, error: log })
+    // 2) шаблон из проекта
+    const logs = []
+    const code = await main(['--create-template-from-deck', join(dir, 'base-deck.json'), '--template-id', 'cli-tpl', '--template-name', 'Из CLI', '--save-template', dir], { log: l => logs.push(l), error: log })
+    assert.equal(code, 0)
+    assert.match(logs.join('\n'), /cli-tpl-template-v1\.zip/)
+    // 3) создание из шаблона: каркас + плейсхолдеры + draft
+    const created = []
+    const createCode = await main(['--title', 'Новая по шаблону', '--lang', 'ru', '--out', dir, '--file', 'from-tpl', '--template-file', join(dir, 'cli-tpl-template-v1.zip')], { log: l => created.push(l), error: log })
+    assert.equal(createCode, 0)
+    assert.match(created.join('\n'), /草稿|draft|待填写/)
+    const manifest = JSON.parse(readFileSync(join(dir, 'from-tpl.json'), 'utf8'))
+    assert.deepEqual(manifest.template, { id: 'cli-tpl', revision: 1 })
+    assert.equal(manifest.brand.primaryColor, '#102030')
+    assert.equal(manifest.slides[0].title, 'Новая по шаблону')
+    // 4) restyle того же файла другим шаблоном (из pptx-примера)
+    const fromPptx = []
+    await main(['--create-template-from-pptx', join(dir, 'base-deck.pptx'), '--template-id', 'cli-pptx', '--template-name', 'Из PPTX', '--save-template', dir], { log: () => {}, error: log })
+    const restyled = []
+    const restyleCode = await main(['--restyle', join(dir, 'from-tpl.json'), '--template-file', join(dir, 'cli-pptx-template-v1.zip')], { log: l => restyled.push(l), error: log })
+    assert.equal(restyleCode, 0)
+    assert.match(restyled.join('\n'), /"template":\s*{\s*"id": "cli-pptx"/)
+    const after = JSON.parse(readFileSync(join(dir, 'from-tpl.json'), 'utf8'))
+    assert.deepEqual(after.template, { id: 'cli-pptx', revision: 1 })
+    // контент цел
+    assert.equal(after.slides.length, manifest.slides.length)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('CLI: --restyle требует источник шаблона; экспорт bundle работает', async () => {
+  await assert.rejects(() => main(['--restyle', 'x.json']), /--template-file \/ --template-key/)
+  const dir = mkdtempSync(join(tmpdir(), 'dsh-ppt-cli-exp-'))
+  try {
+    const bundle = join(dir, 'in.zip')
+    const mod = await import('../skills/dsh-ppt/scripts/deck-templates.mjs')
+    mod.writeTemplateBundle(dir, {
+      schemaVersion: 1, id: 'exp-tpl', name: 'Экспорт',
+      outline: [{ layout: 'cover', title: '{{deck.title}}' }],
+    }, {})
+    const logs = []
+    const code = await main(['--export-template', join(dir, 'exp-tpl-template-v1.zip'), '--to', join(dir, 'out')], { log: l => logs.push(l), error: () => {} })
+    assert.equal(code, 0)
+    assert.match(logs.join('\n'), /bundle/)
+    assert.ok(readFileSync(join(dir, 'out', 'exp-tpl-template-v1.zip')).length > 100)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

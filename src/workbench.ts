@@ -11,7 +11,10 @@ import { PptCoaching } from './coaching.js'
 import type { CoachingModel, ModelRoute } from './coaching-model.js'
 import { PptVisual } from './visual.js'
 import type { VisualModel } from './visual-model.js'
-import { workbenchOwner } from './web-owner.js'
+import { workbenchOwner, workbenchIdentity } from './web-owner.js'
+import { loadTemplatesModule } from './execution.js'
+import type { PptTemplateStore } from './templates.js'
+import type { WorkbenchIdentity } from './web-owner.js'
 
 export const PPT_WORKBENCH_ROUTE = '/api/dsh-ppt/workbench'
 export const PPT_DOWNLOAD_ROUTE = '/api/dsh-ppt/download'
@@ -52,6 +55,10 @@ function speakerNotes(manifest: any): string {
 function json(status: number, value: unknown): Response {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } })
 }
+function requireTemplateKey(key: string): string {
+  if (!key) throw new Error('Не выбран шаблон')
+  return key
+}
 function fail(status: number, message: string): Response {
   const display = /[\u3400-\u9fff]/.test(message) && message.includes(' / ') ? message.slice(0, message.indexOf(' / ')) : message
   return json(status, { ok: false, message: display, messageEn: englishWorkbenchMessage(message) })
@@ -70,11 +77,19 @@ export class PptWorkbench {
   readonly visual: PptVisual
   private readonly loadEngine: () => Promise<WorkbenchEngine>
   private readonly renders = new Map<string, Render>()
+  private templates?: PptTemplateStore
   constructor(options: Options = {}) {
     this.catalogPath = options.catalogPath ?? join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'plugins', 'dsh-ppt', 'projects.jsonl')
     this.loadEngine = options.loadEngine ?? (getEngine as () => Promise<WorkbenchEngine>)
     this.coaching = new PptCoaching(join(dirname(this.catalogPath), 'rehearsals'), options.coachingModel)
     this.visual = new PptVisual(join(dirname(this.catalogPath), 'visual-reviews'), options.visualModel)
+  }
+  /** Attach the template library (index.ts); identity comes from the auth cookie. */
+  attachTemplateStore(store: PptTemplateStore): void { this.templates = store }
+  private templatesModule(): Promise<Record<string, any>> { return loadTemplatesModule() }
+  private needTemplates(): PptTemplateStore {
+    if (!this.templates) throw new Error('Библиотека шаблонов недоступна в этой установке')
+    return this.templates
   }
   private catalog(): Project[] {
     if (!existsSync(this.catalogPath)) return []
@@ -150,21 +165,81 @@ export class PptWorkbench {
     }
     return result
   }
-  async action(body: Record<string, unknown>, signal?: AbortSignal, owner?: string): Promise<unknown> {
+  async action(body: Record<string, unknown>, signal?: AbortSignal, identity: WorkbenchIdentity = { admin: false, local: true }): Promise<unknown> {
     signal?.throwIfAborted()
     if (body.operation === 'list') return { ok: true, projects: this.catalog() }
+    // ---- Template library (identity from the auth cookie; admin flag authoritative) ----
+    if (String(body.operation).startsWith('template-')) {
+      const store = this.needTemplates()
+      const key = typeof body.templateId === 'string' ? body.templateId.trim() : ''
+      switch (body.operation) {
+        case 'template-list':
+          return { ok: true, templates: await store.list(identity), admin: identity.admin }
+        case 'template-get': {
+          const record = await store.get(requireTemplateKey(key), identity)
+          return { ok: true, template: { ...record.manifest, key: record.key, readonly: record.readonly, assets: Object.keys(record.assets) } }
+        }
+        case 'template-import': {
+          const data = typeof body.data === 'string' ? body.data : ''
+          if (!data) throw new Error('Загрузите файл шаблона (.zip или template.json)')
+          const saved = await store.import({ bytes: Buffer.from(data, 'base64'), scope: body.scope === 'public' ? 'public' : 'user', identity })
+          return { ok: true, key: saved.key, template: saved.manifest }
+        }
+        case 'template-save': {
+          if (!body.manifest || typeof body.manifest !== 'object' || Array.isArray(body.manifest)) throw new Error('Нужен манифест шаблона')
+          const saved = await store.save({ manifest: body.manifest as Record<string, any>, scope: body.scope === 'public' ? 'public' : 'user', identity })
+          return { ok: true, key: saved.key, template: saved.manifest }
+        }
+        case 'template-delete':
+          return await store.delete(requireTemplateKey(key), identity)
+        case 'template-publish': {
+          const saved = await store.publish({ key: requireTemplateKey(key), identity })
+          return { ok: true, key: saved.key, template: saved.manifest }
+        }
+        case 'template-restyle': {
+          const { entry, manifest, engine } = await this.project(body.id ?? body.deckPath)
+          const options = await store.restyleOptions(requireTemplateKey(key), identity)
+          const result = await engine.editDeck({
+            deckPath: entry.path, cwd: dirname(entry.path), signal,
+            expectedRevision: body.expectedRevision,
+            saveAs: body.saveAs === true,
+            theme: options.restyle.theme,
+            brand: options.restyle.brand,
+            style: options.restyle.style,
+            templateLineage: options.lineage,
+          })
+          await this.remember(result, {}, undefined)
+          return { ...await this.view(entry.id), restyle: { template: options.lineage, changed: result.changed, revision: result.revision, title: manifest.title } }
+        }
+        case 'template-apply': {
+          const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : ''
+          if (!title) throw new Error('Укажите название новой презентации')
+          const engine = await this.loadEngine()
+          const options = await store.createOptions(requireTemplateKey(key), identity, { title })
+          const outputDir = join(dirname(this.catalogPath), 'created')
+          const created = await engine.buildDeckAsync!({
+            ...options.create, title, outputDir, lang: body.lang, overwrite: false, signal,
+            templateLineage: options.lineage,
+          })
+          await this.remember(created, {}, undefined)
+          return { ...await this.view(digest(created.jsonPath)), createdFrom: options.lineage }
+        }
+        default:
+          throw new Error('Неизвестная операция шаблонов')
+      }
+    }
     if (body.operation === 'open') return this.view(body.id)
     const { entry, engine, manifest, files } = await this.project(body.id)
     signal?.throwIfAborted()
     const context = { id: entry.id, manifest, ...(manifest.dataModel?{dataNotes:Object.fromEntries(manifest.slides.map((s:any)=>[s.id,engine.dataNotes(manifest,s)]))}:{}) }
     const visualContext = { id: entry.id, path: entry.path, manifest, engine }
-    if (body.operation === 'visual-options') return { ok: true, ...await this.visual.options(signal, owner) }
+    if (body.operation === 'visual-options') return { ok: true, ...await this.visual.options(signal, identity.login) }
     if (body.operation === 'visual-list') return { ok: true, runs: this.visual.list(visualContext) }
     if (body.operation === 'visual-get') return { ok: true, run: this.visual.get(visualContext, body.runId) }
     if (body.operation === 'visual-stop') return { ok: true, run: this.visual.stop(visualContext, body.runId) }
     if (body.operation === 'visual-delete') return { ok: true, ...this.visual.remove(visualContext, body.runId) }
     if (body.operation === 'visual-page') return this.visual.page(visualContext, body.runId, body.round, body.slideId)
-    if (body.operation === 'coach-options') return { ok: true, ...await this.coaching.options(signal, owner) }
+    if (body.operation === 'coach-options') return { ok: true, ...await this.coaching.options(signal, identity.login) }
     if (body.operation === 'coach-list') return { ok: true, runs: this.coaching.list(context) }
     if (body.operation === 'coach-get') return { ok: true, run: this.coaching.get(context, body.runId) }
     if (body.operation === 'coach-stop') return { ok: true, run: this.coaching.stop(context, body.runId) }
@@ -184,8 +259,8 @@ export class PptWorkbench {
       return { ok: true, data: 'data:image/png;base64,' + bytes.toString('base64') }
     }
     this.revision(body, manifest)
-    if (body.operation === 'visual-create') return { ok: true, run: await this.visual.create(visualContext, body, signal, owner) }
-    if (body.operation === 'visual-step') return { ok: true, run: await this.visual.step(visualContext, body.runId, body, signal, owner) }
+    if (body.operation === 'visual-create') return { ok: true, run: await this.visual.create(visualContext, body, signal, identity.login) }
+    if (body.operation === 'visual-step') return { ok: true, run: await this.visual.step(visualContext, body.runId, body, signal, identity.login) }
     if (body.operation === 'visual-adopt') {
       if (body.confirmed !== true) throw new Error('请确认采用修复副本 / Confirm adopting the repaired copy')
       const { path, render } = this.visual.adoption(visualContext, body.runId)
@@ -203,9 +278,9 @@ export class PptWorkbench {
       await this.remember(result,args)
       return { ...await this.view(digest(result.jsonPath)), originalId:entry.id }
     }
-    if (body.operation === 'coach-create') return { ok: true, run: await this.coaching.create(context, body, signal, owner) }
+    if (body.operation === 'coach-create') return { ok: true, run: await this.coaching.create(context, body, signal, identity.login) }
     if (body.operation === 'coach-step') {
-      await this.coaching.step(context, body.runId, body, signal, owner)
+      await this.coaching.step(context, body.runId, body, signal, identity.login)
       const current = await this.project(entry.id)
       return { ok: true, run: this.coaching.get({ id: entry.id, manifest: current.manifest }, body.runId) }
     }
@@ -254,12 +329,22 @@ export class PptWorkbench {
     }
     throw new Error('不支持此操作')
   }
-  async fetchDownload(request: Request): Promise<Response> {
+  async fetchDownload(request: Request, identity: WorkbenchIdentity = { admin: false, local: true }): Promise<Response> {
     if (request.method !== 'GET') return fail(405, '请使用 GET')
     const denied = originVerdict(request)
     if (denied) return denied
     try {
       const params = new URL(request.url).searchParams, kind = params.get('kind')
+      if (kind === 'template') {
+        // Template bundle download: visible templates only; store enforces scope.
+        const record = await this.needTemplates().get(requireTemplateKey(String(params.get('id') ?? '')), identity)
+        const mod = await this.templatesModule()
+        const bytes = mod.buildTemplateBundle(record.manifest, record.assets)
+        return new Response(new Uint8Array(bytes), { headers: {
+          'content-type': 'application/zip', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
+          'content-disposition': `attachment; filename="${record.manifest.id}-template-v${record.manifest.revision}.zip"; filename*=UTF-8''${encodeURIComponent(record.manifest.id + '-template-v' + record.manifest.revision + '.zip')}`,
+        } })
+      }
       if (!['html', 'pptx', 'json', 'bundle', 'share', 'notes', 'coaching', 'data', 'visual'].includes(String(kind))) return fail(400, '不支持此文件类型')
       const { entry, manifest, files, engine } = await this.project(params.get('id'))
       if (String(manifest.revision) !== params.get('revision')) return fail(409, '项目已被修改，请重新打开后下载')
@@ -312,7 +397,7 @@ export class PptWorkbench {
       } })
     } catch (error) { return fail(400, error instanceof Error ? error.message : String(error)) }
   }
-  async fetch(request: Request, owner?: string): Promise<Response> {
+  async fetch(request: Request, identity: WorkbenchIdentity = { admin: false, local: true }): Promise<Response> {
     if (request.method !== 'POST') return fail(405, '请使用 POST')
     if (request.headers.get('x-dsh-ppt-action') !== '1' || request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return fail(403, '请从演示文稿面板操作')
     const denied = originVerdict(request)
@@ -324,7 +409,7 @@ export class PptWorkbench {
       try { for (;;) { const { value, done } = await reader.read(); if (done) break; size += value.byteLength; if (size > REQUEST_LIMIT) { await reader.cancel(); return fail(413, '图片或请求超过 12 MiB，请压缩后重试') } chunks.push(value) } } finally { reader.releaseLock() }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
       if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(400, '请求必须是对象')
-      return json(200, await this.action(body, request.signal, owner))
+      return json(200, await this.action(body, request.signal, identity))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return fail(/修订号冲突|已被修改|工程已被修改|正在被另一次|其他操作修改/.test(message) ? 409 : 400, message)
@@ -334,7 +419,7 @@ export class PptWorkbench {
 
 export function installPptWorkbench(ctx: any, workbench: PptWorkbench): void {
   ctx.inject?.(['connection'], (host: any) => {
-    host.connection?.fetch?.register({ path: PPT_WORKBENCH_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetch(request, workbenchOwner(ctx, request)) })
-    host.connection?.fetch?.register({ path: PPT_DOWNLOAD_ROUTE, methods: ['GET'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetchDownload(request) })
+    host.connection?.fetch?.register({ path: PPT_WORKBENCH_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetch(request, workbenchIdentity(ctx, request)) })
+    host.connection?.fetch?.register({ path: PPT_DOWNLOAD_ROUTE, methods: ['GET'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetchDownload(request, workbenchIdentity(ctx, request)) })
   })
 }

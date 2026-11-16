@@ -6,6 +6,8 @@ Agent 先准备实际内容，再生成可放映 HTML 与可编辑 PPTX。用户
 
 `ppt_templates` 提供 weekly、defense、project、pitch 四种结构参考。`ppt_create` 的 `template` 单独使用时生成待填草稿，返回 `deliveryStatus:draft`；提供完成的 content/slides 才能开始成品验收。
 
+**模板库**（详见仓库 `docs/TEMPLATES.md`）：`ppt_template` 管理模板（builtin/public/user 三层；`create-from-pptx` 从示例 PPTX 提取样式与骨架，`create-from-project` 从现有工程，`import`/`export` 收发 ZIP bundle，`publish` 需管理员）。`ppt_create` 新增 `templateId`：按模板样式与骨架生成待填草稿；`ppt_template { operation: 'apply-to-project', deckPath, templateId }` 对现有工程只换外观（主题/品牌/页面背景，可撤销）。CLI 对应 `--template-file`、`--restyle`、`--create-template-from-pptx/deck --save-template`。模板背景按页面类型（cover/section/content/closing）应用；无背景的模板在任何环境都完整可用。
+
 `slides` 新增 image/image-left/image-right/chart 布局。图片示例：`{layout:"image-left",title:"新版流程更短",image:{src:"assets/flow.png",alt:"新版流程截图",fit:"contain"},bullets:["可直接生成","可修改指定页"]}`。PNG/JPEG 本地路径按会话 cwd 解析，亦支持 data URI；每张5MiB/3200万像素、合计32MiB。图片嵌入工程和输出，移动原文件后仍可使用。contain完整显示，cover居中裁切。外链/SVG需先由明确授权的其他工具准备，不自动下载。
 
 图表示例：`{layout:"chart",title:"完成量逐月增加",chart:{kind:"column",categories:["七月","八月","九月"],series:[{name:"完成量",values:[3,5,9]}],unit:"项"}}`。支持 column/bar/line/pie，也可用带表头 rows。长度必须一致，值必须有限；pie仅一个非负系列、正总和。原生PPTX图表包含编辑数据工作簿，HTML有SVG与读屏数据表。

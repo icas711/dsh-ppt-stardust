@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "dark-pitch",
+  "name": "Тёмный питч",
+  "author": "cli",
+  "revision": 1,
+  "createdAt": "2026-11-16T01:45:42.937Z",
+  "updatedAt": "2026-11-16T01:45:42.937Z",
+  "style": {
+    "theme": "data",
+    "brand": {
+      "primaryColor": "#7C3AED",
+      "backgroundColor": "#F2EDFF",
+      "textColor": "#170F2A",
+      "fontFamily": "Liberation Serif"
+    }
+  },
+  "outline": [
+    {
+      "layout": "cover",
+      "title": "{{deck.title}}",
+      "subtitle": "Заполнить: докладчик и дата"
+    },
+    {
+      "layout": "bullets",
+      "title": "Проблема",
+      "bullets": [
+        "Заполнить: конкретные факты, доказательства и следующий шаг"
+      ]
+    },
+    {
+      "layout": "bullets",
+      "title": "Решение",
+      "bullets": [
+        "Заполнить: конкретные факты, доказательства и следующий шаг"
+      ]
+    },
+    {
+      "layout": "closing",
+      "title": "Присоединяйтесь",
+      "subtitle": "Заполнить: следующий шаг и ответственный"
+    }
+  ]
+}

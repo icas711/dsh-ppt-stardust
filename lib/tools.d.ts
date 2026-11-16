@@ -1,5 +1,5 @@
 import type { ResolvedPptConfig } from './config.js';
-import { type PptExecution } from './execution.js';
+import { type PptExecution, type ExecutorOptions } from './execution.js';
 export interface ToolDefinition {
     name: string;
     description: string;
@@ -14,4 +14,4 @@ export interface ToolDefinition {
     execute: (rawArgs: unknown, exec?: PptExecution) => Promise<unknown>;
 }
 /** Assemble presentation schemas, rendering and the session-aware executors. */
-export declare function buildPptTools(config: ResolvedPptConfig): ToolDefinition[];
+export declare function buildPptTools(config: ResolvedPptConfig, options?: ExecutorOptions): ToolDefinition[];

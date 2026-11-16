@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, statSync, openSync, closeSync, rmSync } from '
 import { resolve, dirname, extname, basename } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { inflateSync } from 'node:zlib'
-import { buildPptx, renderHtml, normalizeBuildOptions, normalizeSlides, resolveTheme, resolveLanguage, resolveDeckFileName, commitDeckArtifacts, DECK_VERSION, pptxEastAsianFont } from './deck-core.mjs'
+import { buildPptx, renderHtml, normalizeBuildOptions, normalizeSlides, resolveTheme, resolveLanguage, resolveDeckFileName, commitDeckArtifacts, DECK_VERSION, pptxEastAsianFont, backgroundTypeOfLayout, TEMPLATE_BACKGROUND_TYPES } from './deck-core.mjs'
 import { MEDIA_LAYOUTS, mediaBoxes, LOGO_BOX, FOOTER_BOX, chartColors, normalizeChart } from './deck-media.mjs'
 import { normalizeDataModel, prepareDataSlides, validateDataSnapshot, previewDataChange, dataNotes, dataReport } from './deck-data.mjs'
 import { normalizeVisual, applyVisualActions } from './deck-visual.mjs'
@@ -133,6 +133,30 @@ function brandedTheme(manifest) {
   if (brand?.fontFamily) theme.fonts = { heading: brand.fontFamily, body: brand.fontFamily }
   return theme
 }
+// Template slide backgrounds by page type: cover / section / content / closing.
+function normalizeStyle(input, assets, cwd) {
+  if (input === undefined || input === null) return undefined
+  if (typeof input !== 'object' || Array.isArray(input)) fail('style 必须是对象')
+  const backgrounds = input.backgrounds
+  if (backgrounds === undefined) return undefined
+  if (!Array.isArray(backgrounds) || backgrounds.length > 8) fail('style.backgrounds 需为不超过 8 项的数组')
+  const seen = new Set(), normalized = []
+  for (const [index, bg] of backgrounds.entries()) {
+    if (bg === null) continue
+    if (!bg || typeof bg !== 'object' || Array.isArray(bg)) fail(`style.backgrounds[${index}] 必须是对象`)
+    const type = bg.layoutType
+    if (!TEMPLATE_BACKGROUND_TYPES.includes(type)) fail(`style.backgrounds[${index}].layoutType 只支持 ${TEMPLATE_BACKGROUND_TYPES.join(' / ')}`)
+    if (seen.has(type)) fail(`style.backgrounds 重复的 layoutType：${type}`)
+    seen.add(type)
+    if (!['contain', 'cover'].includes(bg.fit ?? 'cover')) fail(`style.backgrounds[${index}].fit 只支持 contain / cover`)
+    // 引擎内规范形态是 assetId（已在资产里）；来自工具的 src 会在此嵌入
+    const assetId = bg.src === undefined && bg.assetId
+      ? (assets[bg.assetId] ? bg.assetId : fail(`style.backgrounds[${index}] 找不到背景资产 ${bg.assetId}`))
+      : addAsset({ src: bg.src }, assets, cwd, `背景 ${type}`)
+    normalized.push({ layoutType: type, assetId, fit: bg.fit ?? 'cover' })
+  }
+  return normalized.length ? { backgrounds: normalized } : undefined
+}
 function embedSlides(slides, assets, cwd) {
   return slides.map((slide, index) => {
     if (!slide.image) return slide
@@ -154,12 +178,13 @@ function validateRawSlides(slides) {
   })
 }
 function snapshot(manifest) {
-  return clone(Object.fromEntries(['title', 'theme', 'language', 'motion', 'slides', 'brand', 'template', 'dataModel'].filter(k => manifest[k] !== undefined).map(k => [k, manifest[k]])))
+  return clone(Object.fromEntries(['title', 'theme', 'language', 'motion', 'slides', 'brand', 'style', 'template', 'dataModel'].filter(k => manifest[k] !== undefined).map(k => [k, manifest[k]])))
 }
 function collectAssets(manifest) {
   const ids = new Set()
   for (const state of [manifest, ...(manifest.history ?? [])]) {
     if (state.brand?.logoAssetId) ids.add(state.brand.logoAssetId)
+    for (const bg of state.style?.backgrounds ?? []) ids.add(bg.assetId)
     for (const slide of state.slides) if (slide.image?.assetId) ids.add(slide.image.assetId)
   }
   manifest.assets = Object.fromEntries([...ids].map(id => [id, manifest.assets[id]]))
@@ -386,13 +411,31 @@ export function checkManifest(manifest) {
 
 async function exportPptx(manifest, theme, language, signal) {
   const base = buildPptx({ ...manifest, slides: manifest.slides.map(s => ({ ...s, notes: dataNotes(manifest,s) })) }, theme, language)
-  if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !manifest.slides.some(s => s.image || s.chart)) return base
+  const hasBackgrounds = Array.isArray(manifest.style?.backgrounds) && manifest.style.backgrounds.some(bg => manifest.assets?.[bg.assetId]?.data)
+  if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !hasBackgrounds && !manifest.slides.some(s => s.image || s.chart)) return base
   abort(signal)
   let lib
   try { lib = await import('@office-kit/pptx') } catch (error) { fail('图片、图表和品牌导出需要 @office-kit/pptx@0.21.0。插件请重新安装；独立技能请在技能目录运行 npm install --ignore-scripts。' + error.message) }
   abort(signal)
   const presentation = await lib.loadPresentation(base), slides = lib.getSlides(presentation)
   const emu = box => Object.fromEntries(Object.entries(box).map(([k, v]) => [k, Math.round(v * 914400)]))
+  // 模板背景：按页面类型铺底图（cover / section / content / closing）
+  const backgrounds = Array.isArray(manifest.style?.backgrounds) ? manifest.style.backgrounds : []
+  const backgroundBytes = new Map()
+  for (const bg of backgrounds) {
+    const asset = manifest.assets?.[bg.assetId]
+    if (!asset?.data) continue
+    try {
+      const bytes = Buffer.from(asset.data.split(',')[1] ?? '', 'base64')
+      if (bytes.length) backgroundBytes.set(bg.layoutType, bytes)
+    } catch {}
+  }
+  if (backgroundBytes.size) {
+    manifest.slides.forEach((source, index) => {
+      const bytes = backgroundBytes.get(backgroundTypeOfLayout(source.layout))
+      if (bytes) lib.setSlideBackgroundImage(slides[index], bytes)
+    })
+  }
   const putImage = (slide, id, box, fit, name, alt) => {
     const asset = manifest.assets[id], bytes = Buffer.from(asset.data.split(',')[1], 'base64')
     const shape = lib.addSlideImage(slide, bytes, { ...emu(box), name, fit: fit === 'contain' ? 'contain' : 'fill' })
@@ -489,6 +532,11 @@ function validateSnapshot(value, assets) {
     }
     normalizeBrand(value.brand, assets, '.')
   }
+  if (value.style != null) {
+    const normalized = normalizeStyle(value.style, assets, '.')
+    // 引擎内存储用 assetId；来自工具的 src 形式已在上面嵌入资产
+    if (normalized) value.style = normalized
+  }
   for (const slide of value.slides) {
     if (slide.image) {
       if (slide.image.fit !== undefined && !['contain', 'cover'].includes(slide.image.fit)) fail('工程 image.fit 只允许 contain / cover')
@@ -520,9 +568,14 @@ export async function buildDeckAsync(options = {}) {
   if(prepared) normalized.deck.slides = prepared
   const assets = {}
   const brand = normalizeBrand(options.brand, assets, cwd)
+  const style = normalizeStyle(options.style, assets, cwd)
+  const lineage = options.templateLineage
+  if (lineage !== undefined && (lineage === null || typeof lineage !== 'object' || Array.isArray(lineage)
+    || typeof lineage.id !== 'string' || !Number.isInteger(lineage.revision))) fail('templateLineage 需为 { id, revision }')
   const manifest = { version: DECK_VERSION, schemaVersion: 1, deckId: randomUUID(), revision: 0,
     title: normalized.title, theme: normalized.theme.id, language: normalized.language.id, motion: normalized.motion,
-    ...(scenario ? { template: scenario.id } : {}), ...(brand ? { brand } : {}), ...(dataModel ? {dataModel} : {}), assets, history: [],
+    ...(scenario ? { template: scenario.id } : {}), ...(lineage ? { template: { id: lineage.id, revision: lineage.revision } } : {}),
+    ...(brand ? { brand } : {}), ...(style ? { style } : {}), ...(dataModel ? {dataModel} : {}), assets, history: [],
     slides: embedSlides(normalized.deck.slides, assets, cwd).map(s => ({ ...s, id: randomUUID() })) }
   const data = await generate(manifest, options.signal)
   mkdirSync(normalized.outputDir, { recursive: true })
@@ -597,7 +650,7 @@ export async function editDeck(options = {}) {
   expected(current, options.expectedRevision)
   const next = clone(current)
   if (!Array.isArray(options.edits) || !options.edits.length) {
-    if (options.brand === undefined && options.order === undefined && options.duplicate === undefined && options.remove === undefined && options.append === undefined && options.saveAs !== true) fail('请提供 edits、order、duplicate、remove、append 或 brand')
+    if (options.brand === undefined && options.theme === undefined && options.style === undefined && options.templateLineage === undefined && options.order === undefined && options.duplicate === undefined && options.remove === undefined && options.append === undefined && options.saveAs !== true) fail('请提供 edits、order、duplicate、remove、append、brand、theme 或 style')
   }
   const used = new Set(), allowed = new Set(['layout', 'title', 'subtitle', 'kicker', 'text', 'bullets', 'rows', 'notes', 'image', 'chart', 'visual'])
   for (const edit of options.edits ?? []) {
@@ -654,6 +707,25 @@ export async function editDeck(options = {}) {
   }
   if (options.brand !== undefined) next.brand = normalizeBrand(options.brand === null ? null : { ...next.brand, ...options.brand,
     ...(options.brand?.logo === null ? { logo: undefined, logoAssetId: undefined } : {}) }, next.assets, resolve(options.cwd || '.'))
+  // Restyle support: swap the base theme (template application). null clears template lineage.
+  if (options.theme !== undefined) {
+    if (options.theme === null) delete next.template
+    else {
+      try { resolveTheme(options.theme) } catch { fail('未知主题：' + options.theme) }
+      next.theme = resolveTheme(options.theme).id
+    }
+  }
+  if (options.style !== undefined) next.style = normalizeStyle(options.style, next.assets, resolve(options.cwd || '.'))
+  // Template lineage: { id, revision } for library templates; null clears it. A
+  // bare string stays reserved for scenario ids and is rejected here.
+  if (options.templateLineage !== undefined) {
+    const lineage = options.templateLineage
+    if (lineage === null) delete next.template
+    else {
+      if (!lineage || typeof lineage !== 'object' || Array.isArray(lineage) || typeof lineage.id !== 'string' || !Number.isInteger(lineage.revision) || lineage.revision < 1) fail('templateLineage 需为 { id, revision }')
+      next.template = { id: lineage.id, revision: lineage.revision }
+    }
+  }
   if (options.saveAs !== true && JSON.stringify(snapshot(next)) === JSON.stringify(snapshot(current))) return { ...result(current, pathsFor(state.path)), changed: false }
   next.history = [...next.history, snapshot(current)].slice(-MAX_HISTORY)
   return { ...await saveRevision(state, next, options.signal, options.saveAs === true, options.preserveUndo === true), changed: true }
@@ -679,7 +751,7 @@ export async function undoDeck(options = {}) {
   expected(state.manifest, options.expectedRevision)
   if (!state.manifest.history.length) fail('该工程没有可撤销的修改')
   const next = clone(state.manifest), prior = next.history.pop()
-  for (const key of ['brand', 'template', 'dataModel']) delete next[key]
+  for (const key of ['brand', 'style', 'template', 'dataModel']) delete next[key]
   Object.assign(next, prior)
   return saveRevision(state, next, options.signal)
 }
@@ -714,7 +786,8 @@ export function checkDeck(options = {}) {
   }
   return { ...quality, deckPath: path, deckId: manifest.deckId, revision: manifest.revision,
     verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' },
-    undoAvailable: manifest.history.length, slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.title, layout: s.layout })) }
+    undoAvailable: manifest.history.length, slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.title, layout: s.layout })),
+    template: manifest.template ?? null }
 }
 
 export async function checkDeckAsync(options = {}) {

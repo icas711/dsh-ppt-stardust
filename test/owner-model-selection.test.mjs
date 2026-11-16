@@ -174,13 +174,13 @@ test('workbench operations thread the request owner into options and creation', 
     const id = (await wb.action({ operation: 'list' })).projects[0].id
     const revision = readDeckProject({ deckPath: created.jsonPath }).manifest.revision
 
-    const coaching = await wb.action({ operation: 'coach-options', id }, undefined, 'alice')
+    const coaching = await wb.action({ operation: 'coach-options', id }, undefined, { login: 'alice', admin: false, local: false })
     assert.equal(coaching.routes[0].provider, 'personal')
-    const visual = await wb.action({ operation: 'visual-options', id }, undefined, 'bob')
+    const visual = await wb.action({ operation: 'visual-options', id }, undefined, { login: 'bob', admin: false, local: false })
     assert.deepEqual(visual.routes, [])
-    const run = await wb.action({ operation: 'coach-create', id, expectedRevision: revision, confirmed: true, mode: 'review', provider: 'personal', model: 'm', difficulty: 'normal', limit: 1 }, undefined, 'alice')
+    const run = await wb.action({ operation: 'coach-create', id, expectedRevision: revision, confirmed: true, mode: 'review', provider: 'personal', model: 'm', difficulty: 'normal', limit: 1 }, undefined, { login: 'alice', admin: false, local: false })
     assert.equal(run.run.route.provider, 'personal')
-    await assert.rejects(wb.action({ operation: 'coach-create', id, expectedRevision: revision, confirmed: true, mode: 'review', provider: 'personal', model: 'm', difficulty: 'normal', limit: 1 }, undefined, 'carol'), /模型列表已变化/)
+    await assert.rejects(wb.action({ operation: 'coach-create', id, expectedRevision: revision, confirmed: true, mode: 'review', provider: 'personal', model: 'm', difficulty: 'normal', limit: 1 }, undefined, { login: 'carol', admin: false, local: false }), /模型列表已变化/)
     // Without an owner the same request keeps the shared plane.
     const anonymous = await wb.action({ operation: 'coach-options', id })
     assert.equal(anonymous.routes[0].provider, 'shared')

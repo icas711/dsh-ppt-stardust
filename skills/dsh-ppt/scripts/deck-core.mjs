@@ -1154,6 +1154,16 @@ export function renderHtml(manifest, theme, language, files = {}) {
   const lang = language
   const ui = lang.ui
   const motion = manifest.motion !== false
+  // 模板页面背景（按页面类型 cover/section/content/closing），z-index 与 ::before 装饰层同为 -1，
+  // ::after 声明在后因此绘制在其上、正文之下。
+  const backgrounds = Array.isArray(manifest.style?.backgrounds) ? manifest.style.backgrounds : []
+  const backgroundCss = backgrounds.map(bg => {
+    const asset = manifest.assets?.[bg.assetId]
+    if (!asset?.data) return ''
+    const size = bg.fit === 'contain' ? 'contain' : 'cover'
+    const repeat = bg.fit === 'contain' ? 'no-repeat' : 'no-repeat'
+    return `.slide[data-bgt="${bg.layoutType}"]::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:var(--bg) url("${asset.data}") center/${size} ${repeat}}`
+  }).join('\n')
   const motionCss = motion
     ? `body.motion .slide.is-active{animation:slide-in .45s cubic-bezier(.22,.8,.36,1)}
 @keyframes slide-in{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
@@ -1213,6 +1223,7 @@ body{
     radial-gradient(70% 60% at 50% 50%, ${hexToRgba(t.palette.panel, 0.55)}, transparent 100%);
 }
 .slide.is-active{display:flex}
+${backgroundCss}
 ${motionCss}
 ${MEDIA_CSS}
 ${VISUAL_CSS}
@@ -1817,6 +1828,7 @@ function renderHtmlSlide(slide, index, ui, langId, manifest = {}, theme) {
   const subtitle = slide.subtitle || ''
   const bullets = Array.isArray(slide.bullets) ? slide.bullets : []
   const number = String(index + 1).padStart(2, '0')
+  const hasBackground = Boolean(manifest.style?.backgrounds?.length)
   let inner = ''
   switch (slide.layout) {
     case 'image':
@@ -1880,11 +1892,17 @@ function renderHtmlSlide(slide, index, ui, langId, manifest = {}, theme) {
     ? ' data-notes="' + escapeHtml(slide.notes) + '"'
     : ''
   const visualStyle = visualHtmlStyle(slide.visual)
-  return '<section class="slide slide--' + escapeHtml(slide.layout || 'bullets') + '" data-index="' + number + '"' + notesAttr + (visualStyle ? ' style="' + escapeHtml(visualStyle) + '"' : '') + '>' +
+  const bgAttr = hasBackground ? ' data-bgt="' + backgroundTypeOfLayout(slide.layout) + '"' : ''
+  return '<section class="slide slide--' + escapeHtml(slide.layout || 'bullets') + '" data-index="' + number + '"' + notesAttr + bgAttr + (visualStyle ? ' style="' + escapeHtml(visualStyle) + '"' : '') + '>' +
     '<div class="slide-inner">' + inner + '</div>' +
     (manifest.brand?.logoAssetId ? '<img class="brand-logo" src="' + escapeHtml(manifest.assets?.[manifest.brand.logoAssetId]?.data ?? '') + '" alt="' + escapeHtml(manifest.brand.name || 'Logo') + '"/>' : '') +
     (manifest.brand?.footer ? '<div class="brand-footer">' + escapeHtml(manifest.brand.footer) + '</div>' : '') + '</section>'
 }
+
+// 页面类型 → 模板背景类型；deck-advanced 的样式规范化复用同一映射。
+export const TEMPLATE_BACKGROUND_TYPES = ['cover', 'section', 'content', 'closing']
+const BG_LAYOUT_MAP = { cover: 'cover', section: 'section', closing: 'closing', bullets: 'content', statement: 'content', quote: 'content', table: 'content', image: 'content', 'image-left': 'content', 'image-right': 'content', chart: 'content' }
+export function backgroundTypeOfLayout(layout) { return BG_LAYOUT_MAP[layout] ?? 'content' }
 
 function hexToRgba(hex, alpha) {
   const value = String(hex).replace('#', '')
