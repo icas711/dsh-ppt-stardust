@@ -252,6 +252,11 @@ export interface PptTemplateSummary {
     createdAt?: string;
     updatedAt?: string;
     scope?: string;
+    /** `<scope>:<id>` key used by every template operation. */
+    key?: string;
+    readonly?: boolean;
+    /** A public template that overrides the built-in template of the same id. */
+    overridesBuiltin?: boolean;
     theme?: string | null;
     brand?: Record<string, string> | null;
     hasLogo?: boolean;
@@ -297,6 +302,11 @@ export interface DeckEngine {
     dataReport(manifest: any): string;
     dataNotes(manifest: any, slide: any): string;
     buildDeckAsync?(options: Record<string, unknown>): Promise<PptCreateResult>;
+    previewDeckHtml?(options: Record<string, unknown>): {
+        ok: true;
+        html: string;
+        slideCount: number;
+    };
     readDeckProject(options: Record<string, unknown>): {
         manifest: any;
         path: string;

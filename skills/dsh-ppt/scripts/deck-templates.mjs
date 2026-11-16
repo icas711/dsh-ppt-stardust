@@ -441,6 +441,29 @@ export function templateCreateOptions(template, assets, options = {}) {
   return { create, lineage: { id: manifest.id, revision: manifest.revision } }
 }
 
+/**
+ * Шаблон → аргументы HTML-превью (previewDeckHtml): фиксированный мини-дек из пяти страниц
+ * (обложка, раздел, список, тезис, финал) в стиле шаблона. Показывает тему, палитру, шрифт,
+ * логотип, футер и фоны по типам страниц, не зависит от каркаса и образцов шаблона.
+ */
+export function templatePreviewOptions(template, assets, options = {}) {
+  const manifest = validateTemplateManifest(template, { templateAssets: assets })
+  const lang = options.lang ?? 'ru'
+  const slides = [
+    { layout: 'cover', kicker: L(lang, '模板预览', 'Template preview', 'Предпросмотр шаблона'), title: manifest.name,
+      subtitle: manifest.description || L(lang, '副标题与日期', 'Subtitle and date', 'Подзаголовок и дата') },
+    { layout: 'section', kicker: '01', title: L(lang, '章节标题', 'Section title', 'Заголовок раздела'),
+      subtitle: L(lang, '一句话说明本章节', 'One line about this section', 'Одна строка о содержании раздела') },
+    { layout: 'bullets', title: L(lang, '内容页标题', 'Content slide title', 'Заголовок слайда'),
+      bullets: [L(lang, '第一条要点', 'First key point', 'Первый ключевой тезис'), L(lang, '第二条要点', 'Second key point', 'Второй ключевой тезис'), L(lang, '第三条要点', 'Third key point', 'Третий ключевой тезис')] },
+    { layout: 'statement', kicker: L(lang, '核心观点', 'Core idea', 'Главная мысль'), title: L(lang, '一句话讲清楚核心结论', 'One sentence with the main conclusion', 'Главный вывод одной фразой'),
+      subtitle: L(lang, '补充说明', 'Supporting note', 'Пояснение') },
+    { layout: 'closing', title: L(lang, '谢谢', 'Thank you', 'Спасибо'), subtitle: L(lang, '联系方式', 'Contacts', 'Контакты') },
+  ]
+  const { create } = templateCreateOptions({ ...manifest, outline: slides, samples: undefined }, assets, { title: manifest.name, lang })
+  return { ...create, lang }
+}
+
 /** 模板 → editDeck 参数（重设计）：theme/brand/style。 */
 export function templateRestyleOptions(template, assets) {
   const manifest = validateTemplateManifest(template, { templateAssets: assets })

@@ -173,11 +173,21 @@ export class PptWorkbench {
       const store = this.needTemplates()
       const key = typeof body.templateId === 'string' ? body.templateId.trim() : ''
       switch (body.operation) {
-        case 'template-list':
-          return { ok: true, templates: await store.list(identity), admin: identity.admin }
+        case 'template-list': {
+          const engine = await this.loadEngine()
+          return { ok: true, templates: await store.list(identity), admin: identity.admin, themes: engine.listThemes(typeof body.lang === 'string' ? body.lang : 'ru') }
+        }
         case 'template-get': {
           const record = await store.get(requireTemplateKey(key), identity)
-          return { ok: true, template: { ...record.manifest, key: record.key, readonly: record.readonly, assets: Object.keys(record.assets) } }
+          const access = store.access(record, identity)
+          return {
+            ok: true,
+            template: {
+              ...record.manifest, key: record.key, readonly: record.readonly, ...access,
+              assets: Object.keys(record.assets),
+              assetData: Object.fromEntries(Object.entries(record.assets).map(([name, asset]) => [name, asset.data])),
+            },
+          }
         }
         case 'template-import': {
           const data = typeof body.data === 'string' ? body.data : ''
@@ -187,8 +197,46 @@ export class PptWorkbench {
         }
         case 'template-save': {
           if (!body.manifest || typeof body.manifest !== 'object' || Array.isArray(body.manifest)) throw new Error('Нужен манифест шаблона')
-          const saved = await store.save({ manifest: body.manifest as Record<string, any>, scope: body.scope === 'public' ? 'public' : 'user', identity })
+          const saved = await store.saveDraft({
+            manifest: body.manifest as Record<string, any>,
+            uploads: body.uploads && typeof body.uploads === 'object' && !Array.isArray(body.uploads) ? body.uploads as Record<string, any> : undefined,
+            baseKey: typeof body.baseKey === 'string' && body.baseKey ? body.baseKey : undefined,
+            scope: body.scope === 'public' ? 'public' : 'user',
+            expectedRevision: Number.isInteger(body.expectedRevision) ? Number(body.expectedRevision) : undefined,
+            identity,
+          })
           return { ok: true, key: saved.key, template: saved.manifest }
+        }
+        case 'template-create-from-project': {
+          // The project comes from the catalog by id; the browser never supplies a file path.
+          const { manifest } = await this.project(body.id)
+          const mod = await this.templatesModule()
+          const extracted = mod.templateFromDeckManifest(manifest, {
+            templateId: String(body.newTemplateId ?? '').trim(),
+            name: String(body.name ?? '').trim(),
+            author: identity.login ?? 'local',
+            includeSamples: body.samples !== false,
+            lang: typeof manifest.language === 'string' ? manifest.language : body.lang,
+          })
+          const saved = await store.save({ manifest: extracted.manifest, assets: extracted.assets, scope: body.scope === 'public' ? 'public' : 'user', identity })
+          return { ok: true, key: saved.key, template: saved.manifest }
+        }
+        case 'template-duplicate': {
+          const saved = await store.duplicate({ key: requireTemplateKey(key), newId: String(body.newTemplateId ?? '').trim(), name: String(body.name ?? '').trim(), identity })
+          return { ok: true, key: saved.key, template: saved.manifest }
+        }
+        case 'template-preview': {
+          if (!body.manifest || typeof body.manifest !== 'object' || Array.isArray(body.manifest)) throw new Error('Нужен манифест шаблона')
+          const engine = await this.loadEngine()
+          if (!engine.previewDeckHtml) throw new Error('Предпросмотр шаблона недоступен: обновите движок dsh-ppt')
+          const options = await store.previewOptions({
+            manifest: body.manifest as Record<string, any>,
+            uploads: body.uploads && typeof body.uploads === 'object' && !Array.isArray(body.uploads) ? body.uploads as Record<string, any> : undefined,
+            baseKey: typeof body.baseKey === 'string' && body.baseKey ? body.baseKey : undefined,
+            lang: typeof body.lang === 'string' ? body.lang : 'ru',
+            identity,
+          })
+          return engine.previewDeckHtml(options)
         }
         case 'template-delete':
           return await store.delete(requireTemplateKey(key), identity)

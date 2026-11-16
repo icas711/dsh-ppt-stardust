@@ -586,6 +586,28 @@ export async function buildDeckAsync(options = {}) {
   return result(manifest, paths)
 }
 
+/**
+ * HTML-only rendering for editors (template preview): nothing is written to disk,
+ * no PPTX is built and the quality gate is skipped, so it is cheap enough to call
+ * on every edit. Accepts the same theme / brand / style / slides arguments as buildDeckAsync.
+ */
+export function previewDeckHtml(options = {}) {
+  validateRawSlides(options.slides)
+  const normalized = normalizeBuildOptions({ ...options, outputDir: '.' })
+  const cwd = resolve('.'), assets = {}
+  const brand = normalizeBrand(options.brand, assets, cwd)
+  const style = normalizeStyle(options.style, assets, cwd)
+  const manifest = { version: DECK_VERSION, schemaVersion: 1, deckId: 'preview', revision: 0,
+    title: normalized.title, theme: normalized.theme.id, language: normalized.language.id, motion: false,
+    ...(brand ? { brand } : {}), ...(style ? { style } : {}), assets, history: [],
+    slides: embedSlides(normalized.deck.slides, assets, cwd).map((slide, index) => ({ ...slide, id: 'preview-' + (index + 1) })) }
+  validateSnapshot(manifest, manifest.assets)
+  collectAssets(manifest)
+  manifest.slideCount = manifest.slides.length
+  const html = renderHtml(manifest, brandedTheme(manifest), resolveLanguage(manifest.language), { pptx: 'preview.pptx', json: 'preview.json' })
+  return { ok: true, html, slideCount: manifest.slideCount }
+}
+
 function readDocument(pathInput, cwd = '.') {
   const path = resolve(cwd, String(pathInput ?? ''))
   if (!pathInput || extname(path).toLowerCase() !== '.json') fail('deckPath 需指向本插件生成的 .json 工程')

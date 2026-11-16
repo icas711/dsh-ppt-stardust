@@ -1,9 +1,7 @@
-// Панель «Шаблоны»: библиотека (builtin/public/user), импорт файлов,
-// создание деки из шаблона, публикация/удаление для админа, экспорт bundle.
+// Библиотека шаблонов внутри «Презентаций» (переключатель «Проекты | Шаблоны»):
+// карточки builtin/public/user, импорт и экспорт bundle, создание деки из шаблона,
+// шаблон из проекта, дублирование, публикация/удаление и редактор (template-editor.js).
 // Данные — операции template-* сервера (src/workbench.ts) и download?kind=template.
-function pptTextT(zh, en) {
-    try { return pptText(zh, en); } catch { return en ?? zh; }
-}
 const TEMPLATES_CSS = `
 .ppt-templates{display:flex;flex-direction:column;gap:14px;min-width:0}
 .ppt-templates-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
@@ -21,29 +19,35 @@ const TEMPLATES_CSS = `
 `;
 function TemplatesPanel({ onCreated }) {
     const [templates, setTemplates] = React.useState(null);
+    const [themes, setThemes] = React.useState([]);
     const [isAdmin, setIsAdmin] = React.useState(false);
     const [busy, setBusy] = React.useState(false);
     const [message, setMessage] = React.useState('');
     const [error, setError] = React.useState('');
+    const [editing, setEditing] = React.useState(null); // { key: string | null, nonce: number }
     const [applyId, setApplyId] = React.useState(null);
     const [applyTitle, setApplyTitle] = React.useState('');
-    const [restyle, setRestyle] = React.useState(null);
     const [importOpen, setImportOpen] = React.useState(false);
     const [importScope, setImportScope] = React.useState('user');
-    const [fromProject, setFromProject] = React.useState(null); // {path, title}
+    const [fromOpen, setFromOpen] = React.useState(false);
+    const [fromProject, setFromProject] = React.useState('');
     const [projects, setProjects] = React.useState(null);
+    const [copyOf, setCopyOf] = React.useState(null); // ключ шаблона для «Дублировать»
+    const [copyId, setCopyId] = React.useState('');
+    const [copyName, setCopyName] = React.useState('');
     const [newId, setNewId] = React.useState('');
     const [newName, setNewName] = React.useState('');
     React.useEffect(() => { void refresh(); }, []);
     React.useEffect(() => {
-        if (fromProject !== 'open' || projects !== null) return;
-        action({ operation: 'list' }).then(v => { setProjects(v.projects ?? []); setFromProject(null); }).catch(e => setError(e instanceof Error ? e.message : String(e)));
-    }, [fromProject, projects]);
+        if (!fromOpen || projects !== null) return;
+        action({ operation: 'list' }).then(v => setProjects(v.projects ?? [])).catch(e => setError(e instanceof Error ? e.message : String(e)));
+    }, [fromOpen, projects]);
     async function refresh() {
         try {
             setError('');
-            const value = await action({ operation: 'template-list' });
+            const value = await action({ operation: 'template-list', lang: languageOf() });
             setTemplates(value.templates ?? []);
+            setThemes(value.themes ?? []);
             setIsAdmin(value.admin === true);
         }
         catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -54,7 +58,7 @@ function TemplatesPanel({ onCreated }) {
         setError('');
         try {
             const value = await action(body);
-            setMessage(doneText ?? pptTextT('操作完成', 'Done'));
+            setMessage(doneText ?? tplTr('Готово', 'Done'));
             await refresh();
             return value;
         }
@@ -72,86 +76,124 @@ function TemplatesPanel({ onCreated }) {
         document.body.append(link);
         link.click();
         link.remove();
-        setMessage(pptTextT('已请求下载，请查看浏览器的下载列表。', 'Download requested. Check your browser’s downloads.'));
+        setMessage(tplTr('Скачивание запрошено, проверьте загрузки браузера.', 'Download requested. Check your browser’s downloads.'));
     }
     function importFile(file) {
         if (!file) return;
-        if (file.size > 16 * 1024 * 1024) { setError(pptTextT('Файл больше 16 MiB', 'File exceeds 16 MiB')); return; }
+        if (file.size > 9 * 1024 * 1024) { setError(tplTr('Файл больше 9 MiB', 'File exceeds 9 MiB')); return; }
         const reader = new FileReader();
         reader.onload = async () => {
             const data = String(reader.result ?? '').split(',')[1] ?? '';
             setImportOpen(false);
             const saved = await run({ operation: 'template-import', data, scope: importScope });
-            if (saved) setMessage((pptTextT('Шаблон импортирован: ', 'Template imported: ')) + saved.key);
+            if (saved) setMessage(tplTr('Шаблон импортирован: ', 'Template imported: ') + saved.key);
         };
         reader.readAsDataURL(file);
     }
-    const scopeLabel = scope => scope === 'builtin' ? pptTextT('Встроенный', 'Built-in') : scope === 'public' ? pptTextT('Общий', 'Public') : pptTextT('Личный', 'Private');
+    const scopeLabel = scope => scope === 'builtin' ? tplTr('Встроенный', 'Built-in') : scope === 'public' ? tplTr('Общий', 'Public') : tplTr('Личный', 'Private');
+
+    if (editing) {
+        return h('div', { className: 'ppt-templates' },
+            h(W.Status, { tone: 'success' }, message),
+            h(TemplateEditor, {
+                key: (editing.key ?? 'new') + ':' + editing.nonce, templateKey: editing.key, themes, isAdmin,
+                onClose: () => { setEditing(null); void refresh(); },
+                onSaved: (key, text) => { setMessage(text); setEditing({ key, nonce: editing.nonce + 1 }); void refresh(); },
+            }));
+    }
+
     const cards = (templates ?? []).map(tpl => {
         const swatches = [tpl.brand?.primaryColor, tpl.brand?.backgroundColor, tpl.brand?.textColor].filter(Boolean);
-        const canDelete = tpl.scope !== 'builtin' && (tpl.scope === 'user' || isAdmin);
         const key = tpl.key ?? (tpl.scope + ':' + tpl.id);
+        const canEdit = tpl.scope === 'user' || isAdmin;
+        const canDelete = tpl.scope === 'user' || (tpl.scope === 'public' && isAdmin);
         return h('div', { className: 'ppt-template-card', key },
             h('div', { className: 'tpl-swatch' }, swatches.map((color, i) => h('i', { key: i, style: { background: color } }))),
             h('h3', null, tpl.name),
             h('div', { className: 'tpl-meta' },
                 h('span', { className: 'w-tag' }, scopeLabel(tpl.scope)),
-                tpl.theme ? h('span', null, pptTextT('тема ', 'theme ') + tpl.theme) : null,
-                tpl.outlineCount ? h('span', null, pptTextT('каркас ', 'outline ') + tpl.outlineCount) : null,
+                tpl.overridesBuiltin ? h('span', { className: 'w-tag' }, tplTr('заменяет встроенный', 'overrides built-in')) : null,
+                tpl.theme ? h('span', null, tplTr('тема ', 'theme ') + tpl.theme) : null,
+                tpl.outlineCount ? h('span', null, tplTr('каркас ', 'outline ') + tpl.outlineCount) : null,
                 tpl.author ? h('span', null, tpl.author) : null),
             tpl.description ? h('p', { className: 'tpl-outline' }, tpl.description) :
                 (tpl.outlineTitles?.length ? h('p', { className: 'tpl-outline' }, tpl.outlineTitles.join(' → ')) : null),
             h('div', { className: 'tpl-actions' },
-                h(W.Button, { variant: 'primary', disabled: busy, onClick: () => { setApplyId(key); setApplyTitle(''); } }, pptTextT('Создать дек', 'New deck')),
-                h(W.Button, { disabled: busy, onClick: () => downloadBundle(tpl) }, pptTextT('Экспорт', 'Export')),
-                !tpl.readonly && tpl.scope === 'user' && isAdmin ? h(W.Button, { disabled: busy, onClick: () => run({ operation: 'template-publish', templateId: key, owner: tpl.author }) }, pptTextT('Опубликовать', 'Publish')) : null,
-                canDelete ? h(W.Button, { variant: 'danger', disabled: busy, onClick: async () => { const done = await run({ operation: 'template-delete', templateId: key }); if (done) setMessage(pptTextT('Шаблон удалён', 'Template deleted')); } }, pptTextT('Удалить', 'Delete')) : null));
+                h(W.Button, { variant: 'primary', disabled: busy, onClick: () => { setApplyId(key); setApplyTitle(''); } }, tplTr('Создать дек', 'New deck')),
+                h(W.Button, { icon: 'edit', disabled: busy, onClick: () => setEditing({ key, nonce: 0 }) }, canEdit ? tplTr('Править', 'Edit') : tplTr('Открыть', 'Open')),
+                h(W.Button, { icon: 'copy', disabled: busy, onClick: () => { setCopyOf(key); setCopyId(''); setCopyName(tpl.name + (languageOf() === 'ru' ? ' (копия)' : ' (copy)')); } }, tplTr('Дублировать', 'Duplicate')),
+                h(W.Button, { icon: 'download', disabled: busy, onClick: () => downloadBundle(tpl) }, tplTr('Экспорт', 'Export')),
+                tpl.scope === 'user' && isAdmin ? h(W.Button, { disabled: busy, onClick: () => run({ operation: 'template-publish', templateId: key, owner: tpl.author }, tplTr('Шаблон опубликован в общие', 'Template published')) }, tplTr('Опубликовать', 'Publish')) : null,
+                tpl.overridesBuiltin && isAdmin ? h(W.Button, { disabled: busy, onClick: async () => {
+                    if (!window.confirm(tplTr('Удалить общую копию и вернуть встроенный шаблон?', 'Delete the public copy and restore the built-in template?'))) return;
+                    await run({ operation: 'template-delete', templateId: key }, tplTr('Встроенный шаблон восстановлен', 'Built-in template restored'));
+                } }, tplTr('Сбросить к встроенному', 'Reset to built-in')) : null,
+                canDelete && !tpl.overridesBuiltin ? h(W.Button, { icon: 'trash', variant: 'danger', disabled: busy, onClick: async () => {
+                    if (!window.confirm(tplTr('Удалить шаблон «', 'Delete template “') + tpl.name + tplTr('»?', '”?'))) return;
+                    await run({ operation: 'template-delete', templateId: key }, tplTr('Шаблон удалён', 'Template deleted'));
+                } }, tplTr('Удалить', 'Delete')) : null));
     });
     return h('div', { className: 'ppt-templates' },
         h('style', null, TEMPLATES_CSS),
         h(W.Status, { tone: 'success' }, message),
         error ? h(W.Status, { tone: 'error' }, error) : null,
         h('div', { className: 'w-toolbar' },
-            h(W.Button, { icon: 'refresh', disabled: busy, onClick: () => void refresh() }, pptTextT('Обновить', 'Refresh')),
-            h(W.Button, { icon: 'upload', disabled: busy, onClick: () => { setImportScope(isAdmin ? 'public' : 'user'); setImportOpen(true); } }, pptTextT('Импорт шаблона', 'Import template')),
-            h(W.Button, { disabled: busy, onClick: () => { setProjects(null); setFromProject('open'); setNewId(''); setNewName(''); } }, pptTextT('Шаблон из проекта', 'Template from project')),
-            h('span', { className: 'w-muted' }, isAdmin ? pptTextT('Вы администратор: импорт и удаление общих шаблонов доступны.', 'You are an admin: importing and deleting public templates is available.') : pptTextT('Общие шаблоны доступны для чтения; свои — в разделе «Личный».', 'Public templates are read-only; your own are under “Private”.'))),
-        templates === null ? h(W.Status, null, pptTextT('Загрузка…', 'Loading…'))
+            h(W.Button, { variant: 'primary', icon: 'plus', disabled: busy, onClick: () => setEditing({ key: null, nonce: 0 }) }, tplTr('Новый шаблон', 'New template')),
+            h(W.Button, { icon: 'upload', disabled: busy, onClick: () => { setImportScope(isAdmin ? 'public' : 'user'); setImportOpen(true); } }, tplTr('Импорт шаблона', 'Import template')),
+            h(W.Button, { disabled: busy, onClick: () => { setProjects(null); setFromProject(''); setNewId(''); setNewName(''); setFromOpen(true); } }, tplTr('Шаблон из проекта', 'Template from project')),
+            h(W.IconButton, { icon: 'refresh', label: tplTr('Обновить', 'Refresh'), disabled: busy, onClick: () => void refresh() }),
+            h('span', { className: 'w-muted' }, isAdmin ? tplTr('Вы администратор: можно править общие и встроенные шаблоны.', 'You are an admin: public and built-in templates are editable.') : tplTr('Общие шаблоны доступны для чтения; сохраните копию, чтобы править.', 'Public templates are read-only; save a copy to edit.'))),
+        templates === null ? h(W.Status, null, tplTr('Загрузка…', 'Loading…'))
             : cards.length ? h('div', { className: 'ppt-templates-grid' }, cards)
-                : h(W.Empty, { icon: 'slides', title: pptTextT('Шаблонов пока нет', 'No templates yet') }, pptTextT('Создайте шаблон из примера PPTX (ppt_template create-from-pptx) или из существующего проекта.', 'Create a template from a PPTX example (ppt_template create-from-pptx) or from an existing project.')),
-        fromProject ? h(W.Dialog, { title: pptTextT('Шаблон из проекта', 'Template from project'), closeLabel: pptTextT('Отмена', 'Cancel'), busy, onClose: () => setFromProject(null) },
+                : h(W.Empty, { icon: 'slides', title: tplTr('Шаблонов пока нет', 'No templates yet') }, tplTr('Создайте шаблон кнопкой «Новый шаблон», импортируйте файл или сделайте шаблон из существующего проекта.', 'Create a template with “New template”, import a file, or make one from an existing project.')),
+        fromOpen ? h(W.Dialog, { title: tplTr('Шаблон из проекта', 'Template from project'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setFromOpen(false) },
             h('div', { className: 'ppt-tpl-import' },
-                h('p', { className: 'w-muted' }, pptTextT('Стиль, каркас страниц и до 3 слайдов-образцов станут шаблоном. Тексты страниц превратятся в места для заполнения.', 'The style, page skeleton and up to 3 sample slides become a template. Slide texts turn into placeholders.')),
-                h('label', null, pptTextT('Проект', 'Project'),
-                    projects === null ? h('p', { className: 'w-muted' }, pptTextT('Загрузка…', 'Loading…'))
-                        : h('select', { value: fromProject && fromProject !== 'open' ? fromProject : '', onChange: e => setFromProject(e.target.value) },
-                            h('option', { value: '' }, pptTextT('— выберите проект —', '— pick a project —')),
-                            projects.map(row => h('option', { key: row.id, value: row.path }, row.title + ' · ' + row.path)))),
-                h('label', null, pptTextT('id шаблона (латиница, цифры, дефис)', 'Template id (latin, digits, hyphen)'),
-                    h('input', { value: newId, maxLength: 49, onChange: e => setNewId(e.target.value), placeholder: 'my-corp-template' })),
-                h('label', null, pptTextT('Название', 'Name'),
-                    h('input', { value: newName, maxLength: 81, onChange: e => setNewName(e.target.value), placeholder: pptTextT('Мой корпоративный шаблон', 'My corporate template') }))),
-            h(W.Button, { variant: 'primary', disabled: busy || !fromProject || fromProject === 'open' || !newId.trim() || !newName.trim(), onClick: async () => {
-                const value = await run({ operation: 'create-from-project', deckPath: fromProject, newTemplateId: newId.trim(), name: newName.trim() }, pptTextT('Шаблон создан из проекта', 'Template created from project'));
-                if (value) setFromProject(null);
-            } }, pptTextT('Создать шаблон', 'Create template'))) : null,
-        applyId !== null ? h(W.Dialog, { title: pptTextT('Создать дек из шаблона', 'New deck from template'), closeLabel: pptTextT('Отмена', 'Cancel'), busy, onClose: () => setApplyId(null) },
+                h('p', { className: 'w-muted' }, tplTr('Стиль, каркас страниц и до 3 слайдов-образцов станут шаблоном. Тексты страниц превратятся в места для заполнения.', 'The style, page skeleton and up to 3 sample slides become a template. Slide texts turn into placeholders.')),
+                h('label', null, tplTr('Проект', 'Project'),
+                    projects === null ? h('p', { className: 'w-muted' }, tplTr('Загрузка…', 'Loading…'))
+                        : h('select', { value: fromProject, onChange: e => setFromProject(e.target.value) },
+                            h('option', { value: '' }, tplTr('— выберите проект —', '— pick a project —')),
+                            projects.map(row => h('option', { key: row.id, value: row.id }, row.title)))),
+                h('label', null, tplTr('id шаблона (латиница, цифры, дефис)', 'Template id (latin, digits, hyphen)'),
+                    h('input', { value: newId, maxLength: 49, onChange: e => setNewId(e.target.value.trim().toLowerCase()), placeholder: 'my-corp-template' })),
+                h('label', null, tplTr('Название', 'Name'),
+                    h('input', { value: newName, maxLength: 81, onChange: e => setNewName(e.target.value), placeholder: tplTr('Мой корпоративный шаблон', 'My corporate template') }))),
+            h(W.Button, { variant: 'primary', disabled: busy || !fromProject || !newId || !newName.trim(), onClick: async () => {
+                const value = await run({ operation: 'template-create-from-project', id: fromProject, newTemplateId: newId, name: newName.trim() }, tplTr('Шаблон создан из проекта', 'Template created from project'));
+                if (value) { setFromOpen(false); setEditing({ key: value.key, nonce: 0 }); }
+            } }, tplTr('Создать шаблон', 'Create template'))) : null,
+        copyOf ? h(W.Dialog, { title: tplTr('Дублировать шаблон', 'Duplicate template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setCopyOf(null) },
             h('div', { className: 'ppt-tpl-import' },
-                h('label', null, pptTextT('Название презентации', 'Deck title'),
-                    h('input', { value: applyTitle, maxLength: 200, onChange: e => setApplyTitle(e.target.value), placeholder: pptTextT('Например: Квартальный отчёт', 'e.g. Quarterly report') })),
-                h('p', { className: 'w-muted' }, pptTextT('Будет создан черновик: каркас страниц с местами для заполнения, стиль и бренд шаблона. Черновик появится в списке проектов.', 'A draft is created: page skeleton with placeholders, in the template’s style and brand. It appears in the projects list.'))),
+                h('p', { className: 'w-muted' }, tplTr('Копия появится в ваших личных шаблонах, её можно править.', 'The copy appears in your private templates and can be edited.')),
+                h('label', null, tplTr('id копии (латиница, цифры, дефис)', 'Copy id (latin, digits, hyphen)'),
+                    h('input', { value: copyId, maxLength: 49, onChange: e => setCopyId(e.target.value.trim().toLowerCase()), placeholder: 'my-corp-template-2' })),
+                h('label', null, tplTr('Название', 'Name'),
+                    h('input', { value: copyName, maxLength: 81, onChange: e => setCopyName(e.target.value) }))),
+            h(W.Button, { variant: 'primary', disabled: busy || !/^[a-z0-9][a-z0-9-]{1,48}$/.test(copyId) || !copyName.trim(), onClick: async () => {
+                const value = await run({ operation: 'template-duplicate', templateId: copyOf, newTemplateId: copyId, name: copyName.trim() }, tplTr('Копия создана', 'Copy created'));
+                if (value) setCopyOf(null);
+            } }, tplTr('Создать копию', 'Create copy'))) : null,
+        applyId !== null ? h(W.Dialog, { title: tplTr('Создать дек из шаблона', 'New deck from template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setApplyId(null) },
+            h('div', { className: 'ppt-tpl-import' },
+                h('label', null, tplTr('Название презентации', 'Deck title'),
+                    h('input', { value: applyTitle, maxLength: 200, onChange: e => setApplyTitle(e.target.value), placeholder: tplTr('Например: Квартальный отчёт', 'e.g. Quarterly report') })),
+                h('p', { className: 'w-muted' }, tplTr('Будет создан черновик: каркас страниц с местами для заполнения, стиль и бренд шаблона. Черновик появится в списке проектов.', 'A draft is created: page skeleton with placeholders, in the template’s style and brand. It appears in the projects list.'))),
             h(W.Button, { variant: 'primary', disabled: busy || !applyTitle.trim(), onClick: async () => {
-                const value = await action({ operation: 'template-apply', templateId: applyId, title: applyTitle.trim() });
-                setApplyId(null);
-                if (value?.project) { setMessage(pptTextT('Черновик создан: ', 'Draft created: ') + value.project.title); if (onCreated) onCreated(value.project.id); }
-            } }, pptTextT('Создать', 'Create'))) : null,
-        importOpen ? h(W.Dialog, { title: pptTextT('Импорт шаблона', 'Import template'), closeLabel: pptTextT('Отмена', 'Cancel'), busy, onClose: () => setImportOpen(false) },
+                setBusy(true); setError('');
+                try {
+                    const value = await action({ operation: 'template-apply', templateId: applyId, title: applyTitle.trim(), lang: languageOf() });
+                    setApplyId(null);
+                    if (value?.project) { setMessage(tplTr('Черновик создан: ', 'Draft created: ') + value.project.title); if (onCreated) onCreated(value.project.id); }
+                } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+                finally { setBusy(false); }
+            } }, tplTr('Создать', 'Create'))) : null,
+        importOpen ? h(W.Dialog, { title: tplTr('Импорт шаблона', 'Import template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setImportOpen(false) },
             h('div', { className: 'ppt-tpl-import' },
-                h('p', { className: 'w-muted' }, pptTextT('Файл .zip или template.json (до 16 MiB).', 'A .zip or template.json file (up to 16 MiB).')),
-                isAdmin ? h('label', null, pptTextT('Куда импортировать', 'Import into'),
+                h('p', { className: 'w-muted' }, tplTr('Файл .zip (bundle шаблона) или template.json, до 9 MiB.', 'A .zip bundle or template.json file, up to 9 MiB.')),
+                isAdmin ? h('label', null, tplTr('Куда импортировать', 'Import into'),
                     h('select', { value: importScope, onChange: e => setImportScope(e.target.value) },
-                        h('option', { value: 'user' }, pptTextT('Себе (личный)', 'My own (private)')),
-                        h('option', { value: 'public' }, pptTextT('В общие (админ)', 'To public (admin)')))) : null,
+                        h('option', { value: 'user' }, tplTr('Себе (личный)', 'My own (private)')),
+                        h('option', { value: 'public' }, tplTr('В общие (админ)', 'To public (admin)')))) : null,
                 h('input', { type: 'file', accept: '.zip,.json', onChange: e => importFile(e.target.files?.[0]) }))) : null,
         null);
 }

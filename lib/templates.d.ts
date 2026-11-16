@@ -43,13 +43,46 @@ export declare class PptTemplateStore {
     list(identity: CallerIdentity): Promise<PptTemplateSummary[]>;
     /** Resolve a template with assets for apply/restyle. */
     get(key: string, identity: CallerIdentity): Promise<TemplateRecord>;
+    /** What the caller may do with a template and where an edit is stored. */
+    access(record: TemplateRecord, identity: CallerIdentity): {
+        canEdit: boolean;
+        saveScope: 'public' | 'user';
+        overridesBuiltin: boolean;
+    };
     /** Create or update a template in the caller's own space (or public for admins). */
     save(input: {
         manifest: Record<string, any>;
         assets?: Record<string, any>;
         scope?: string;
+        expectedRevision?: number;
         identity: CallerIdentity;
     }): Promise<TemplateRecord>;
+    /** Assets named by the manifest: unchanged ones come from the stored base template, new ones from uploads. */
+    private draftAssets;
+    /** Save an editor draft: the manifest plus only the assets that are new or changed. */
+    saveDraft(input: {
+        manifest: Record<string, any>;
+        uploads?: Record<string, any>;
+        baseKey?: string;
+        scope?: string;
+        expectedRevision?: number;
+        identity: CallerIdentity;
+    }): Promise<TemplateRecord>;
+    /** Copy any visible template into the caller's own library under a new id. */
+    duplicate(input: {
+        key: string;
+        newId: string;
+        name: string;
+        identity: CallerIdentity;
+    }): Promise<TemplateRecord>;
+    /** Arguments for the engine's HTML-only preview of an unsaved draft. */
+    previewOptions(input: {
+        manifest: Record<string, any>;
+        uploads?: Record<string, any>;
+        baseKey?: string;
+        lang?: string;
+        identity: CallerIdentity;
+    }): Promise<Record<string, any>>;
     /** Import a bundle (.zip or template.json) into user space, or public for admins. */
     import(input: {
         source?: string;
