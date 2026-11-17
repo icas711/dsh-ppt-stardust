@@ -1,6 +1,6 @@
 ---
 name: dsh-ppt
-description: "Turn one sentence or a Markdown document into a complete, presentation-ready deck: a standalone HTML web slideshow plus an editable PPTX export, with 5 built-in visual themes (Swiss Pulse / Velvet Standard / Data Drift / Soft Signal / Maximalist Type), slide transitions + bullet entrance animations (motion, on by default), and Chinese/English/Russian UI support. Use when the user asks for a PPT, slides, deck, keynote, presentation, pitch deck, report, proposal, roadshow, training materials, or wants to turn a document into a presentation."
+description: "Turn one sentence or a Markdown document into a complete, presentation-ready deck: a standalone HTML web slideshow plus an editable PPTX export. Before building, lists installed templates and asks the user which one to use (default corporate-report); slide transitions + bullet entrance animations; Chinese/English/Russian UI. Use when the user asks for a PPT, slides, deck, presentation, pitch deck, report, proposal, training materials, or wants to turn a document into a presentation."
 compatibility: "Node ^22.19.0 or >=24.0.0. Images/charts use @office-kit/pptx@0.21.0; optional data models use jsep@1.4.0 and csv-parse@6.1.0. Optional PNG/PDF renderer: @deepseek-ai/libreoffice-kit@0.2.3 (bundled by DSH 0.2.2+; 0.1.5 also supported). Cross-harness: copy the full directory and run npm install --ignore-scripts there."
 allowed-tools: "Bash, Read, Write, Edit"
 ---
@@ -23,7 +23,7 @@ The user wants to create a PPT / slides / presentation / deck / report / proposa
 
 - One idea per slide; titles must be declarative statements (assertions), not noun phrases.
 - Write the content in the language you author; `lang` only controls the UI text.
-- Choose a theme before building; if unsure, use the default `data` theme.
+- Always build on an installed template. List templates with `ppt_template { operation: "list" }` and ask the user via the ask-user tool (`ask_user_question` in DSH) which one to use before building; only if that tool is unavailable or the user does not answer, proceed with `builtin:corporate-report` and say so. Never offer or select the five built-in visual themes (swiss / velvet / data / soft / bold) and never pass `theme` to `ppt_create` — the visual style comes from the chosen template; bare themes are an engine fallback, not a choice.
 - Go through the "Quality Gate" checklist at the end of this document item by item before delivery.
 - Aim for a production-ready deliverable: organize real content first before calling the generator; any unfilled templates must be explicitly marked as drafts—never fabricate missing facts.
 - If the render report flags missing fonts, substitute them with fonts available in both the local environment and the recipient's machine, regenerate, and inspect slide by slide; any unresolved font issues must be noted, and the deck cannot be claimed as visually verified.
@@ -33,11 +33,11 @@ The user wants to create a PPT / slides / presentation / deck / report / proposa
 1. **Probe Requirements**: Read the user's sentence or document to determine the audience, objective, and tone. Do not ask clarifying questions for single-sentence inputs—infer the context directly from the presentation scenario.
 2. **Outline**: Produce a 5–12 slide outline (Cover → Problem/Context → Solution/Arguments [3–6 slides] → Evidence → Call to Action → Closing Slide).
    → Read `references/copywriting.md` before writing the outline and body copy.
-3. **Theme**: Call `ppt_themes` (in DSH) or run `node scripts/build-deck.mjs --list-themes` (cross-harness).
-   → If unsure which theme to pick, consult the mood decision tree in `references/themes.md`.
+3. **Select Template**: Call `ppt_template { operation: "list" }` (in DSH) to enumerate installed templates — `builtin:*` ships in the package, `public:*` and `user:*` come from the library. Present the list and ask the user via the ask-user tool which template to use, corporate options first; always ask before building. If the session has no ask-user tool or the user does not answer, use `builtin:corporate-report` and state that choice explicitly.
+   → Read `references/templates.md` for template keys, outline skeletons, and per-slide `layoutId`.
 4. **Build**:
-   - Inside DSH: Call `ppt_create`, passing the outline as Markdown via `content` (recommended) or passing structured `slides`.
-   - Cross-harness: Run `node <skill-dir>/scripts/build-deck.mjs --title "Title" --content deck.md --theme data --lang en --out dist`.
+   - Inside DSH: Call `ppt_create` with the chosen `templateId`, passing the outline as Markdown via `content` (recommended) or passing structured `slides`; do not pass `theme` and do not call `ppt_themes`.
+   - Cross-harness: Run `node <skill-dir>/scripts/build-deck.mjs --title "Title" --content deck.md --template-file <bundle.zip> --lang en --out dist` (there is no template library — export a bundle first; `--theme` is a legacy fallback).
    - Motion is enabled by default (slide transitions + sequential bullet entrance); pass `motion: 'off'` for formal or print scenarios.
    → Read `references/syntax.md` before using tables, pull quotes, speaker notes, or structured slides.
 5. **Verify & Refine**: Call `ppt_check` to inspect specific slides; test slideshow playback, overview mode, and speaker notes in a browser, and verify images/charts. If the optional official engine is available, call `ppt_render` to read the final PPTX and generate per-slide PNGs/PDFs for visual slide-by-slide review. Apply fixes via `ppt_edit` using `expectedRevision` to prevent conflicts; use `ppt_undo` if needed. Re-render after edits and re-verify the current file against its receipt. Passing file header or structural checks does not equal visual sign-off—report static estimates, rendering results, and visual inspection separately.
@@ -48,7 +48,8 @@ The user wants to create a PPT / slides / presentation / deck / report / proposa
 | When to Read | File | Contents |
 | --- | --- | --- |
 | Before writing outline / body copy | `references/copywriting.md` | Narrative structure, single-slide rules, bilingual rules |
-| Unsure which theme to choose | `references/themes.md` | 5 theme color palettes + mood decision tree |
+| Choosing or applying a template / its layouts | `references/templates.md` | Template keys, outline skeleton, `layoutId`, restyling, fallback rule |
+| The user explicitly asks about the five visual themes | `references/themes.md` | 5 theme palettes + mood decision tree (legacy engine fallback) |
 | Using tables / pull quotes / speaker notes / structured slides | `references/syntax.md` | Markdown parsing, advanced syntax, slides JSON, motion toggle |
 | Images / charts / templates / branding / editing / rendering | `references/advanced.md` | Parameters, limits, drafts vs. finals, receipt semantics |
 | Numerical traceability & live simulation | `references/data.md` | Source bindings, formulas, update previews, offline parameter write-back |
@@ -59,6 +60,7 @@ The user wants to create a PPT / slides / presentation / deck / report / proposa
 - [ ] Slide count is 3–60, starting with a cover slide and ending with a closing slide.
 - [ ] Every slide has a clear title; `bullets` slides have 1–8 items, with ≤ 20 characters per item in Chinese or ≤ 12 words in English.
 - [ ] HTML and PPTX use the same theme with consistent color palettes.
+- [ ] The deck was built with the user-selected template (`templateId`); no bare built-in theme was used.
 - [ ] Theme colors have sufficient contrast (light text on dark background, or dark text on light background).
 - [ ] Chinese copy is free of typos; English titles use Title Case.
 - [ ] The final slide includes an actionable Call to Action (CTA), not just a generic "Thank You".
