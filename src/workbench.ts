@@ -500,7 +500,7 @@ export class PptWorkbench {
 export function installPptWorkbench(ctx: any, workbench: PptWorkbench): void {
   ctx.inject?.(['connection'], (host: any) => {
     host.connection?.fetch?.register({ path: PPT_WORKBENCH_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetch(request, workbenchIdentity(ctx, request)) })
-    host.connection?.fetch?.register({ path: PPT_TEMPLATE_UPLOAD_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetchTemplateUpload(request, workbenchIdentity(ctx, request)) })
     host.connection?.fetch?.register({ path: PPT_DOWNLOAD_ROUTE, methods: ['GET'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetchDownload(request, workbenchIdentity(ctx, request)) })
+    host.connection?.fetch?.register({ path: PPT_TEMPLATE_UPLOAD_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetchTemplateUpload(request, workbenchIdentity(ctx, request)) })
   })
 }

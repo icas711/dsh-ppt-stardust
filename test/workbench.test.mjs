@@ -60,7 +60,7 @@ test('read-only listing does not create storage; known tools register persistent
 }))
 test('authenticated carrier only; original Host used across HTTP bridge and origin checked', () => fixture(async ({ wb }) => {
   const registrations = []; installPptWorkbench({ inject(deps, fn) { assert.deepEqual(deps, ['connection']); fn({ connection: { fetch: { register(route) { registrations.push(route) } } } }); } }, wb)
-  assert.equal(registrations.length, 2); assert.equal(registrations[0].path, PPT_WORKBENCH_ROUTE)
+  assert.equal(registrations.length, 3); assert.equal(registrations[0].path, PPT_WORKBENCH_ROUTE); assert.equal(registrations[2].path, '/api/dsh-ppt/template-upload'); assert.deepEqual(registrations[2].methods, ['POST'])
   assert.equal(registrations[1].path, PPT_DOWNLOAD_ROUTE); assert.deepEqual(registrations[1].methods, ['GET']); assert.equal(registrations[1].requestBody, 'buffered')
   assert.equal((await wb.fetch(request({ operation: 'list' }))).status, 200)
   assert.equal((await wb.fetch(request({ operation: 'list' }, { origin: 'https://evil.example' }))).status, 403)
