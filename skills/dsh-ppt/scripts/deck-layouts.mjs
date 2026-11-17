@@ -159,3 +159,38 @@ export function renderLayoutLayer(layout, assets) {
 export const LAYOUT_CSS = `.tpl-layer{position:absolute;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
 .tpl-bg{position:absolute;inset:0}
 .tpl-img{position:absolute;max-width:none;user-select:none}`
+
+/** Область текста макета (объединение всех textZones) в % слайда либо undefined. */
+export function zoneRect(layout) {
+  const zones = layout?.textZones
+  if (!Array.isArray(zones) || !zones.length) return undefined
+  const x0 = Math.min(...zones.map(z => z.x)), y0 = Math.min(...zones.map(z => z.y))
+  const x1 = Math.max(...zones.map(z => z.x + z.w)), y1 = Math.max(...zones.map(z => z.y + z.h))
+  return { x: round(x0), y: round(y0), w: round(x1 - x0), h: round(y1 - y0) }
+}
+
+/** Inline-стиль .slide-inner: текст слайда занимает область текста макета. */
+export function zoneInnerStyle(layout) {
+  const r = zoneRect(layout)
+  return r ? `position:absolute;left:${pct(r.x)};top:${pct(r.y)};width:${pct(r.w)};height:${pct(r.h)};max-width:none;box-sizing:border-box;padding:0;overflow:hidden` : ''
+}
+
+// Типовая область текста генератора (EMU слайда 12192000×6858000), в неё «вписываются» тексты по умолчанию.
+const DEFAULT_FRAME = { x: 900000, y: 900000, w: 10400000, h: 5100000 }
+const TEXT_SHAPES = /^(Title|Subtitle|Kicker|Body|Quote|Attribution|Statement|Caption|Table|Accent bar)$/
+/** Перенос текстовых фигур PPTX-слайда из типовой области в область текста макета. */
+export function remapTextShapes(shapesXml, layout) {
+  const r = zoneRect(layout)
+  if (!r) return shapesXml
+  const zx = r.x / 100 * 12192000, zy = r.y / 100 * 6858000, zw = r.w / 100 * 12192000, zh = r.h / 100 * 6858000
+  const sx = zw / DEFAULT_FRAME.w, sy = zh / DEFAULT_FRAME.h
+  return shapesXml.replace(/<p:(sp|graphicFrame)>[\s\S]*?<\/p:\1>/g, block => {
+    const name = /<p:cNvPr id="\d+" name="([^"]*)"/.exec(block)?.[1]
+    if (!name || !TEXT_SHAPES.test(name)) return block
+    return block.replace(/<a:off x="(-?\d+)" y="(-?\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/, (_, x, y, w, h) => {
+      const nx = Math.round(zx + (Number(x) - DEFAULT_FRAME.x) * sx), ny = Math.round(zy + (Number(y) - DEFAULT_FRAME.y) * sy)
+      const nw = Math.max(200000, Math.round(Number(w) * sx)), nh = Math.max(150000, Math.round(Number(h) * sy))
+      return `<a:off x="${Math.max(0, nx)}" y="${Math.max(0, ny)}"/><a:ext cx="${Math.min(nw, 12192000 - Math.max(0, nx))}" cy="${Math.min(nh, 6858000 - Math.max(0, ny))}"/>`
+    })
+  })
+}

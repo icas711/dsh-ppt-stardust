@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Область текста макета (`textZones`): импорт PPTX вычисляет её по геометрии, HTML и PPTX размещают заголовок и текст внутри неё, чтобы не наезжать на логотипы и графику; правится в редакторе.
+- Layout text area (`textZones`): derived from geometry on PPTX import; HTML and PPTX keep title and body inside it; editable in the layout editor.
 - Шаблоны с картинками: макеты `style.layouts[]` (фон + картинки с положением и размером в процентах слайда), schemaVersion 2, вкладка «Макеты» в редакторе с числовыми полями и живым превью, выбор макета у слайдов каркаса. HTML-плеер и экспорт PPTX соблюдают положение; SVG безопасно санитизируется.
 - «Шаблон из PPTX» в панели: загрузка файла с диска (до 64 MiB, сырым телом), извлечение макетов, картинок, SVG-пар и плашек, пересчёт под 16:9, сжатие крупных картинок, отчёт импорта.
 - Image templates: `style.layouts[]` (background + images positioned in percent of the slide), schemaVersion 2, a "Layouts" editor tab with numeric fields and live preview, per-slide layout choice. The HTML player and PPTX export honour positions; SVG is sanitised.

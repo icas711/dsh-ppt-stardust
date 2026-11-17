@@ -144,7 +144,7 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
   const byHash = new Map()
   const skipped = {}
   const skip = kind => { skipped[kind] = (skipped[kind] ?? 0) + 1 }
-  const stats = { images: 0, backgrounds: 0, plates: 0, svg: 0, shrunk: 0 }
+  const stats = { images: 0, backgrounds: 0, plates: 0, svg: 0, shrunk: 0, zones: 0 }
 
   const storeBytes = async (raw, hint) => {
     const buffer = Buffer.from(raw)
@@ -269,6 +269,8 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
       // Полноэкранная картинка без фона макета считается фоном
       return { ...rest, z: index, role: rest.role ?? roleOf(rest) }
     })
+    const zone = deriveTextZone(entry.images)
+    if (zone) { entry.textZones = [zone]; stats.zones++ }
     layouts.push(entry)
     layoutIdByPart.set(part, id)
   }
@@ -289,4 +291,17 @@ function composeTransform(parent, child) {
   // Вложенные группы: внутренние координаты ребёнка проецируются родителем
   const p = (x, y, w, h) => ({ x: parent.outer.x + (x - parent.inner.x) * (num(parent.outer.w) / (num(parent.inner.w) || 1)), y: parent.outer.y + (y - parent.inner.y) * (num(parent.outer.h) / (num(parent.inner.h) || 1)), w: w * (num(parent.outer.w) / (num(parent.inner.w) || 1)), h: h * (num(parent.outer.h) / (num(parent.inner.h) || 1)) })
   return { outer: p(num(child.outer.x), num(child.outer.y), num(child.outer.w), num(child.outer.h)), inner: child.inner }
+}
+
+/**
+ * Область текста по геометрии макета: ниже самой нижней «шапочной» картинки/плашки (логотипы, линия, белая плашка
+ * над мозаикой). Без таких элементов зона не создаётся — действует типовая вёрстка.
+ */
+export function deriveTextZone(images) {
+  const header = images.filter(item => item.role !== 'background' && item.y < 30 && item.y + item.h <= 55 && !(item.w >= 95 && item.h >= 95))
+  if (!header.length) return null
+  const top = Math.min(50, Math.max(...header.map(item => item.y + item.h)) + 2)
+  if (top < 12) return null
+  const bottom = 93
+  return { kind: 'body', x: 6, y: round3(top), w: 88, h: round3(bottom - top) }
 }

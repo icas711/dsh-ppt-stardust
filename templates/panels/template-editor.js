@@ -80,7 +80,7 @@ function tplCleanLayout(layout) {
     if (layout.name && layout.name.trim()) out.name = layout.name.trim();
     if (layout.background?.image) out.background = { image: layout.background.image, fit: layout.background.fit || 'cover' };
     if (layout.backgroundColor) out.backgroundColor = layout.backgroundColor;
-    if (layout.textZones?.length) out.textZones = layout.textZones;
+    if (layout.textZones?.length) out.textZones = layout.textZones.map(zone => ({ kind: zone.kind === 'title' ? 'title' : 'body', x: Math.min(100, Math.max(0, tplNum(zone.x))), y: Math.min(100, Math.max(0, tplNum(zone.y))), w: Math.min(100, Math.max(1, tplNum(zone.w))), h: Math.min(100, Math.max(1, tplNum(zone.h))) }));
     return out;
 }
 function tplCleanSlide(slide) {
@@ -244,6 +244,13 @@ function TplLayoutsEditor({ draft, images, disabled, set, pickImage, error }) {
                     onClear: () => patch({ background: undefined }) },
                     current.background?.image ? h('label', null, tplTr('Вписывание', 'Fit'), h('select', { value: current.background.fit || 'cover', disabled, onChange: e => patch({ background: { ...current.background, fit: e.target.value } }) },
                         h('option', { value: 'cover' }, tplTr('Заполнить и обрезать', 'Fill and crop')), h('option', { value: 'contain' }, tplTr('Показать целиком', 'Show whole image')))) : null),
+                h('h3', null, tplTr('Область текста', 'Text area')),
+                h('p', { className: 'tpe-hint' }, tplTr('Заголовок и текст страницы размещаются внутри этой области, чтобы не налезать на логотипы и графику макета.', 'Slide title and text are laid out inside this area so they do not run into the layout logos and artwork.')),
+                current.textZones?.length ? h('div', null,
+                    h('div', { className: 'tpe-nums' }, ['x', 'y', 'w', 'h'].map(key => h('label', { key, className: 'tpe-num' }, key + ' %',
+                        h('input', { type: 'number', step: 0.5, disabled, value: current.textZones[0][key], onChange: e => patch({ textZones: [{ ...current.textZones[0], kind: 'body', [key]: e.target.value === '' ? '' : Number(e.target.value) }] }) })))),
+                    h(W.Button, { disabled, onClick: () => patch({ textZones: undefined }) }, tplTr('Типовая вёрстка', 'Default layout')))
+                    : h(W.Button, { disabled, onClick: () => patch({ textZones: [{ kind: 'body', x: 6, y: 25, w: 88, h: 68 }] }) }, tplTr('Задать область текста', 'Set text area')),
                 h('h3', null, tplTr('Картинки макета', 'Layout images') + ' (' + (current.images?.length ?? 0) + '/12)'),
                 (current.images ?? []).map((image, i) => h('div', { className: 'tpe-bg tpe-limg', key: i + ':' + image.image },
                     h('div', { className: 'tpe-slide-head' },

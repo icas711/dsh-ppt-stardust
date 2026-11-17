@@ -132,3 +132,28 @@ test('импорт PPTX: макеты, картинки, SVG и положени
   }
   assert.equal(result.manifest.schemaVersion, 2)
 })
+
+test('область текста: HTML ограничивает .slide-inner, PPTX переносит текстовые фигуры в зону', async () => {
+  const template = layoutTemplate()
+  template.style.layouts[0].textZones = [{ kind: 'body', x: 10, y: 50, w: 80, h: 40 }]
+  const manifest = templates.validateTemplateManifest(template, { templateAssets: layoutAssets() })
+  assert.deepEqual(layouts.zoneRect(manifest.style.layouts[0]), { x: 10, y: 50, w: 80, h: 40 })
+  const { create } = templates.templateCreateOptions(manifest, layoutAssets(), { title: 'Дек' })
+  const html = advanced.previewDeckHtml(create).html
+  assert.match(html, /<div class="slide-inner" style="position:absolute;left:10%;top:50%;width:80%;height:40%/)
+  await withTmp(async dir => {
+    const built = await advanced.buildDeckAsync({ ...create, outputDir: dir })
+    const xml = Buffer.from(unzipSync(new Uint8Array(readFileSync(built.pptxPath)))['ppt/slides/slide1.xml']).toString('utf8')
+    const title = /name="Title"[\s\S]*?<a:off x="(\d+)" y="(\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/.exec(xml)
+    assert.ok(title, 'Title найден')
+    const [x, y, w, h] = title.slice(1).map(Number)
+    assert.ok(x >= 1219200 - 10 && x + w <= 12192000 * 0.9 + 10, `x=${x} w=${w} внутри зоны по горизонтали`)
+    assert.ok(y >= 6858000 * 0.5 - 10 && y + h <= 6858000 * 0.9 + 10, `y=${y} h=${h} внутри зоны по вертикали`)
+  })
+})
+
+test('deriveTextZone: область под шапкой; без шапки зоны нет', () => {
+  const zone = pptxLayouts.deriveTextZone([{ role: 'logo', x: 3, y: 5, w: 14, h: 6 }, { role: 'decor', x: 0, y: 0, w: 100, h: 19, fit: 'fill' }])
+  assert.equal(zone.kind, 'body'); assert.ok(zone.y > 19 && zone.y < 25)
+  assert.equal(pptxLayouts.deriveTextZone([{ role: 'background', x: 0, y: 0, w: 100, h: 100 }]), null)
+})

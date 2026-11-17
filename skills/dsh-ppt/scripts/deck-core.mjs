@@ -21,7 +21,7 @@ import { MEDIA_LAYOUTS, MEDIA_CSS, normalizeMediaSlide, renderMediaHtml, mediaBo
 import { renderDelivery } from './deck-delivery.mjs'
 import { renderDataView } from './deck-data-view.mjs'
 import { normalizeVisual, visualHtmlStyle, visualShapeXml, VISUAL_CSS } from './deck-visual.mjs'
-import { LAYOUT_CSS, pickDesignLayout, renderLayoutLayer } from './deck-layouts.mjs'
+import { LAYOUT_CSS, pickDesignLayout, renderLayoutLayer, zoneInnerStyle, remapTextShapes } from './deck-layouts.mjs'
 
 /**
  * manifest 版本跟随发布包 package.json；把 skills/dsh-ppt 独立复制到其他
@@ -1900,7 +1900,7 @@ function renderHtmlSlide(slide, index, ui, langId, manifest = {}, theme) {
   const visualStyle = visualHtmlStyle(slide.visual)
   const bgAttr = hasBackground ? ' data-bgt="' + backgroundTypeOfLayout(slide.layout) + '"' : ''
   return '<section class="slide slide--' + escapeHtml(slide.layout || 'bullets') + '" data-index="' + number + '"' + notesAttr + bgAttr + (visualStyle ? ' style="' + escapeHtml(visualStyle) + '"' : '') + '>' +
-    layerHtml + '<div class="slide-inner">' + inner + '</div>' +
+    layerHtml + '<div class="slide-inner"' + (designLayout && zoneInnerStyle(designLayout) ? ' style="' + zoneInnerStyle(designLayout) + '"' : '') + '>' + inner + '</div>' +
     (manifest.brand?.logoAssetId ? '<img class="brand-logo" src="' + escapeHtml(manifest.assets?.[manifest.brand.logoAssetId]?.data ?? '') + '" alt="' + escapeHtml(manifest.brand.name || 'Logo') + '"/>' : '') +
     (manifest.brand?.footer ? '<div class="brand-footer">' + escapeHtml(manifest.brand.footer) + '</div>' : '') + '</section>'
 }
@@ -2208,7 +2208,7 @@ function slideXml(slide, index, total, theme, langId, motion) {
     '<p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="' + hex(p.bg) + '"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>' +
     '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
     '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' +
-    slideShapeList(slide, index, total, theme, langId) +
+    remapTextShapes(slideShapeList(slide, index, total, theme, langId), slide.__layout) +
     '</p:spTree></p:cSld>' +
     '<p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr>' +
     motionXml +
@@ -2548,7 +2548,7 @@ export function buildPptx(manifest, themeInput, languageInput) {
   }
   slides.forEach((slide, index) => {
     const hasNotes = noteIndexes.includes(index)
-    entries.push({ name: 'ppt/slides/slide' + (index + 1) + '.xml', data: slideXml(slide, index, slides.length, theme, language.attr, motion) })
+    entries.push({ name: 'ppt/slides/slide' + (index + 1) + '.xml', data: slideXml({ ...slide, __layout: pickDesignLayout(manifest.style?.layouts, slide, backgroundTypeOfLayout(slide.layout)) }, index, slides.length, theme, language.attr, motion) })
     entries.push({ name: 'ppt/slides/_rels/slide' + (index + 1) + '.xml.rels', data: slideRelXml(hasNotes, index + 1) })
     if (hasNotes) {
       entries.push({ name: 'ppt/notesSlides/notesSlide' + (index + 1) + '.xml', data: notesSlideXml(slide.notes, language.attr) })
