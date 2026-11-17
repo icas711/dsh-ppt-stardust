@@ -1,36 +1,39 @@
-# 图文、图表、工程编辑与渲染
+# Images, Charts, Project Editing, and Rendering
 
-Agent 先准备实际内容，再生成可放映 HTML 与可编辑 PPTX。用户无需填写 JSON。以下是工具接口参考。
+The agent prepares the actual content first, then generates a playable HTML slideshow and an editable PPTX. Users do not need to write JSON manually. Below is the tool interface reference.
 
-## 创建
+## Creation
 
-`ppt_templates` 提供 weekly、defense、project、pitch 四种结构参考。`ppt_create` 的 `template` 单独使用时生成待填草稿，返回 `deliveryStatus:draft`；提供完成的 content/slides 才能开始成品验收。
+`ppt_templates` provides four structural references: `weekly`, `defense`, `project`, and `pitch`. Using `template` alone in `ppt_create` generates an unfilled draft and returns `deliveryStatus:draft`; you must supply completed `content` or `slides` before starting final deliverable verification.
 
-**模板库**（详见仓库 `docs/TEMPLATES.md`）：`ppt_template` 管理模板（builtin/public/user 三层；`create-from-pptx` 从示例 PPTX 提取样式与骨架，`create-from-project` 从现有工程，`import`/`export` 收发 ZIP bundle，`publish` 需管理员）。`ppt_create` 新增 `templateId`：按模板样式与骨架生成待填草稿；`ppt_template { operation: 'apply-to-project', deckPath, templateId }` 对现有工程只换外观（主题/品牌/页面背景，可撤销）。CLI 对应 `--template-file`、`--restyle`、`--create-template-from-pptx/deck --save-template`。模板背景按页面类型（cover/section/content/closing）应用；无背景的模板在任何环境都完整可用。
+**Template Library** (see `docs/TEMPLATES.md` in the repository for details): `ppt_template` manages templates across three tiers (`builtin` / `public` / `user`; `create-from-pptx` extracts styles and skeleton from a sample PPTX, `create-from-project` creates from an existing project, `import`/`export` handles ZIP bundles, and `publish` requires administrator privileges). `ppt_create` accepts `templateId` to generate a skeleton draft using a template's styling and structure; `ppt_template { operation: 'apply-to-project', deckPath, templateId }` restyles an existing project's appearance only (theme, branding, and slide backgrounds; undoable). Equivalent CLI flags are `--template-file`, `--restyle`, and `--create-template-from-pptx/deck --save-template`. Template backgrounds are applied by slide type (`cover`/`section`/`content`/`closing`); templates without custom backgrounds work fully in any environment.
 
-`slides` 新增 image/image-left/image-right/chart 布局。图片示例：`{layout:"image-left",title:"新版流程更短",image:{src:"assets/flow.png",alt:"新版流程截图",fit:"contain"},bullets:["可直接生成","可修改指定页"]}`。PNG/JPEG 本地路径按会话 cwd 解析，亦支持 data URI；每张5MiB/3200万像素、合计32MiB。图片嵌入工程和输出，移动原文件后仍可使用。contain完整显示，cover居中裁切。外链/SVG需先由明确授权的其他工具准备，不自动下载。
+`slides` supports `image`, `image-left`, `image-right`, and `chart` layouts. Image example: `{layout:"image-left",title:"New Workflow Is Shorter",image:{src:"assets/flow.png",alt:"Screenshot of the new workflow",fit:"contain"},bullets:["Generate directly","Edit specific slides"]}`. Local PNG/JPEG paths are resolved relative to the session `cwd`, and data URIs are also supported; limits are 5 MiB / 32 megapixels per image and 32 MiB total. Images are embedded into the project and output files, so they remain intact even if the original source files are moved. `contain` fits the entire image inside the frame, while `cover` crops from the center. External URLs and SVGs must first be prepared by an explicitly authorized tool—they are never downloaded automatically.
 
-图表示例：`{layout:"chart",title:"完成量逐月增加",chart:{kind:"column",categories:["七月","八月","九月"],series:[{name:"完成量",values:[3,5,9]}],unit:"项"}}`。支持 column/bar/line/pie，也可用带表头 rows。长度必须一致，值必须有限；pie仅一个非负系列、正总和。原生PPTX图表包含编辑数据工作簿，HTML有SVG与读屏数据表。
+Chart example: `{layout:"chart",title:"Monthly Completions Keep Rising",chart:{kind:"column",categories:["July","August","September"],series:[{name:"Completions",values:[3,5,9]}],unit:"items"}}`. Supported chart kinds are `column`, `bar`, `line`, and `pie`; data can also be passed via `rows` with a header row. Category and value array lengths must match, and all values must be finite numbers; `pie` charts allow only one non-negative series with a positive sum. Native PPTX charts include an embedded editable data workbook, while HTML renders an SVG chart alongside an accessible data table for screen readers.
 
-共享品牌 `brand:{primaryColor:"#2C9F87",fontFamily:"Microsoft YaHei",logo:"logo.png",footer:"产品团队 · 2026"}`。还可设背景/文字色及name。选择接收方可用字体；字体诊断不自动安装字体。
+Shared branding is configured via `brand:{primaryColor:"#2C9F87",fontFamily:"Arial",logo:"logo.png",footer:"Product Team · 2026"}`. You can also specify background/text colors and `name`. Choose fonts available on the recipient's machine; font diagnostics will not install missing fonts automatically.
 
-## 修改与撤销
 
-先 `ppt_check {deckPath:"report.json"}` 取得当前revision和页面ID。修改：`ppt_edit {deckPath:"report.json",expectedRevision:0,edits:[{slide:3,patch:{title:"新标题",bullets:["事实一","行动"]}}]}`。slide为1起始页码或ID，其他页保留；重复指定页拒绝。可单独修改brand；brand:null清空品牌，logo:null清空Logo，空footer清空页脚。
+## Editing & Undo
 
-复制与删除：`ppt_edit {deckPath:"report.json",expectedRevision:0,duplicate:[2],remove:[3]}`。两组引用都按修改前的1起始页码或稳定ID解析；副本紧跟原页，获得新ID，并保留图片、图表和备注。同一页不能同时复制和删除，不能重复指定，最终保留1–120页。可与edits和order合为一次修改，先编辑/排序，再复制/删除；order仍需包含每个原始页面ID各一次。
+First, run `ppt_check {deckPath:"report.json"}` to retrieve the current `revision` and slide IDs. To edit: `ppt_edit {deckPath:"report.json",expectedRevision:0,edits:[{slide:3,patch:{title:"New Title",bullets:["Fact One","Action"]}}]}`. `slide` accepts a 1-based slide index or a stable slide ID, while all other slides remain unchanged; targeting the same slide multiple times in one call is rejected. `brand` can be updated independently; pass `brand:null` to clear branding, `logo:null` to remove the logo, or an empty `footer` string to clear the footer.
 
-编辑会原子更新整套HTML/PPTX/JSON，失败回滚。历史最多20次。`ppt_undo {deckPath:"report.json",expectedRevision:1}` 恢复上次状态，包含页面结构、图片/图表/品牌；revision继续增长，旧修改不可覆盖撤销。仅编辑本插件JSON工程，不导入任意外部PPTX进行修改。表格扩大到需要分页时会要求另建文稿。
+Duplicating & Removing: `ppt_edit {deckPath:"report.json",expectedRevision:0,duplicate:[2],remove:[3]}`. Both arrays resolve against pre-edit 1-based slide indices or stable IDs; duplicated slides are inserted immediately after their originals, receive new IDs, and retain images, charts, and speaker notes. A slide cannot be duplicated and removed in the same operation, nor specified twice, and the final deck must contain 1–120 slides. These operations can be combined with `edits` and `order` in a single call—edits and reordering are applied first, followed by duplication and removal; `order` must still include each original slide ID exactly once.
 
-## 检查与渲染
+Edits atomically update the entire HTML/PPTX/JSON set and roll back on failure. Undo history retains up to 20 steps. `ppt_undo {deckPath:"report.json",expectedRevision:1}` restores the previous state, including slide structure, images, charts, and branding; `revision` continues incrementing forward, and stale modifications cannot overwrite an undone state. Only JSON projects created by this plugin can be edited—arbitrary external PPTX files cannot be imported for editing. If a table expands to the point of requiring pagination, you will be prompted to generate a new deck instead.
 
-`ppt_check` 定位页面问题，包括密度、估计溢出、7–8列表格14pt、图片缺失/损坏/分辨率、图表标签和对比度。6列以内原生表格17pt。静态估算不能保证字体或视觉布局。
 
-可选安装 `npm install --ignore-scripts @deepseek-ai/libreoffice-kit@0.2.3`（DSH 0.2.2 起内置该版本，0.1.5 亦兼容）。Windows还需相应架构的VC++v14运行库。`ppt_render {pptxPath:"report.pptx",format:"both"}` 读取最终PPTX，输出PNG/PDF/收据，不改源文件。默认png，width默认1440（320–3840），timeoutMs默认120000（1000–300000）；最多120页，输入64MiB、输出128MiB、单张16MP。缺失引擎返回unavailable及安装说明，普通创建仍可用。
+## Inspection & Rendering
 
-查看每页PNG及HTML，必要时在实际PowerPoint/WPS检查编辑、备注和动画。LibreOffice不保证与Office逐像素一致，PNG/PDF不保留动画。成功渲染仍为 `visual:not-verified`，不会自动声称视觉通过。
+`ppt_check` identifies slide-level issues, including content density, estimated text overflow, 14pt font sizing on 7–8 column tables, missing/corrupted/low-resolution images, chart label overlap, and color contrast. Native tables with up to 6 columns use 17pt font sizing. Static estimation does not guarantee exact font metrics or final visual layout.
 
-把返回receiptPath传给 `ppt_check {deckPath:"report.json",renderReceipt:".../render-receipt.json"}`。源文件与所有输出的摘要必须匹配；修改/删除后失效，重新渲染。收据是本地完整性记录，非签名证明。
+Optionally install `npm install --ignore-scripts @deepseek-ai/libreoffice-kit@0.2.3` (bundled with DSH 0.2.2+; 0.1.5 is also compatible). Windows also requires the matching architecture's VC++ v14 runtime. Run `ppt_render {pptxPath:"report.pptx",format:"both"}` to read the final PPTX and output PNGs, PDF, and a render receipt without modifying the source file. Defaults: `format` is `"png"`, `width` is `1440` (range `320–3840`), and `timeoutMs` is `120000` (range `1000–300000`). Limits: up to 120 slides, 64 MiB input size, 128 MiB total output size, and 16 MP per image. If the rendering engine is missing, it returns `unavailable` along with installation instructions, while standard deck generation remains unaffected.
+
+Inspect every rendered PNG as well as the HTML slideshow, and verify editability, speaker notes, and animations in PowerPoint or WPS when necessary. LibreOffice does not guarantee pixel-for-pixel parity with Microsoft Office, and PNG/PDF outputs do not preserve animations. A successful render still carries the status `visual:not-verified`—never automatically claim visual inspection has passed.
+
+Pass the returned `receiptPath` to `ppt_check {deckPath:"report.json",renderReceipt:".../render-receipt.json"}`. The checksums of the source file and all outputs must match; any subsequent modification or deletion invalidates the receipt, requiring a re-render. The receipt serves as a local integrity record, not a cryptographic signature.
+
 
 ## CLI
 
@@ -40,4 +43,5 @@ Agent 先准备实际内容，再生成可放映 HTML 与可编辑 PPTX。用户
 
 `--check report.json`、`--render report.pptx --format both`、`--check report.json --render-receipt receipt.json`。
 
-默认渲染目录在PPTX旁；显式 `--out` 指定基目录，已有目录追加后缀。引擎不可用/静态错误/显式收据失效返回非零退出码。
+By default, the render output directory is created next to the PPTX file; passing `--out` explicitly specifies the base directory, appending a suffix if the directory already exists. An unavailable rendering engine, static validation errors, or an invalidated explicit receipt will return a non-zero exit code.
+

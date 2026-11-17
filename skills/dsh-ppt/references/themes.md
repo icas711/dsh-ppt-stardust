@@ -1,61 +1,64 @@
-# dsh-ppt 内置主题参考
+# dsh-ppt Built-In Themes Reference
 
-主题系统移植自 hyperframes 技能的 `visual-styles.md` 视觉风格库。每套主题在 HTML 与 PPTX 中使用同一色板、同一字体族、同一情绪规则。
+The theme system is ported from the `visual-styles.md` visual style library of the `hyperframes` skill. Every theme uses the exact same color palette, font family, and mood guidelines across both HTML and PPTX exports.
 
-> 想先看效果：运行 `ppt_themes { preview: true, outputDir: "dist" }`，会生成 `themes-preview.html` 与每套主题一张 `theme-<id>.svg`；README/npm 首屏可以直接引用 SVG。
+> Want a preview first? Run `ppt_themes { preview: true, outputDir: "dist" }` to generate `themes-preview.html` along with a `theme-<id>.svg` file for each theme; these SVGs can be embedded directly in READMEs or npm landing pages.
 
-## 速查
+## Quick Reference
 
-| ID | 中文名 | English | 明暗 | 底色 | 前景 | 主强调 | 次强调 | 情绪 | 适用 |
+| ID | Chinese Name | English | Mode | Background | Foreground | Primary Accent | Secondary Accent | Mood | Best For |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `data` | 数据漂移 | Data Drift | 暗 | `#070B14` | `#E8F1FF` | `#7C3AED` | `#06B6D4` | 未来/沉浸 | AI、数据、研究、技术发布 |
-| `swiss` | 瑞士脉冲 | Swiss Pulse | 暗 | `#10151B` | `#F5F7FA` | `#2F6BFF` | `#FFB300` | 精准/理性 | SaaS、数据、开发者工具 |
-| `velvet` | 天鹅绒标准 | Velvet Standard | 暗 | `#111316` | `#F4EFE6` | `#C9A84C` | `#3D4A63` | 高级/克制 | 高管汇报、品牌、融资路演 |
-| `soft` | 柔和信号 | Soft Signal | 亮 | `#FFF8EC` | `#3B2F2A` | `#E58A2F` | `#8FAF8C` | 温暖/人本 | 品牌故事、培训、个人分享 |
-| `bold` | 极繁大字 | Maximalist Type | 暗 | `#0D0D0D` | `#FFFFFF` | `#E63946` | `#FFD60A` | 大声/动能 | 产品发布、活动、大事件 |
+| `data` | 数据漂移 | Data Drift | Dark | `#070B14` | `#E8F1FF` | `#7C3AED` | `#06B6D4` | Futuristic / Immersive | AI, data, research, tech launches |
+| `swiss` | 瑞士脉冲 | Swiss Pulse | Dark | `#10151B` | `#F5F7FA` | `#2F6BFF` | `#FFB300` | Precise / Rational | SaaS, analytics, developer tools |
+| `velvet` | 天鹅绒标准 | Velvet Standard | Dark | `#111316` | `#F4EFE6` | `#C9A84C` | `#3D4A63` | Premium / Restrained | Executive reports, branding, pitch decks |
+| `soft` | 柔和信号 | Soft Signal | Light | `#FFF8EC` | `#3B2F2A` | `#E58A2F` | `#8FAF8C` | Warm / Human | Brand storytelling, training, personal talks |
+| `bold` | 极繁大字 | Maximalist Type | Dark | `#0D0D0D` | `#FFFFFF` | `#E63946` | `#FFD60A` | Loud / Kinetic | Product launches, events, major announcements |
 
-## 逐主题说明
+## Theme Breakdown
 
-### data — 数据漂移（默认）
+### data — Data Drift (Default)
 
-- 深黑底 + 电光紫 + 青色，细体未来感。
-- 适合 AI / ML / 数据 / 前沿技术；大标题少字，用对比数字。
-- 反模式：不要加多余暖色；不要堆长段落。
+- Deep black background + electric purple + cyan, light-weight futuristic typography.
+- Ideal for AI / ML / data / frontier tech; use concise display titles and contrasting metrics.
+- Anti-patterns: Do not introduce extraneous warm colors; avoid dense paragraphs of text.
 
-### swiss — 瑞士脉冲
 
-- 黑白灰 + 一个电蓝（或琥珀），栅格感、大数字。
-- 适合 SaaS / 指标 / 开发者工具；标题短、要点像 spec。
-- 反模式：不要装饰性渐变文字；不要圆角卡片堆叠。
+### swiss — Swiss Pulse
 
-### velvet — 天鹅绒标准
+- Black, white, and gray + a single electric blue (or amber), grid-driven layout, large numbers.
+- Ideal for SaaS / metrics / developer tools; keep titles short and format bullets like technical specs.
+- Anti-patterns: Do not use decorative gradient text; avoid stacking rounded-corner cards.
 
-- 黑、米白、香槟金，衬线标题 + 无衬线正文，宽字距，留白多。
-- 适合高管汇报 / 品牌 / 融资；节奏慢，页数少而精。
-- 反模式：不要动画感强烈的颜色；不要超过一个强调色。
+### velvet — Velvet Standard
 
-### soft — 柔和信号
+- Black, off-white, and champagne gold; serif headings + sans-serif body text, wide letter spacing, generous whitespace.
+- Ideal for executive reports / branding / fundraising; slow pacing with fewer, high-impact slides.
+- Anti-patterns: Do not use flashy, overly animated colors; never use more than one accent color.
 
-- 暖奶油底、深棕字、琥珀 + 鼠尾草绿，亮色唯一浅底主题。
-- 适合品牌故事 / 培训 / 个人分享；文字可以更口语。
-- 反模式：不要用纯黑正文；不要高饱和撞色。
+### soft — Soft Signal
 
-### bold — 极繁大字
+- Warm cream background, dark brown text, amber + sage green; the only light-background theme in the palette.
+- Ideal for brand storytelling / training / personal talks; copy can be more conversational.
+- Anti-patterns: Do not use pure black for body text; avoid high-saturation clashing colors.
 
-- 黑底、正红 + 明黄，超粗标题，字就是视觉主体。
-- 适合产品发布 / 活动 / 大事件；短标题、单页单一冲击。
-- 反模式：不要把页面塞满要点；不要让红黄之外再出现第三种强调色。
+### bold — Maximalist Type
 
-## 选主题决策树
+- Black background, true red + bright yellow, ultra-bold display titles where typography serves as the primary visual element.
+- Ideal for product launches / events / major announcements; short headlines with a single focal punch per slide.
+- Anti-patterns: Do not crowd slides with dense bullet lists; never introduce a third accent color beyond red and yellow.
 
-1. 情绪是未来/科技 → `data`
-2. 情绪是理性/数据/精准 → `swiss`
-3. 情绪是高级/信任/正式 → `velvet`
-4. 情绪是温暖/人本/故事 → `soft`
-5. 情绪是大音量/发布会 → `bold`
 
-无法判断时用 `data`，不要自造主题 ID。
+## Theme Selection Decision Tree
 
-## 视觉引擎复用（hyperframes）
+1. Mood is futuristic / tech → `data`
+2. Mood is rational / data-driven / precise → `swiss`
+3. Mood is premium / trustworthy / formal → `velvet`
+4. Mood is warm / human-centric / storytelling → `soft`
+5. Mood is loud / launch event → `bold`
 
-如果 `hyperframes` 技能已安装，生成前先读它的 `visual-styles.md` / `house-style.md` 作为视觉判断依据；本技能的 5 套主题就是把其中 Swiss Pulse / Velvet Standard / Data Drift / Soft Signal / Maximalist Type 五套风格落成确定性 HTML+PPTX 实现。需要高级动画视频版时，才转用 hyperframes；普通演示不要上视频引擎。
+When in doubt, default to `data`—never invent custom theme IDs.
+
+## Visual Engine Reuse (hyperframes)
+
+If the `hyperframes` skill is installed, read its `visual-styles.md` / `house-style.md` first as a visual reference before generating; this skill's 5 themes are deterministic HTML+PPTX implementations of its Swiss Pulse, Velvet Standard, Data Drift, Soft Signal, and Maximalist Type styles. Switch to `hyperframes` only when an advanced animated video version is required; do not use a video engine for standard presentations.
+

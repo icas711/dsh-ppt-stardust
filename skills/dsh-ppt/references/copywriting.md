@@ -1,59 +1,62 @@
-# dsh-ppt 幻灯片写作规则（中英双语）
+# dsh-ppt Slide Copywriting Rules (Bilingual)
 
-## 结构模板
+## Structural Template
 
-任何 deck 都遵循同一叙事骨架：
+Every deck follows the same narrative skeleton:
 
-1. **封面**：标题（判断句或名词短语 + 价值承诺）+ 副标题（一句话定位）。
-2. **背景/问题**：现状 → 痛点 → 为什么现在。
-3. **方案/论点**：每个论点一页，先结论后理由。
-4. **证据/案例**：数字、对比、客户/数据点。
-5. **行动号召**：希望听众下一步做什么。
-6. **结束页**：谢谢 + 联系方式或 CTA 重复。
+1. **Cover**: Title (declarative statement or noun phrase + value proposition) + Subtitle (one-sentence positioning).
+2. **Background / Problem**: Current state → Pain points → Why now.
+3. **Solution / Arguments**: One slide per argument, leading with the conclusion followed by supporting reasons.
+4. **Evidence / Case Studies**: Metrics, comparisons, customer proof, or data points.
+5. **Call to Action (CTA)**: What you want the audience to do next.
+6. **Closing Slide**: Thank you + contact details or restated CTA.
 
-一句话输入的最小完整结构：封面 → 核心观点页 → 结束页。
+Minimum complete structure for a single-sentence input: Cover → Core Statement Slide → Closing Slide.
 
-## 单页规则
 
-- 一个页面只讲一个观点。
-- 标题是完整的判断句，例如「AI 客服把首响时间压缩到 8 秒」，而不是「关于客服」。
-- bullets 1–8 条，中文每条 ≤ 20 字，英文每条 ≤ 12 词。
-- 优先使用数字、对比、动词；避免「赋能、抓手、闭环」等空词。
-- 最后一页要给出可执行的 CTA，不是只写「谢谢」。
+## Single-Slide Rules
 
-## 双语规则
+- Present only one idea per slide.
+- Titles must be complete declarative statements—for example, *"AI Customer Support Cuts First Response Time to 8 Seconds"*, rather than *"About Customer Support"*.
+- Include 1–8 bullets per slide, keeping each bullet to ≤ 20 characters in Chinese or ≤ 12 words in English.
+- Prioritize numbers, comparisons, and strong verbs; avoid empty corporate buzzwords (such as *"empower"*, *"leverage point"*, or *"closed-loop"*).
+- The final slide must include an actionable Call to Action (CTA), not just a generic *"Thank You"*.
 
-- 插件 `lang` 参数只控制界面（页码/标签/结束页默认文案）；**内容双语由写作阶段完成**。
-- 双语 deck 推荐两种做法：
-  1. 同一页内：中文标题 + 英文副标题；bullets 中文为主，关键词括号英文。
-  2. 两份 deck：同一大纲分别以 `zh` 与 `en` 生成，主题保持一致。
-- 英文标题用 Title Case；术语首现给中文+英文，如「检索增强生成（RAG）」。
-- 双语时不要逐句直译，按目标语言习惯重写。
+## Bilingual Rules
 
-## Markdown 与结构化输入
+- The plugin's `lang` parameter only controls UI elements (slide numbers, labels, default closing slide copy); **bilingual content must be authored during the writing stage**.
+- Two recommended approaches for bilingual decks:
+  1. **Single combined deck**: Chinese title + English subtitle on the same slide; primary bullets in Chinese with key English terms in parentheses.
+  2. **Two separate decks**: Generate two versions from the same outline using `zh` and `en` respectively, keeping the theme consistent across both.
+- Use Title Case for English titles; introduce technical terms with both languages on first mention, such as *"Retrieval-Augmented Generation (RAG)"*.
+- Avoid literal word-for-word translation in bilingual decks—rewrite copy naturally to match the idioms and conventions of the target language.
 
-解析规则、表格/金句/备注语法与结构化 `slides` JSON 见 `syntax.md`。
 
-## 示例
+## Markdown & Structured Input
 
-输入：
+For parsing rules, table/pull-quote/speaker-note syntax, and structured `slides` JSON, see `syntax.md`.
+
+## Example
+
+Input:
 
 ```markdown
-# 让会议少一半
+# Cut Meetings in Half
 
-用异步决策替代同步例会。
+Replace synchronous status meetings with asynchronous decision-making.
 
-## 问题
-- 工程师每周 6 小时在例会上
-- 决策没有记录，反复讨论
+## Problem
+- Engineers spend 6 hours per week in status meetings
+- Decisions go unrecorded, causing repeated discussions
 
-## 方案
-- 会前异步文档 + 24h 评论期
-- 只有分歧项才开会
+## Solution
+- Pre-meeting async docs + 24-hour comment window
+- Hold live meetings only for unresolved disagreements
 
-## 效果
-- 周会从 4 次降到 1 次
-- 决策记录 100% 沉淀
+## Results
+- Weekly meetings reduced from 4 to 1
+- 100% of decisions documented and preserved
 ```
 
-产出：封面 → 问题 → 方案 → 效果 → 结束页，共 5 页，主题可选 `swiss`（数据/效率）或 `soft`（团队协作）。
+Output: Cover → Problem → Solution → Results → Closing Slide (5 slides total); recommended themes are `swiss` (data/efficiency) or `soft` (team collaboration).
+

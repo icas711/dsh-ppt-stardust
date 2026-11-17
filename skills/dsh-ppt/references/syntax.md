@@ -1,44 +1,45 @@
-# dsh-ppt 输入语法参考（Markdown / 结构化 slides / 动效）
+# dsh-ppt Input Syntax Reference (Markdown / Structured Slides / Motion)
 
-只在需要查具体语法时读本文件；常规流程在 SKILL.md。
+Consult this file only when looking up specific syntax rules; standard workflows are covered in `SKILL.md`.
 
-## Markdown 解析规则
+## Markdown Parsing Rules
 
-`ppt_create` 与 `build-deck.mjs` 按以下规则解析 Markdown：
+`ppt_create` and `build-deck.mjs` parse Markdown according to the following rules:
 
-- 第一个 `# 标题` 会成为封面标题；其后的段落/列表成为封面副标题来源。
-- 每个 `## 小节`（或更深标题）生成一页：
-  - 有 `- ` / `* ` / `1.` 列表 → `bullets` 页；
-  - 无列表且无正文 → `section` 过渡页；
-  - 有正文段落 → 正文拆句后作为 bullets。
-- 没有标题的纯文本：第一段第一句为封面副标题，后续段落按 5 句一组拆成要点页。
-- 只有一句话：自动生成「封面 → 核心观点 → 结束页」三页。
-- 需要更精细控制时使用结构化 `slides` JSON，不要和 Markdown 混用。
+- The first `# Heading` becomes the cover slide title; any immediately following paragraphs or lists are used as the cover subtitle.
+- Each `## Section` (or deeper heading) generates a single slide:
+  - Contains a `- ` / `* ` / `1.` list → `bullets` slide;
+  - Contains neither a list nor body text → `section` divider slide;
+  - Contains body paragraphs → sentences are split and converted into bullets.
+- Plain text without headings: The first sentence of the first paragraph becomes the cover subtitle, and subsequent paragraphs are split into bullet slides in groups of 5 sentences.
+- Single-sentence input: Automatically generates a three-slide sequence: "Cover → Core Statement → Closing Slide".
+- When finer layout control is required, use structured `slides` JSON—do not mix it with Markdown.
 
-## 进阶语法（自动识别）
+## Advanced Syntax (Auto-Detected)
 
-- **表格**：`| 列 | 列 |` 连续行（第二行 `| --- | --- |` 分隔线）→ 独立 `table` 页（主题色表头；每页 8 行数据，长表格自动续页并重复表头；最多 8 列、每格 60 字符，超限先报错）。数据对比优先用表格，别堆要点。
-- **金句**：`>` 引用块 → 独立 `quote` 页；最后一行写 `—— 出处` 会成为署名。
-- **演讲者备注**：`<!-- 备注: 这页要讲的内容 -->`（或 `<!-- note: ... -->`）附着到该页。备注不进正文：HTML 放映按 `S` 呼出备注面板，PPTX 写入原生备注（演示者视图可见）。为汇报/演讲类 deck 主动写备注（口径、数据出处、应答预案）。
+- **Tables**: Consecutive `| Col | Col |` rows (with a `| --- | --- |` separator on the second line) → standalone `table` slide (theme-colored header; up to 8 data rows per slide, with longer tables automatically continuing onto new slides with repeated headers; max 8 columns and 60 characters per cell—exceeding limits throws an error). Prefer tables over dense bullet lists for data comparisons.
+- **Pull Quotes**: `>` blockquotes → standalone `quote` slide; ending the final line with `—— Attribution` (or `-- Attribution`) sets the quote attribution.
+- **Speaker Notes**: `<!-- note: Content to speak on this slide -->` (also supports `<!-- 备注: ... -->`) attaches speaker notes to that slide. Notes are excluded from slide body content: press `S` during HTML playback to toggle the notes panel, and in PPTX they are written to native speaker notes (visible in Presenter View). Proactively write speaker notes for reports and live talks (metric definitions, data sources, Q&A talking points).
 
-## 结构化 slides（高级用法）
+## Structured `slides` (Advanced Usage)
 
-`ppt_create` 的 `slides` 与 CLI `--slides` 接受 JSON 数组：
+The `slides` parameter in `ppt_create` and the `--slides` CLI flag accept a JSON array:
 
 ```json
 [
-  { "layout": "cover", "title": "标题", "subtitle": "副标题", "kicker": "开场", "notes": "开场先自我介绍 30 秒" },
-  { "layout": "section", "kicker": "01", "title": "背景" },
-  { "layout": "bullets", "title": "三个论点", "bullets": ["论点一", "论点二", "论点三"] },
-  { "layout": "table", "title": "业绩对比", "rows": [["大区", "营收"], ["华东", "1.2 亿"]], "notes": "强调华东增速" },
-  { "layout": "quote", "title": "慢就是快。", "subtitle": "创始人" },
-  { "layout": "statement", "title": "核心观点一句话", "subtitle": "支撑说明" },
-  { "layout": "closing", "title": "谢谢", "subtitle": "行动号召" }
+  { "layout": "cover", "title": "Title", "subtitle": "Subtitle", "kicker": "Opening", "notes": "Start with a 30-second self-introduction" },
+  { "layout": "section", "kicker": "01", "title": "Background" },
+  { "layout": "bullets", "title": "Three Key Arguments", "bullets": ["Point One", "Point Two", "Point Three"] },
+  { "layout": "table", "title": "Performance Comparison", "rows": [["Region", "Revenue"], ["East China", "\$12M"]], "notes": "Highlight growth rate in East China" },
+  { "layout": "quote", "title": "Slow is smooth, smooth is fast.", "subtitle": "Founder" },
+  { "layout": "statement", "title": "Core Takeaway in One Sentence", "subtitle": "Supporting context" },
+  { "layout": "closing", "title": "Thank You", "subtitle": "Call to Action" }
 ]
 ```
 
-`layout` 支持 `cover | section | bullets | statement | quote | table | closing | image | image-left | image-right | chart`；每页可选 `notes`，表格用 `rows`（首行为表头）。结构化表格自动分页，备注只放第一页。分页后超过 maxSlides 会报错，最多120页。图文、图表、品牌及按页编辑见 `advanced.md`。
+`layout` supports `cover | section | bullets | statement | quote | table | closing | image | image-left | image-right | chart`; each slide accepts an optional `notes` field, and tables use `rows` (with the first row serving as the header). Structured tables paginate automatically, with speaker notes placed only on the first page. If pagination causes the total slide count to exceed `maxSlides`, an error is thrown (maximum 120 slides). For images, charts, branding, and per-slide editing, see `advanced.md`.
 
-## 动效（motion）
+## Motion (`motion`)
 
-默认 `motion: on`：HTML 放映有页间淡入与要点逐条入场；PPTX 每页原生淡入转场，`bullets` 页的要点按「点击一次出现一条」放映。交付严肃/打印场景或用户明确要静态时传 `motion: 'off'`（CLI `--motion off`），产物不含任何动画代码。
+Defaults to `motion: on`: HTML playback features cross-fade slide transitions and sequential bullet entrance animations; PPTX includes native fade transitions on every slide, and `bullets` slides reveal points one by one on click during playback. Pass `motion: 'off'` (CLI `--motion off`) for formal/print scenarios or when the user explicitly requests a static deck—the generated output will contain zero animation code.
+
