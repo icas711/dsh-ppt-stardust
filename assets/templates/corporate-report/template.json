@@ -1,43 +1,806 @@
 {
-  "schemaVersion": 1,
-  "id": "corporate-report",
-  "name": "Корпоративный отчёт (синий)",
-  "author": "cli",
+  "schemaVersion": 2,
+  "id": "dkp-projects",
+  "name": "ДКП-проекты",
+  "author": "kamura",
   "revision": 1,
-  "createdAt": "2026-11-16T01:45:42.804Z",
-  "updatedAt": "2026-11-16T01:45:42.804Z",
+  "createdAt": "2026-11-17T12:29:40.867Z",
+  "updatedAt": "2026-11-17T12:35:38.482Z",
   "style": {
     "theme": "data",
     "brand": {
-      "primaryColor": "#1B4FD8",
-      "backgroundColor": "#F5F8FF",
-      "textColor": "#10224A",
-      "fontFamily": "Liberation Sans"
-    }
+      "primaryColor": "#CF1F2F",
+      "backgroundColor": "#F5F5F5",
+      "textColor": "#3E3E41",
+      "fontFamily": "TT Moscow Economy"
+    },
+    "layouts": [
+      {
+        "id": "layout-12",
+        "name": "8_Типовая страница 2",
+        "layoutType": "content",
+        "backgroundColor": "#FFFFFF",
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-5888b13f.png",
+            "x": 2.229,
+            "y": 4.361,
+            "w": 18.955,
+            "h": 8.022,
+            "z": 1,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-babf01eb.svg"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": -0.055,
+            "w": 100,
+            "h": 19.065,
+            "z": 2,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 3.027,
+            "y": 5.077,
+            "w": 14.102,
+            "h": 5.8,
+            "z": 3,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-aa0a7831.png",
+            "x": 20.486,
+            "y": 5.077,
+            "w": 10.584,
+            "h": 5.8,
+            "z": 4,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-9150cac3.svg"
+          },
+          {
+            "image": "img-0be1a1fc.png",
+            "x": 12.52,
+            "y": 14.872,
+            "w": 74.959,
+            "h": 0.173,
+            "z": 5,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-07c682e1.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-13",
+        "name": "Title and text",
+        "layoutType": "content",
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 3.182,
+            "y": 6.525,
+            "w": 12.678,
+            "h": 6.554,
+            "z": 1,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-0be1a1fc.png",
+            "x": 12.787,
+            "y": 16.79,
+            "w": 74.426,
+            "h": 0.216,
+            "z": 2,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-07c682e1.svg"
+          },
+          {
+            "image": "img-aa0a7831.png",
+            "x": 18.733,
+            "y": 6.525,
+            "w": 9.515,
+            "h": 6.554,
+            "z": 3,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-9150cac3.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-10",
+        "name": "1_Типовая страница 1",
+        "layoutType": "content",
+        "background": {
+          "image": "img-69df1f37.jpg",
+          "fit": "cover"
+        },
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": 0,
+            "w": 100,
+            "h": 35.57,
+            "z": 1,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": -0.055,
+            "w": 100,
+            "h": 19.065,
+            "z": 2,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 3.027,
+            "y": 5.077,
+            "w": 14.102,
+            "h": 5.8,
+            "z": 3,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-aa0a7831.png",
+            "x": 20.486,
+            "y": 5.077,
+            "w": 10.584,
+            "h": 5.8,
+            "z": 4,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-9150cac3.svg"
+          },
+          {
+            "image": "img-0be1a1fc.png",
+            "x": 12.52,
+            "y": 14.872,
+            "w": 74.959,
+            "h": 0.173,
+            "z": 5,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-07c682e1.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-11",
+        "name": "2_Типовая страница 1",
+        "layoutType": "content",
+        "background": {
+          "image": "img-69df1f37.jpg",
+          "fit": "cover"
+        },
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": 0,
+            "w": 100,
+            "h": 35.57,
+            "z": 1,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": -0.055,
+            "w": 100,
+            "h": 19.065,
+            "z": 2,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-0be1a1fc.png",
+            "x": 12.52,
+            "y": 14.872,
+            "w": 74.959,
+            "h": 0.173,
+            "z": 3,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-07c682e1.svg"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 3.076,
+            "y": 4.969,
+            "w": 13.891,
+            "h": 5.835,
+            "z": 4,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-aa0a7831.png",
+            "x": 20.114,
+            "y": 4.969,
+            "w": 10.425,
+            "h": 5.835,
+            "z": 5,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-9150cac3.svg"
+          },
+          {
+            "image": "img-6b31b4da.png",
+            "x": 44.518,
+            "y": 4.969,
+            "w": 10.963,
+            "h": 5.901,
+            "z": 6,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-b988d047.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-1",
+        "name": "Типовая страница 1",
+        "layoutType": "content",
+        "background": {
+          "image": "img-69df1f37.jpg",
+          "fit": "cover"
+        },
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-5888b13f.png",
+            "x": 2.229,
+            "y": 7.859,
+            "w": 18.955,
+            "h": 8.022,
+            "z": 1,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-babf01eb.svg"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": 21.686,
+            "w": 100,
+            "h": 9.582,
+            "z": 2,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": -0.055,
+            "w": 100,
+            "h": 25.27,
+            "z": 3,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 3.027,
+            "y": 5.077,
+            "w": 14.102,
+            "h": 5.8,
+            "z": 4,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-aa0a7831.png",
+            "x": 20.486,
+            "y": 5.077,
+            "w": 10.584,
+            "h": 5.8,
+            "z": 5,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-9150cac3.svg"
+          },
+          {
+            "image": "img-0be1a1fc.png",
+            "x": 12.52,
+            "y": 14.872,
+            "w": 74.959,
+            "h": 0.173,
+            "z": 6,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-07c682e1.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-3",
+        "name": "Типовая страница 3",
+        "layoutType": "content",
+        "background": {
+          "image": "img-d1184d2e.jpg",
+          "fit": "cover"
+        },
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-5888b13f.png",
+            "x": 2.229,
+            "y": 7.859,
+            "w": 18.955,
+            "h": 8.022,
+            "z": 1,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-babf01eb.svg"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": -0.055,
+            "w": 100,
+            "h": 19.065,
+            "z": 2,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 3.027,
+            "y": 5.077,
+            "w": 14.102,
+            "h": 5.8,
+            "z": 3,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-aa0a7831.png",
+            "x": 20.486,
+            "y": 5.077,
+            "w": 10.584,
+            "h": 5.8,
+            "z": 4,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-9150cac3.svg"
+          },
+          {
+            "image": "img-0be1a1fc.png",
+            "x": 12.52,
+            "y": 14.872,
+            "w": 74.959,
+            "h": 0.173,
+            "z": 5,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-07c682e1.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-2",
+        "name": "Типовая страница 2",
+        "layoutType": "content",
+        "background": {
+          "image": "img-d1184d2e.jpg",
+          "fit": "cover"
+        },
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": 0,
+            "w": 100,
+            "h": 19.065,
+            "z": 1,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 3.267,
+            "y": 5.596,
+            "w": 15.221,
+            "h": 6.393,
+            "z": 2,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-aa0a7831.png",
+            "x": 22.111,
+            "y": 5.596,
+            "w": 11.423,
+            "h": 6.393,
+            "z": 3,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-9150cac3.svg"
+          },
+          {
+            "image": "fill-ffffff.png",
+            "x": 0,
+            "y": -0.055,
+            "w": 100,
+            "h": 19.065,
+            "z": 4,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 3.027,
+            "y": 5.077,
+            "w": 14.102,
+            "h": 5.8,
+            "z": 5,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-aa0a7831.png",
+            "x": 20.486,
+            "y": 5.077,
+            "w": 10.584,
+            "h": 5.8,
+            "z": 6,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-9150cac3.svg"
+          },
+          {
+            "image": "img-0be1a1fc.png",
+            "x": 12.52,
+            "y": 14.872,
+            "w": 74.959,
+            "h": 0.173,
+            "z": 7,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-07c682e1.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-5",
+        "name": "Инфографика 2",
+        "layoutType": "content",
+        "background": {
+          "image": "img-adeafda7.jpg",
+          "fit": "cover"
+        },
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-c75f9c17.png",
+            "x": 2.229,
+            "y": 7.994,
+            "w": 19.283,
+            "h": 8.156,
+            "z": 1,
+            "fit": "fill",
+            "role": "logo"
+          }
+        ]
+      },
+      {
+        "id": "layout-9",
+        "name": "2_Титульный слайд",
+        "layoutType": "cover",
+        "backgroundColor": "#FFFFFF",
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-cf13cde9.png",
+            "x": -2.596,
+            "y": -26.538,
+            "w": 108.621,
+            "h": 54.941,
+            "z": 1,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-eeec0709.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-4",
+        "name": "Инфографика 1",
+        "layoutType": "content",
+        "background": {
+          "image": "img-74289c7a.jpg",
+          "fit": "cover"
+        },
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-c75f9c17.png",
+            "x": 2.229,
+            "y": 7.994,
+            "w": 19.283,
+            "h": 8.156,
+            "z": 1,
+            "fit": "fill",
+            "role": "logo"
+          }
+        ]
+      },
+      {
+        "id": "layout-8",
+        "name": "3_Титульный слайд",
+        "layoutType": "cover",
+        "backgroundColor": "#FFFFFF",
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-cf13cde9.png",
+            "x": -2.596,
+            "y": -8.843,
+            "w": 110.625,
+            "h": 55.955,
+            "z": 1,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-eeec0709.svg"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 7.236,
+            "y": 13.136,
+            "w": 22.314,
+            "h": 9.372,
+            "z": 2,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-a17368c8.png",
+            "x": 41.758,
+            "y": 13.318,
+            "w": 16.484,
+            "h": 9.226,
+            "z": 3,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-ed6a8f37.svg"
+          },
+          {
+            "image": "img-3485b5ce.png",
+            "x": 75.175,
+            "y": 13.318,
+            "w": 17.074,
+            "h": 9.19,
+            "z": 4,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-a962d7c3.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-6",
+        "name": "Финальный слайд",
+        "layoutType": "closing",
+        "background": {
+          "image": "img-a1239253.jpg",
+          "fit": "cover"
+        },
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-254ca2f4.png",
+            "x": 46.137,
+            "y": 43.682,
+            "w": 7.727,
+            "h": 20.228,
+            "z": 1,
+            "fit": "fill",
+            "role": "decor",
+            "svg": "vec-370baae8.svg"
+          }
+        ]
+      },
+      {
+        "id": "layout-7",
+        "name": "1_Титульный слайд",
+        "layoutType": "cover",
+        "backgroundColor": "#FFFFFF",
+        "images": [
+          {
+            "image": "fill-ffffff-10.png",
+            "x": 45.584,
+            "y": 4.611,
+            "w": 8.832,
+            "h": 16.199,
+            "z": 0,
+            "fit": "fill",
+            "role": "decor"
+          },
+          {
+            "image": "img-cf13cde9.png",
+            "x": -2.596,
+            "y": -8.843,
+            "w": 110.625,
+            "h": 55.955,
+            "z": 1,
+            "fit": "fill",
+            "role": "header",
+            "svg": "vec-eeec0709.svg"
+          },
+          {
+            "image": "img-6efe9fe1.png",
+            "x": 7.236,
+            "y": 13.136,
+            "w": 22.314,
+            "h": 9.372,
+            "z": 2,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-d3865129.svg"
+          },
+          {
+            "image": "img-a17368c8.png",
+            "x": 41.758,
+            "y": 13.318,
+            "w": 16.484,
+            "h": 9.226,
+            "z": 3,
+            "fit": "fill",
+            "role": "logo",
+            "svg": "vec-ed6a8f37.svg"
+          }
+        ]
+      }
+    ]
   },
   "outline": [
     {
       "layout": "cover",
+      "layoutId": "layout-7",
       "title": "{{deck.title}}",
       "subtitle": "Заполнить: докладчик и дата"
     },
     {
-      "layout": "bullets",
-      "title": "Ключевые результаты",
-      "bullets": [
-        "Заполнить: конкретные факты, доказательства и следующий шаг"
-      ]
-    },
-    {
-      "layout": "bullets",
-      "title": "Планы",
-      "bullets": [
-        "Заполнить: конкретные факты, доказательства и следующий шаг"
-      ]
-    },
-    {
       "layout": "closing",
-      "title": "Спасибо за внимание",
+      "layoutId": "layout-2",
+      "title": "Заголовок",
       "subtitle": "Заполнить: следующий шаг и ответственный"
     }
   ]
