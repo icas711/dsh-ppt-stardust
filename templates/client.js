@@ -122,7 +122,7 @@ window.__ModuleLoader__.load({ id: 'dsh-ppt', factory: require => {
                 return 'The presentation workbench is unavailable. Check that the plugin is loaded and restart DSH.';
             if (status === 409)
                 return 'The project changed. Load the latest version and review your edits before saving.';
-            return /[\u3400-\u9fff]/.test(message || '') ? 'The operation failed. Check the project files and DSH logs, then retry.' : message;
+            return /[\u3400-\u9fff]/.test(message || '') ? 'The operation failed. Check the project files and DSH logs, then retry. Details: ' + String(message).replace(/^dsh-ppt：/, '') : message;
         }
         function useLanguage(locale) {
             const [, rerender] = useState(0);

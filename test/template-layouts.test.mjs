@@ -157,3 +157,19 @@ test('deriveTextZone: область под шапкой; без шапки зо
   assert.equal(zone.kind, 'body'); assert.ok(zone.y > 19 && zone.y < 25)
   assert.equal(pptxLayouts.deriveTextZone([{ role: 'background', x: 0, y: 0, w: 100, h: 100 }]), null)
 })
+
+test('хранилище: предпросмотр и сохранение черновика не теряют файлы макетов', async () => {
+  const { PptTemplateStore } = await import('../lib/templates.js')
+  await withTmp(async dir => {
+    const store = new PptTemplateStore({ root: join(dir, 'templates'), builtinDir: join(dir, 'none'), templatesModuleLoader: () => Promise.resolve(templates) })
+    const identity = { login: 'kamura', admin: true, local: false }
+    const manifest = templates.validateTemplateManifest(layoutTemplate(), { templateAssets: layoutAssets() })
+    const saved = await store.save({ manifest, assets: layoutAssets(), scope: 'public', identity })
+    // Правка текста без загрузок: все файлы макетов берутся из сохранённой копии
+    const draft = { ...saved.manifest, name: 'Новое имя' }
+    const options = await store.previewOptions({ manifest: draft, baseKey: saved.key, lang: 'ru', identity })
+    assert.ok(options.style?.layouts?.length === 2 && options.style.layouts[0].images[0].svg, 'макеты и SVG дошли до предпросмотра')
+    const resaved = await store.saveDraft({ manifest: draft, baseKey: saved.key, scope: 'public', identity })
+    assert.deepEqual(Object.keys(resaved.assets).sort(), ['bg.png', 'logo.png', 'logo.svg'])
+  })
+})

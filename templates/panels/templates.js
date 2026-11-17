@@ -158,8 +158,11 @@ function TemplatesPanel({ onCreated }) {
                     await run({ operation: 'template-delete', templateId: key }, tplTr('Шаблон удалён', 'Template deleted'));
                 } }, tplTr('Удалить', 'Delete')) : null));
     });
-    return h('div', { className: 'ppt-templates' },
+    const dialogOpen = fromOpen || Boolean(copyOf) || applyId !== null || pptxOpen || importOpen;
+    return h('div', { className: 'ppt-templates tpe-busywrap' },
         h('style', null, TEMPLATES_CSS),
+        h('style', null, TPL_BUSY_CSS),
+        busy && !dialogOpen ? h(TplBusy, null) : null,
         h(W.Status, { tone: 'success' }, message),
         error ? h(W.Status, { tone: 'error' }, error) : null,
         h('div', { className: 'w-toolbar' },
@@ -169,10 +172,10 @@ function TemplatesPanel({ onCreated }) {
             h(W.Button, { disabled: busy, onClick: () => { setProjects(null); setFromProject(''); setNewId(''); setNewName(''); setFromOpen(true); } }, tplTr('Шаблон из проекта', 'Template from project')),
             h(W.IconButton, { icon: 'refresh', label: tplTr('Обновить', 'Refresh'), disabled: busy, onClick: () => void refresh() }),
             h('span', { className: 'w-muted' }, isAdmin ? tplTr('Вы администратор: можно править общие и встроенные шаблоны.', 'You are an admin: public and built-in templates are editable.') : tplTr('Общие шаблоны доступны для чтения; сохраните копию, чтобы править.', 'Public templates are read-only; save a copy to edit.'))),
-        templates === null ? h(W.Status, null, tplTr('Загрузка…', 'Loading…'))
+        templates === null ? h('div', { className: 'tpe-busywrap', style: { minHeight: '120px' } }, h(TplBusy, { label: tplTr('Загружаю шаблоны…', 'Loading templates…') }))
             : cards.length ? h('div', { className: 'ppt-templates-grid' }, cards)
                 : h(W.Empty, { icon: 'slides', title: tplTr('Шаблонов пока нет', 'No templates yet') }, tplTr('Создайте шаблон кнопкой «Новый шаблон», импортируйте файл или сделайте шаблон из существующего проекта.', 'Create a template with “New template”, import a file, or make one from an existing project.')),
-        fromOpen ? h(W.Dialog, { title: tplTr('Шаблон из проекта', 'Template from project'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setFromOpen(false) },
+        fromOpen ? h(TplDialog, { busyLabel: tplTr('Создаю шаблон из проекта…', 'Creating the template from the project…'), title: tplTr('Шаблон из проекта', 'Template from project'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setFromOpen(false) },
             h('div', { className: 'ppt-tpl-import' },
                 h('p', { className: 'w-muted' }, tplTr('Стиль, каркас страниц и до 3 слайдов-образцов станут шаблоном. Тексты страниц превратятся в места для заполнения.', 'The style, page skeleton and up to 3 sample slides become a template. Slide texts turn into placeholders.')),
                 h('label', null, tplTr('Проект', 'Project'),
@@ -188,7 +191,7 @@ function TemplatesPanel({ onCreated }) {
                 const value = await run({ operation: 'template-create-from-project', id: fromProject, newTemplateId: newId, name: newName.trim() }, tplTr('Шаблон создан из проекта', 'Template created from project'));
                 if (value) { setFromOpen(false); setEditing({ key: value.key, nonce: 0 }); }
             } }, tplTr('Создать шаблон', 'Create template'))) : null,
-        copyOf ? h(W.Dialog, { title: tplTr('Дублировать шаблон', 'Duplicate template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setCopyOf(null) },
+        copyOf ? h(TplDialog, { busyLabel: tplTr('Дублирую шаблон…', 'Duplicating the template…'), title: tplTr('Дублировать шаблон', 'Duplicate template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setCopyOf(null) },
             h('div', { className: 'ppt-tpl-import' },
                 h('p', { className: 'w-muted' }, tplTr('Копия появится в ваших личных шаблонах, её можно править.', 'The copy appears in your private templates and can be edited.')),
                 h('label', null, tplTr('id копии (латиница, цифры, дефис)', 'Copy id (latin, digits, hyphen)'),
@@ -199,7 +202,7 @@ function TemplatesPanel({ onCreated }) {
                 const value = await run({ operation: 'template-duplicate', templateId: copyOf, newTemplateId: copyId, name: copyName.trim() }, tplTr('Копия создана', 'Copy created'));
                 if (value) setCopyOf(null);
             } }, tplTr('Создать копию', 'Create copy'))) : null,
-        applyId !== null ? h(W.Dialog, { title: tplTr('Создать дек из шаблона', 'New deck from template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setApplyId(null) },
+        applyId !== null ? h(TplDialog, { busyLabel: tplTr('Создаю презентацию из шаблона…', 'Creating the deck from the template…'), title: tplTr('Создать дек из шаблона', 'New deck from template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setApplyId(null) },
             h('div', { className: 'ppt-tpl-import' },
                 h('label', null, tplTr('Название презентации', 'Deck title'),
                     h('input', { value: applyTitle, maxLength: 200, onChange: e => setApplyTitle(e.target.value), placeholder: tplTr('Например: Квартальный отчёт', 'e.g. Quarterly report') })),
@@ -213,7 +216,7 @@ function TemplatesPanel({ onCreated }) {
                 } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
                 finally { setBusy(false); }
             } }, tplTr('Создать', 'Create'))) : null,
-        pptxOpen ? h(W.Dialog, { title: tplTr('Шаблон из PPTX', 'Template from PPTX'), closeLabel: tplTr('Закрыть', 'Close'), busy, onClose: () => setPptxOpen(false) },
+        pptxOpen ? h(TplDialog, { busyLabel: tplTr('Обработка PPTX: извлекаю макеты и картинки, сжимаю крупные файлы. Это может занять до минуты…', 'Processing the PPTX: extracting layouts and images, compressing large files. This can take up to a minute…'), title: tplTr('Шаблон из PPTX', 'Template from PPTX'), closeLabel: tplTr('Закрыть', 'Close'), busy, onClose: () => setPptxOpen(false) },
             pptxResult ? h('div', { className: 'ppt-tpl-import' },
                 h(W.Status, { tone: 'success' }, tplTr('Шаблон создан: ', 'Template created: ') + pptxResult.key),
                 h('ul', { className: 'w-muted' },
@@ -240,7 +243,7 @@ function TemplatesPanel({ onCreated }) {
                         h('option', { value: 'user' }, tplTr('Себе (личный)', 'My own (private)')),
                         h('option', { value: 'public' }, tplTr('В общие (админ)', 'To public (admin)')))) : null,
                 h(W.Button, { variant: 'primary', disabled: busy || !pptxFile || pptxFile.size > 64 * 1024 * 1024 || !/^[a-z0-9][a-z0-9-]{1,48}$/.test(pptxId) || !pptxName.trim(), onClick: () => void uploadPptx() }, busy ? tplTr('Обработка…', 'Processing…') : tplTr('Создать шаблон', 'Create template')))) : null,
-        importOpen ? h(W.Dialog, { title: tplTr('Импорт шаблона', 'Import template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setImportOpen(false) },
+        importOpen ? h(TplDialog, { busyLabel: tplTr('Импортирую шаблон…', 'Importing the template…'), title: tplTr('Импорт шаблона', 'Import template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setImportOpen(false) },
             h('div', { className: 'ppt-tpl-import' },
                 h('p', { className: 'w-muted' }, tplTr('Файл .zip (bundle шаблона) или template.json, до 9 MiB.', 'A .zip bundle or template.json file, up to 9 MiB.')),
                 isAdmin ? h('label', null, tplTr('Куда импортировать', 'Import into'),

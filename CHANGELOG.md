@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Исправлено: предпросмотр и сохранение шаблона с макетами падали («模板资产缺失»), потому что хранилище не считало файлы макетов используемыми; теперь они сохраняются и попадают в предпросмотр.
+- Индикаторы загрузки: оверлей со спиннером блокирует интерфейс при открытии, сохранении, импорте, загрузке PPTX и обновлении предпросмотра; ошибки с непереводимым текстом показывают подробности.
+- Fixed: preview/save of templates with layouts failed because the store did not treat layout files as referenced; they are now kept and previewed. Busy overlays block the UI during async template operations; untranslatable errors now include details.
 - Область текста макета (`textZones`): импорт PPTX вычисляет её по геометрии, HTML и PPTX размещают заголовок и текст внутри неё, чтобы не наезжать на логотипы и графику; правится в редакторе.
 - Layout text area (`textZones`): derived from geometry on PPTX import; HTML and PPTX keep title and body inside it; editable in the layout editor.
 - Шаблоны с картинками: макеты `style.layouts[]` (фон + картинки с положением и размером в процентах слайда), schemaVersion 2, вкладка «Макеты» в редакторе с числовыми полями и живым превью, выбор макета у слайдов каркаса. HTML-плеер и экспорт PPTX соблюдают положение; SVG безопасно санитизируется.

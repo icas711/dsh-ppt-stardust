@@ -37,7 +37,7 @@ export function englishWorkbenchMessage(message: string): string {
   if (/至少保留一页/.test(message)) return 'Keep at least one slide in the presentation.'
   if (/工程页数超过 120/.test(message)) return 'A presentation can contain at most 120 slides.'
   if (/没有.*图片|超过.*MiB|图片.*无效/.test(message)) return 'The image is invalid or too large. Choose another PNG or JPEG image.'
-  return /[\u3400-\u9fff]/.test(message) ? 'The operation failed. Check the project files and DSH logs, then try again.' : message
+  return /[\u3400-\u9fff]/.test(message) ? 'The operation failed. Check the project files and DSH logs, then try again. Details: ' + message.replace(/^dsh-ppt：/, '') : message
 }
 
 const quality: Record<string, [string, string]> = {

@@ -226,7 +226,7 @@ export class PptTemplateStore {
     const draft = input.manifest ?? {}
     // The preview tolerates a half-typed id or an empty name; saving validates them strictly.
     const manifest = {
-      ...draft, schemaVersion: 1,
+      ...draft, schemaVersion: Array.isArray(draft?.style?.layouts) && draft.style.layouts.length ? 2 : 1,
       id: typeof draft.id === 'string' && /^[a-z0-9][a-z0-9-]{1,48}$/.test(draft.id) ? draft.id : 'preview-template',
       name: typeof draft.name === 'string' && draft.name.trim() ? draft.name : 'Шаблон',
     }
@@ -308,6 +308,13 @@ function referencedAssets(manifest: Record<string, any>): Set<string> {
   const logo = manifest?.style?.brand?.logo
   if (typeof logo === 'string') names.add(logo)
   for (const bg of Array.isArray(manifest?.style?.backgrounds) ? manifest.style.backgrounds : []) if (typeof bg?.image === 'string') names.add(bg.image)
+  for (const layout of Array.isArray(manifest?.style?.layouts) ? manifest.style.layouts : []) {
+    if (typeof layout?.background?.image === 'string') names.add(layout.background.image)
+    for (const image of Array.isArray(layout?.images) ? layout.images : []) {
+      if (typeof image?.image === 'string') names.add(image.image)
+      if (typeof image?.svg === 'string') names.add(image.svg)
+    }
+  }
   for (const list of [manifest?.outline, manifest?.samples]) {
     for (const slide of Array.isArray(list) ? list : []) if (typeof slide?.image?.src === 'string') names.add(slide.image.src)
   }

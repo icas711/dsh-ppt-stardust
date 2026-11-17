@@ -6,6 +6,18 @@ const tplTr = (ru, en) => languageOf() === 'ru' ? ru : en;
 const TPL_LAYOUTS = ['cover', 'section', 'bullets', 'statement', 'quote', 'closing'];
 const TPL_BG_TYPES = ['cover', 'section', 'content', 'closing'];
 const TPL_FONTS = ['Arial', 'Calibri', 'Cambria', 'Georgia', 'Helvetica', 'Open Sans', 'Roboto', 'Segoe UI', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
+// Индикатор занятости: оверлей поверх контейнера с классом tpe-busywrap блокирует клики и показывает спиннер.
+const TPL_BUSY_CSS = `.tpe-busywrap{position:relative}
+.tpe-busy{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;gap:10px;min-height:56px;background:color-mix(in srgb,var(--w-bg,#fff) 72%,transparent);cursor:progress;border-radius:inherit;font-size:13px}
+.tpe-spin{width:18px;height:18px;border-radius:50%;border:2px solid var(--w-border,#ccc);border-top-color:var(--w-accent,#2563eb);animation:tpe-rot .8s linear infinite;flex:none}
+@keyframes tpe-rot{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.tpe-spin{animation-duration:2.4s}}`;
+function TplBusy({ label }) {
+    return h('div', { className: 'tpe-busy', role: 'status', 'aria-live': 'polite' }, h('span', { className: 'tpe-spin', 'aria-hidden': 'true' }), h('span', null, label || tplTr('Выполняется…', 'Working…')));
+}
+function TplDialog({ busy, busyLabel, children, ...rest }) {
+    return h(W.Dialog, { ...rest, busy }, h('div', { className: 'tpe-busywrap' }, h('style', null, TPL_BUSY_CSS), busy ? h(TplBusy, { label: busyLabel }) : null, ...[].concat(children ?? [])));
+}
 const TPL_MAX_ASSET = 5 * 1024 * 1024;
 const TPL_MAX_ASSETS = 8 * 1024 * 1024;
 const TPL_HEX = /^#[0-9a-f]{6}$/i;
@@ -283,6 +295,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
     const [loadError, setLoadError] = React.useState('');
     const [preview, setPreview] = React.useState('');
     const [previewError, setPreviewError] = React.useState('');
+    const [previewBusy, setPreviewBusy] = React.useState(false);
     const [copy, setCopy] = React.useState(null); // { id, name } — диалог «Сохранить как копию»
     const previewSeq = React.useRef(0);
 
@@ -303,20 +316,22 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
 
     React.useEffect(() => {
         if (!draft) return;
-        if (styleProblem) { setPreviewError(styleProblem); return; }
+        if (styleProblem) { setPreviewError(styleProblem); setPreviewBusy(false); return; }
         const seq = ++previewSeq.current;
+        setPreviewBusy(true);
         const timer = setTimeout(async () => {
             try {
                 const value = await action({ operation: 'template-preview', manifest: tplBuild(draft, base), uploads, baseKey: templateKey || undefined, lang: languageOf() });
                 if (seq !== previewSeq.current) return;
                 setPreview(value.html); setPreviewError('');
             } catch (e) { if (seq === previewSeq.current) setPreviewError(e instanceof Error ? e.message : String(e)); }
+            finally { if (seq === previewSeq.current) setPreviewBusy(false); }
         }, 500);
         return () => clearTimeout(timer);
     }, [draft, uploads, styleProblem]);
 
     if (loadError) return h('div', { className: 'tpe' }, h(W.Status, { tone: 'error' }, loadError), h('div', { className: 'w-toolbar' }, h(W.Button, { icon: 'left', onClick: onClose }, tplTr('К списку шаблонов', 'Back to templates'))));
-    if (!draft) return h(W.Status, null, tplTr('Загрузка…', 'Loading…'));
+    if (!draft) return h('div', { className: 'tpe-busywrap', style: { minHeight: '140px' } }, h('style', null, TPL_BUSY_CSS), h(TplBusy, { label: tplTr('Загружаю шаблон…', 'Loading the template…') }));
 
     const set = patch => { setDraft(d => ({ ...d, ...patch })); setDirty(true); setError(''); };
     const setBackground = (type, patch) => set({ backgrounds: { ...draft.backgrounds, [type]: { fit: 'cover', ...draft.backgrounds[type], ...patch } } });
@@ -402,8 +417,10 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
                 h('select', { value: draft.backgrounds[type].fit || 'cover', disabled, onChange: e => setBackground(type, { fit: e.target.value }) },
                     h('option', { value: 'cover' }, tplTr('Заполнить и обрезать', 'Fill and crop')), h('option', { value: 'contain' }, tplTr('Показать целиком', 'Show whole image')))) : null))));
 
-    return h('div', { className: 'tpe' },
+    return h('div', { className: 'tpe tpe-busywrap' },
         h('style', null, TPE_CSS),
+        h('style', null, TPL_BUSY_CSS),
+        busy ? h(TplBusy, { label: tplTr('Сохраняю…', 'Saving…') }) : null,
         h('div', { className: 'w-toolbar' },
             h(W.Button, { icon: 'left', disabled: busy, onClick: close }, tplTr('К списку шаблонов', 'Back to templates')),
             h('strong', null, draft.name || tplTr('Новый шаблон', 'New template')),
@@ -427,12 +444,12 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
                     : section === 'outline' ? h(TplSlideList, { designLayouts: draft.layouts, slides: draft.outline, limit: 120, disabled, hint: tplTr('Каркас — страницы-заготовки нового дека. {{deck.title}} подставит название презентации; строки «Заполнить: …» помечают места для ввода, дек остаётся черновиком, пока они не заполнены.', 'The outline is the skeleton of a new deck. {{deck.title}} is replaced with the deck title; “To fill: …” lines mark spots to complete and keep the deck a draft until they are replaced.'), onChange: outline => set({ outline }) })
                         : h(TplSlideList, { designLayouts: draft.layouts, slides: draft.samples, limit: 5, disabled, hint: tplTr('Образцы — до 5 готовых страниц с реальным содержанием: показывают, как должен выглядеть заполненный дек.', 'Samples are up to 5 finished slides with real content that show what a completed deck should look like.'), onChange: samples => set({ samples }) })),
             h('div', { className: 'tpe-preview' },
-                h('div', { className: 'preview' }, preview
+                h('div', { className: 'preview tpe-busywrap' }, previewBusy ? h(TplBusy, { label: tplTr('Обновляю предпросмотр…', 'Refreshing the preview…') }) : null, preview
                     ? h('iframe', { title: tplTr('Предпросмотр шаблона', 'Template preview'), sandbox: 'allow-scripts', srcDoc: preview })
-                    : h('p', { className: 'tpe-hint', style: { padding: '12px' } }, tplTr('Готовлю предпросмотр…', 'Preparing the preview…'))),
+                    : previewError ? null : h('p', { className: 'tpe-hint', style: { padding: '12px', minHeight: '80px' } }, tplTr('Готовлю предпросмотр…', 'Preparing the preview…'))),
                 previewError ? h(W.Status, { tone: 'error' }, previewError) : null,
                 h('p', { className: 'tpe-hint' }, tplTr('Предпросмотр показывает тему, цвета, шрифт, логотип, футер и фоны на типовых страницах. Он обновляется при каждой правке и ничего не сохраняет.', 'The preview shows the theme, colours, font, logo, footer and backgrounds on typical slides. It updates as you edit and saves nothing.')))),
-        copy ? h(W.Dialog, { title: tplTr('Сохранить как копию', 'Save as a copy'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setCopy(null) },
+        copy ? h(TplDialog, { busyLabel: tplTr('Сохраняю копию…', 'Saving the copy…'), title: tplTr('Сохранить как копию', 'Save as a copy'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setCopy(null) },
             h('div', { className: 'ppt-tpl-import' },
                 h('p', { className: 'w-muted' }, tplTr('Копия сохранится в ваши личные шаблоны вместе с текущими правками.', 'The copy is saved into your private templates together with the current edits.')),
                 h('label', null, tplTr('Id копии (латиница, цифры, дефис)', 'Copy id (latin, digits, hyphen)'), h('input', { value: copy.id, maxLength: 49, placeholder: 'my-corp-template-2', onChange: e => setCopy({ ...copy, id: e.target.value.trim().toLowerCase() }) })),
