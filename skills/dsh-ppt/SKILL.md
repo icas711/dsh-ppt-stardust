@@ -22,7 +22,7 @@ The user wants to create a PPT / slides / presentation / deck / report / proposa
 - Run `ppt_check` before modifying an existing project. Externally edited HTML/PPTX files or legacy projects lacking a build verification record must not be overwritten; inform the user that `saveAs:true` saves a new copy solely from the JSON source while keeping the original intact, and manual edits made in Office will not be imported. Never bypass verification or manually tamper with checksums.
 
 - One idea per slide; titles must be declarative statements (assertions), not noun phrases.
-- Write the content in the language you author; `lang` only controls the UI text.
+- Write the content in the language you author; `lang` only controls the UI text. Always set `lang` explicitly to match the user's conversation language — `ru` is fully supported (player UI, presenter window, PPTX kickers, ru-RU number format), as are `zh`, `en`, and `bilingual`.
 - Always build on an installed template. List templates with `ppt_template { operation: "list" }` and ask the user via the ask-user tool (`ask_user_question` in DSH) which one to use before building; only if that tool is unavailable or the user does not answer, proceed with `builtin:corporate-report` and say so. Never offer or select the five built-in visual themes (swiss / velvet / data / soft / bold) and never pass `theme` to `ppt_create` — the visual style comes from the chosen template; bare themes are an engine fallback, not a choice.
 - Go through the "Quality Gate" checklist at the end of this document item by item before delivery.
 - Aim for a production-ready deliverable: organize real content first before calling the generator; any unfilled templates must be explicitly marked as drafts—never fabricate missing facts.
