@@ -18,6 +18,8 @@ import type { WorkbenchIdentity } from './web-owner.js'
 
 export const PPT_WORKBENCH_ROUTE = '/api/dsh-ppt/workbench'
 export const PPT_DOWNLOAD_ROUTE = '/api/dsh-ppt/download'
+export const PPT_TEMPLATE_UPLOAD_ROUTE = '/api/dsh-ppt/template-upload'
+const PPTX_UPLOAD_LIMIT = 64 * 1024 * 1024
 const REQUEST_LIMIT = 12 * 1024 * 1024
 const FILE_LIMIT = 64 * 1024 * 1024
 const BUNDLE_LIMIT = 128 * 1024 * 1024
@@ -445,6 +447,36 @@ export class PptWorkbench {
       } })
     } catch (error) { return fail(400, error instanceof Error ? error.message : String(error)) }
   }
+  /** Загрузка PPTX с диска пользователя: сырое тело (не base64), параметры в query. Результат — шаблон + отчёт импорта. */
+  async fetchTemplateUpload(request: Request, identity: WorkbenchIdentity = { admin: false, local: true }): Promise<Response> {
+    if (request.method !== 'POST') return fail(405, 'Используйте POST')
+    if (request.headers.get('x-dsh-ppt-action') !== '1') return fail(403, 'Действие доступно только из панели презентаций')
+    const denied = originVerdict(request)
+    if (denied) return denied
+    try {
+      const declared = Number(request.headers.get('content-length') ?? 0)
+      if (declared > PPTX_UPLOAD_LIMIT) return fail(413, 'PPTX больше 64 МиБ')
+      const reader = request.body?.getReader()
+      if (!reader) return fail(400, 'Файл не передан')
+      let size = 0; const chunks: Uint8Array[] = []
+      try { for (;;) { const { value, done } = await reader.read(); if (done) break; size += value.byteLength; if (size > PPTX_UPLOAD_LIMIT) { await reader.cancel(); return fail(413, 'PPTX больше 64 МиБ') } chunks.push(value) } } finally { reader.releaseLock() }
+      const bytes = Buffer.concat(chunks)
+      if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) return fail(400, 'Это не файл PPTX (ожидается ZIP-контейнер Office)')
+      const query = new URL(request.url).searchParams
+      const store = this.needTemplates()
+      const mod = await this.templatesModule()
+      const extracted = await mod.templateFromPptx(bytes, {
+        templateId: String(query.get('templateId') ?? '').trim(),
+        name: String(query.get('name') ?? '').trim(),
+        description: query.get('description') ?? undefined,
+        lang: query.get('lang') ?? 'ru',
+        author: identity.login ?? 'local',
+      })
+      request.signal.throwIfAborted()
+      const saved = await store.save({ manifest: extracted.manifest, assets: extracted.assets, scope: query.get('scope') === 'public' ? 'public' : 'user', identity })
+      return json(200, { ok: true, key: saved.key, template: saved.manifest, report: extracted.report })
+    } catch (error) { return fail(400, error instanceof Error ? error.message : String(error)) }
+  }
   async fetch(request: Request, identity: WorkbenchIdentity = { admin: false, local: true }): Promise<Response> {
     if (request.method !== 'POST') return fail(405, '请使用 POST')
     if (request.headers.get('x-dsh-ppt-action') !== '1' || request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') return fail(403, '请从演示文稿面板操作')
@@ -468,6 +500,7 @@ export class PptWorkbench {
 export function installPptWorkbench(ctx: any, workbench: PptWorkbench): void {
   ctx.inject?.(['connection'], (host: any) => {
     host.connection?.fetch?.register({ path: PPT_WORKBENCH_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetch(request, workbenchIdentity(ctx, request)) })
+    host.connection?.fetch?.register({ path: PPT_TEMPLATE_UPLOAD_ROUTE, methods: ['POST'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetchTemplateUpload(request, workbenchIdentity(ctx, request)) })
     host.connection?.fetch?.register({ path: PPT_DOWNLOAD_ROUTE, methods: ['GET'], requestBody: 'buffered', fetch: (request: Request) => workbench.fetchDownload(request, workbenchIdentity(ctx, request)) })
   })
 }

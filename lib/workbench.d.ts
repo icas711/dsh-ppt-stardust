@@ -8,6 +8,7 @@ import type { PptTemplateStore } from './templates.js';
 import type { WorkbenchIdentity } from './web-owner.js';
 export declare const PPT_WORKBENCH_ROUTE = "/api/dsh-ppt/workbench";
 export declare const PPT_DOWNLOAD_ROUTE = "/api/dsh-ppt/download";
+export declare const PPT_TEMPLATE_UPLOAD_ROUTE = "/api/dsh-ppt/template-upload";
 type WorkbenchEngine = DeckEngine & {
     readDeckProject(options: Record<string, unknown>): {
         manifest: any;
@@ -41,6 +42,8 @@ export declare class PptWorkbench {
     private patch;
     action(body: Record<string, unknown>, signal?: AbortSignal, identity?: WorkbenchIdentity): Promise<unknown>;
     fetchDownload(request: Request, identity?: WorkbenchIdentity): Promise<Response>;
+    /** Загрузка PPTX с диска пользователя: сырое тело (не base64), параметры в query. Результат — шаблон + отчёт импорта. */
+    fetchTemplateUpload(request: Request, identity?: WorkbenchIdentity): Promise<Response>;
     fetch(request: Request, identity?: WorkbenchIdentity): Promise<Response>;
 }
 export declare function installPptWorkbench(ctx: any, workbench: PptWorkbench): void;

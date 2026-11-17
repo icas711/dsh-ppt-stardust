@@ -6,6 +6,7 @@ import { buildPptx, renderHtml, normalizeBuildOptions, normalizeSlides, resolveT
 import { MEDIA_LAYOUTS, mediaBoxes, LOGO_BOX, FOOTER_BOX, chartColors, normalizeChart } from './deck-media.mjs'
 import { normalizeDataModel, prepareDataSlides, validateDataSnapshot, previewDataChange, dataNotes, dataReport } from './deck-data.mjs'
 import { normalizeVisual, applyVisualActions } from './deck-visual.mjs'
+import { normalizeDesignLayouts, pickDesignLayout, layoutAssetIds } from './deck-layouts.mjs'
 export { readRenderReceipt } from './deck-render.mjs'
 export { dataNotes, dataReport } from './deck-data.mjs'
 export { buildDeck, buildThemePreview, listThemes, resolveTheme, resolveLanguage } from './deck-core.mjs'
@@ -137,8 +138,8 @@ function brandedTheme(manifest) {
 function normalizeStyle(input, assets, cwd) {
   if (input === undefined || input === null) return undefined
   if (typeof input !== 'object' || Array.isArray(input)) fail('style 必须是对象')
-  const backgrounds = input.backgrounds
-  if (backgrounds === undefined) return undefined
+  const backgrounds = input.backgrounds ?? []
+  const layouts = normalizeDesignLayouts(input.layouts, assets, (image, page) => addAsset(image, assets, cwd, page), fail)
   if (!Array.isArray(backgrounds) || backgrounds.length > 8) fail('style.backgrounds 需为不超过 8 项的数组')
   const seen = new Set(), normalized = []
   for (const [index, bg] of backgrounds.entries()) {
@@ -155,7 +156,8 @@ function normalizeStyle(input, assets, cwd) {
       : addAsset({ src: bg.src }, assets, cwd, `背景 ${type}`)
     normalized.push({ layoutType: type, assetId, fit: bg.fit ?? 'cover' })
   }
-  return normalized.length ? { backgrounds: normalized } : undefined
+  if (!normalized.length && !layouts) return undefined
+  return { ...(normalized.length ? { backgrounds: normalized } : {}), ...(layouts ? { layouts } : {}) }
 }
 function embedSlides(slides, assets, cwd) {
   return slides.map((slide, index) => {
@@ -185,6 +187,7 @@ function collectAssets(manifest) {
   for (const state of [manifest, ...(manifest.history ?? [])]) {
     if (state.brand?.logoAssetId) ids.add(state.brand.logoAssetId)
     for (const bg of state.style?.backgrounds ?? []) ids.add(bg.assetId)
+    for (const layout of state.style?.layouts ?? []) for (const id of layoutAssetIds(layout)) ids.add(id)
     for (const slide of state.slides) if (slide.image?.assetId) ids.add(slide.image.assetId)
   }
   manifest.assets = Object.fromEntries([...ids].map(id => [id, manifest.assets[id]]))
@@ -409,9 +412,10 @@ export function checkManifest(manifest) {
     noteRu: 'Размеры текста и переполнение — статическая оценка; итоговую вёрстку проверяйте в HTML-показе и в PowerPoint / WPS. Мелкий текст колонтитула и номеров страниц телом слайда не считается.' }
 }
 
+const SLIDE_W_IN = 13.333333, SLIDE_H_IN = 7.5
 async function exportPptx(manifest, theme, language, signal) {
   const base = buildPptx({ ...manifest, slides: manifest.slides.map(s => ({ ...s, notes: dataNotes(manifest,s) })) }, theme, language)
-  const hasBackgrounds = Array.isArray(manifest.style?.backgrounds) && manifest.style.backgrounds.some(bg => manifest.assets?.[bg.assetId]?.data)
+  const hasBackgrounds = (Array.isArray(manifest.style?.backgrounds) && manifest.style.backgrounds.some(bg => manifest.assets?.[bg.assetId]?.data)) || Boolean(manifest.style?.layouts?.length)
   if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !hasBackgrounds && !manifest.slides.some(s => s.image || s.chart)) return base
   abort(signal)
   let lib
@@ -432,6 +436,7 @@ async function exportPptx(manifest, theme, language, signal) {
   }
   if (backgroundBytes.size) {
     manifest.slides.forEach((source, index) => {
+      if (pickDesignLayout(manifest.style?.layouts, source, backgroundTypeOfLayout(source.layout))) return
       const bytes = backgroundBytes.get(backgroundTypeOfLayout(source.layout))
       if (bytes) lib.setSlideBackgroundImage(slides[index], bytes)
     })
@@ -445,7 +450,24 @@ async function exportPptx(manifest, theme, language, signal) {
       const fraction = natural > target ? (1 - target / natural) / 2 : (1 - natural / target) / 2
       lib.setShapeImageCrop(shape, natural > target ? { left: fraction, right: fraction } : { top: fraction, bottom: fraction })
     }
+    return shape
   }
+  const putImageShape = (slide, id, box, fit, name) => putImage(slide, id, box, fit, name, name)
+  // Макеты шаблона: фон макета и его картинки кладутся под текст слайда (в PPTX — PNG/JPEG; SVG только в HTML).
+  manifest.slides.forEach((source, index) => {
+    const layout = pickDesignLayout(manifest.style?.layouts, source, backgroundTypeOfLayout(source.layout))
+    if (!layout) return
+    const slide = slides[index], bgAsset = layout.backgroundAssetId && manifest.assets?.[layout.backgroundAssetId]
+    const layers = []
+    if (bgAsset?.data) layers.push(['Template background', layout.backgroundAssetId, { x: 0, y: 0, w: SLIDE_W_IN, h: SLIDE_H_IN }, layout.fit === 'contain' ? 'contain' : 'cover'])
+    for (const image of [...(layout.images ?? [])].sort((a, b) => a.z - b.z)) {
+      if (!manifest.assets?.[image.assetId]?.data) continue
+      layers.push([`Template ${image.role ?? 'image'}`, image.assetId, { x: image.x / 100 * SLIDE_W_IN, y: image.y / 100 * SLIDE_H_IN, w: image.w / 100 * SLIDE_W_IN, h: image.h / 100 * SLIDE_H_IN }, image.fit === 'fill' ? 'fill' : image.fit])
+    }
+    // Каждый следующий слой отправляется «назад» в обратном порядке, чтобы итоговый порядок совпал с z.
+    const shapes = layers.map(([name, id, box, fit]) => putImageShape(slide, id, box, fit, name))
+    for (let i = shapes.length - 1; i >= 0; i--) lib.sendShapeToBack(shapes[i])
+  })
   manifest.slides.forEach((source, index) => {
     abort(signal)
     const slide = slides[index], boxes = mediaBoxes(source.layout)

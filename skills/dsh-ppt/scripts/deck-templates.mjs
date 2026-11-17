@@ -13,8 +13,12 @@ import { basename, extname, join, resolve } from 'node:path'
 import { inflateSync } from 'node:zlib'
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
 import { resolveTheme, resolveLanguage } from './deck-core.mjs'
+import { extractPptxLayouts } from './deck-pptx-layouts.mjs'
+import { LAYOUT_TYPES, MAX_LAYOUTS, MAX_LAYOUT_IMAGES, sanitizeSvg } from './deck-layouts.mjs'
 
 export const TEMPLATE_SCHEMA_VERSION = 1
+/** Шаблон с style.layouts (макеты с картинками) записывается как schemaVersion 2; версия 1 читается как раньше. */
+export const TEMPLATE_LAYOUTS_SCHEMA_VERSION = 2
 const TEMPLATE_JSON = 'template.json'
 const ASSETS_PREFIX = 'assets/'
 const MAX_TEMPLATE_JSON = 1024 * 1024            // 1 MiB manifest
@@ -54,15 +58,78 @@ function checkImageName(name) {
   if (typeof name !== 'string' || !FILE_PATTERN.test(name) || !/\.(png|jpe?g)$/i.test(name)) fail(`资产文件名不合法：${name}（需 assets/ 下的 PNG/JPEG）`)
   return name
 }
+function checkSvgName(name) {
+  if (typeof name !== 'string' || !FILE_PATTERN.test(name) || !/\.svg$/i.test(name)) fail(`SVG 资产文件名不合法：${name}（需 assets/ 下的 .svg）`)
+  return name
+}
+const ASSET_EXT = /\.(png|jpe?g|svg)$/i
+const IMAGE_FIT = ['contain', 'cover', 'fill']
+const IMAGE_ROLES = ['logo', 'decor', 'header', 'background', 'photo']
+function checkNumber(value, field, min, max) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(`${field} 需为 ${min}…${max} 之间的数字`)
+  return Math.round(value * 1000) / 1000
+}
+
+/** style.layouts → 规范化数组（引用的文件名放在 image / svg / background.image）。 */
+function validateLayouts(list) {
+  if (!Array.isArray(list) || list.length > MAX_LAYOUTS) fail(`style.layouts 需为不超过 ${MAX_LAYOUTS} 项的数组`)
+  const seen = new Set()
+  return list.map((raw, index) => {
+    const path = `style.layouts[${index}]`
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail(`${path} 必须是对象`)
+    if (typeof raw.id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(raw.id)) fail(`${path}.id 需为小写字母/数字/连字符`)
+    if (seen.has(raw.id)) fail(`style.layouts 有重复的 id：${raw.id}`)
+    seen.add(raw.id)
+    if (!LAYOUT_TYPES.includes(raw.layoutType)) fail(`${path}.layoutType 只支持 ${LAYOUT_TYPES.join(' / ')}`)
+    const layout = { id: raw.id, ...(raw.name !== undefined ? { name: checkText(String(raw.name), `${path}.name`, 80) } : {}), layoutType: raw.layoutType }
+    if (raw.background !== undefined && raw.background !== null) {
+      const bg = raw.background
+      if (typeof bg !== 'object' || Array.isArray(bg)) fail(`${path}.background 必须是对象`)
+      if (bg.fit !== undefined && !['contain', 'cover'].includes(bg.fit)) fail(`${path}.background.fit 只支持 contain / cover`)
+      layout.background = { image: checkImageName(bg.image), fit: bg.fit ?? 'cover' }
+    }
+    if (raw.backgroundColor !== undefined && raw.backgroundColor !== '') layout.backgroundColor = checkHex(raw.backgroundColor, `${path}.backgroundColor`)
+    const images = raw.images ?? []
+    if (!Array.isArray(images) || images.length > MAX_LAYOUT_IMAGES) fail(`${path}.images 最多 ${MAX_LAYOUT_IMAGES} 项`)
+    layout.images = images.map((image, i) => {
+      const ipath = `${path}.images[${i}]`
+      if (!image || typeof image !== 'object' || Array.isArray(image)) fail(`${ipath} 必须是对象`)
+      const entry = {
+        image: checkImageName(image.image),
+        x: checkNumber(image.x, `${ipath}.x`, -50, 150), y: checkNumber(image.y, `${ipath}.y`, -50, 150),
+        w: checkNumber(image.w, `${ipath}.w`, 0.1, 200), h: checkNumber(image.h, `${ipath}.h`, 0.1, 200),
+        z: image.z === undefined ? i : Math.round(checkNumber(image.z, `${ipath}.z`, 0, 99)),
+        fit: image.fit ?? 'contain',
+      }
+      if (!IMAGE_FIT.includes(entry.fit)) fail(`${ipath}.fit 只支持 ${IMAGE_FIT.join(' / ')}`)
+      if (image.role !== undefined) {
+        if (!IMAGE_ROLES.includes(image.role)) fail(`${ipath}.role 只支持 ${IMAGE_ROLES.join(' / ')}`)
+        entry.role = image.role
+      }
+      if (image.svg !== undefined && image.svg !== null) entry.svg = checkSvgName(image.svg)
+      return entry
+    })
+    if (raw.textZones !== undefined) {
+      if (!Array.isArray(raw.textZones) || raw.textZones.length > 6) fail(`${path}.textZones 最多 6 项`)
+      layout.textZones = raw.textZones.map((zone, i) => {
+        const zpath = `${path}.textZones[${i}]`
+        if (!zone || typeof zone !== 'object' || !['title', 'body'].includes(zone.kind)) fail(`${zpath}.kind 只支持 title / body`)
+        return { kind: zone.kind, x: checkNumber(zone.x, `${zpath}.x`, 0, 100), y: checkNumber(zone.y, `${zpath}.y`, 0, 100),
+          w: checkNumber(zone.w, `${zpath}.w`, 1, 100), h: checkNumber(zone.h, `${zpath}.h`, 1, 100) }
+      })
+    }
+    return layout
+  })
+}
 
 /** 校验并规范一个模板清单；返回深拷贝。assets 用于引用检查，可省略。 */
 export function validateTemplateManifest(input, { templateAssets } = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('template.json 必须是对象')
-  if (input.schemaVersion !== TEMPLATE_SCHEMA_VERSION) fail(`不支持的模板 schemaVersion：${input.schemaVersion}`)
+  if (![TEMPLATE_SCHEMA_VERSION, TEMPLATE_LAYOUTS_SCHEMA_VERSION].includes(input.schemaVersion)) fail(`不支持的模板 schemaVersion：${input.schemaVersion}`)
   if (typeof input.id !== 'string' || !ID_PATTERN.test(input.id)) fail('模板 id 需为 2-49 位小写字母/数字/连字符，且以字母或数字开头')
   if (typeof input.name !== 'string' || !NAME_PATTERN.test(input.name.trim())) fail('模板 name 需为 1-81 字符')
   const manifest = {
-    schemaVersion: TEMPLATE_SCHEMA_VERSION, id: input.id, name: input.name.trim(),
+    schemaVersion: input.schemaVersion, id: input.id, name: input.name.trim(),
     ...(input.description !== undefined ? { description: checkText(input.description, 'description', 500) } : {}),
     ...(typeof input.author === 'string' && input.author ? { author: checkText(input.author, 'author', 100) } : {}),
     revision: Number.isInteger(input.revision) && input.revision > 0 ? input.revision : 1,
@@ -109,6 +176,11 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
     }
     if (backgrounds.length) normalizedStyle.backgrounds = backgrounds
   }
+  if (style.layouts !== undefined) {
+    const layouts = validateLayouts(style.layouts)
+    if (layouts.length) normalizedStyle.layouts = layouts
+  }
+  manifest.schemaVersion = normalizedStyle.layouts ? TEMPLATE_LAYOUTS_SCHEMA_VERSION : TEMPLATE_SCHEMA_VERSION
   if (Object.keys(normalizedStyle).length) manifest.style = normalizedStyle
 
   const slidesLike = (list, field, max) => {
@@ -116,8 +188,9 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
     list.forEach((slide, index) => {
       if (!slide || typeof slide !== 'object' || Array.isArray(slide)) fail(`${field}[${index}] 必须是对象`)
       for (const key of Object.keys(slide)) {
-        if (!['layout', 'title', 'subtitle', 'kicker', 'text', 'bullets', 'rows', 'notes', 'image', 'chart'].includes(key)) fail(`${field}[${index}] 不支持字段 ${key}`)
+        if (!['layout', 'layoutId', 'title', 'subtitle', 'kicker', 'text', 'bullets', 'rows', 'notes', 'image', 'chart'].includes(key)) fail(`${field}[${index}] 不支持字段 ${key}`)
       }
+      if (slide.layoutId !== undefined && (typeof slide.layoutId !== 'string' || !/^[a-z0-9][a-z0-9-]{0,40}$/.test(slide.layoutId))) fail(`${field}[${index}].layoutId 无效`)
       if (slide.title !== undefined) checkText(slide.title, `${field}[${index}].title`, 300)
       if (slide.subtitle !== undefined) checkText(slide.subtitle, `${field}[${index}].subtitle`, 500)
       if (slide.kicker !== undefined) checkText(slide.kicker, `${field}[${index}].kicker`, 200)
@@ -145,15 +218,31 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
   const referenced = new Set()
   if (manifest.style?.brand?.logo) referenced.add(manifest.style.brand.logo)
   for (const bg of manifest.style?.backgrounds ?? []) referenced.add(bg.image)
+  for (const name of layoutAssetNames(manifest)) referenced.add(name)
   for (const list of [manifest.outline, manifest.samples]) {
     for (const slide of list ?? []) if (slide.image) referenced.add(slide.image.src)
+  }
+  const layoutIds = new Set((manifest.style?.layouts ?? []).map(layout => layout.id))
+  for (const slide of manifest.outline ?? []) {
+    if (slide.layoutId !== undefined && !layoutIds.has(slide.layoutId)) fail(`outline 引用了不存在的版式：${slide.layoutId}`)
   }
   if (templateAssets !== undefined) {
     for (const name of referenced) {
       if (!templateAssets[name]) fail(`模板资产缺失：assets/${name}`)
+      const vector = templateAssets[name].mime === 'image/svg+xml'
+      if (vector !== /\.svg$/i.test(name)) fail(`模板资产类型与文件名不符：${name}`)
     }
   }
   return manifest
+}
+
+function layoutAssetNames(manifest) {
+  const names = []
+  for (const layout of manifest.style?.layouts ?? []) {
+    if (layout.background) names.push(layout.background.image)
+    for (const image of layout.images ?? []) { names.push(image.image); if (image.svg) names.push(image.svg) }
+  }
+  return names
 }
 
 /** 汇总模板元信息（列表/工具输出用），不携带资产。 */
@@ -167,6 +256,7 @@ export function summarizeTemplate(manifest) {
     brand: style.brand ? Object.fromEntries(Object.entries(style.brand).filter(([k]) => k !== 'logo')) : null,
     hasLogo: Boolean(style.brand?.logo),
     backgrounds: (style.backgrounds ?? []).map(bg => ({ layoutType: bg.layoutType, fit: bg.fit })),
+    layouts: (style.layouts ?? []).map(layout => ({ id: layout.id, name: layout.name ?? layout.id, layoutType: layout.layoutType, imageCount: layout.images.length, hasBackground: Boolean(layout.background) })),
     outlineCount: manifest.outline?.length ?? 0,
     sampleCount: manifest.samples?.length ?? 0,
     outlineTitles: (manifest.outline ?? []).map(s => s.title ?? '').slice(0, 12),
@@ -178,6 +268,7 @@ export function countTemplateAssets(manifest) {
   const names = new Set()
   if (manifest.style?.brand?.logo) names.add(manifest.style.brand.logo)
   for (const bg of manifest.style?.backgrounds ?? []) names.add(bg.image)
+  for (const name of layoutAssetNames(manifest)) names.add(name)
   for (const list of [manifest.outline, manifest.samples]) {
     for (const slide of list ?? []) if (slide.image) names.add(slide.image.src)
   }
@@ -190,6 +281,11 @@ export function countTemplateAssets(manifest) {
 
 function imageInfo(bytes) {
   let width, height, mime
+  const head = bytes.subarray(0, 64).toString('utf8').trimStart()
+  if (head.startsWith('<')) {
+    if (!sanitizeSvg(bytes)) fail('SVG 含脚本/外链或体积超过 300 KiB，已拒绝')
+    return { width: 0, height: 0, mime: 'image/svg+xml' }
+  }
   if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     if (bytes.length < 45 || bytes.toString('ascii', 12, 16) !== 'IHDR') fail('PNG 文件不完整')
     width = bytes.readUInt32BE(16); height = bytes.readUInt32BE(20); mime = 'image/png'
@@ -228,12 +324,12 @@ export function normalizeTemplateAssets(input = {}) {
   const assets = {}
   let total = 0
   for (const [name, value] of Object.entries(input)) {
-    checkImageName(name)
+    if (!FILE_PATTERN.test(name) || !ASSET_EXT.test(name)) fail(`资产文件名不合法：${name}（需 assets/ 下的 PNG/JPEG/SVG）`)
     let bytes
     if (value && typeof value === 'object' && Buffer.isBuffer(value)) bytes = value
     else if (value && typeof value === 'object' && value.bytes) bytes = Buffer.from(value.bytes)
     else if (typeof value === 'string' && value.startsWith('data:image/')) {
-      const match = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(value)
+      const match = /^data:image\/(png|jpeg|svg\+xml);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(value)
       if (!match) fail(`模板资产 ${name} 的 data URI 无效`)
       bytes = Buffer.from(match[2], 'base64')
     } else if (typeof value === 'string') {
@@ -290,7 +386,7 @@ function entryName(name) {
   if (normalized === TEMPLATE_JSON) return TEMPLATE_JSON
   if (!normalized.startsWith(ASSETS_PREFIX)) return null
   const rest = normalized.slice(ASSETS_PREFIX.length)
-  return FILE_PATTERN.test(rest) && /\.(png|jpe?g)$/i.test(rest) ? rest : null
+  return FILE_PATTERN.test(rest) && ASSET_EXT.test(rest) ? rest : null
 }
 
 /** 读取 bundle（.zip 或裸 template.json）→ { manifest, assets } */
@@ -378,7 +474,7 @@ export function readTemplateDir(dir) {
   const raw = {}
   if (existsSync(assetsDir)) {
     for (const name of readdirSync(assetsDir)) {
-      if (!FILE_PATTERN.test(name) || !/\.(png|jpe?g)$/i.test(name)) continue
+      if (!FILE_PATTERN.test(name) || !ASSET_EXT.test(name)) continue
       raw[name] = readFileSync(join(assetsDir, name))
     }
   }
@@ -408,6 +504,31 @@ function applyVars(slide, vars) {
   return out
 }
 
+/** style.backgrounds + style.layouts → 引擎 style 参数（src 为 data URI；SVG 以 data URI 放入图片的 svg 字段）。 */
+function engineStyle(manifest, assets) {
+  const out = {}
+  const backgrounds = manifest.style?.backgrounds ?? []
+  if (backgrounds.length) out.backgrounds = backgrounds.map(bg => ({ layoutType: bg.layoutType, src: assets[bg.image]?.data, fit: bg.fit }))
+  const layouts = manifest.style?.layouts ?? []
+  if (layouts.length) {
+    out.layouts = layouts.map(layout => ({
+      id: layout.id, ...(layout.name ? { name: layout.name } : {}), layoutType: layout.layoutType,
+      ...(layout.background ? { background: { src: assets[layout.background.image]?.data, fit: layout.background.fit } } : {}),
+      ...(layout.backgroundColor ? { backgroundColor: layout.backgroundColor } : {}),
+      images: layout.images.map(image => ({
+        src: assets[image.image]?.data, x: image.x, y: image.y, w: image.w, h: image.h, z: image.z, fit: image.fit,
+        ...(image.role ? { role: image.role } : {}), ...(image.svg ? { svg: assets[image.svg]?.data } : {}),
+      })),
+      ...(layout.textZones ? { textZones: layout.textZones } : {}),
+    }))
+  }
+  return Object.keys(out).length ? out : undefined
+}
+function withDesignLayout(slide) {
+  const { layoutId, ...rest } = slide
+  return layoutId ? { ...rest, designLayout: layoutId } : rest
+}
+
 /**
  * 模板 → buildDeckAsync 参数：theme/brand/style/slides。
  * options: { title, includeSamples=true, lang }
@@ -418,8 +539,8 @@ export function templateCreateOptions(template, assets, options = {}) {
   if (!title) fail('创建演示文稿需要标题')
   const lang = options.lang ?? 'zh'
   const vars = { 'deck.title': title }
-  const outline = (manifest.outline ?? []).map(slide => applyVars(slide, vars))
-  const samples = options.includeSamples === false ? [] : (manifest.samples ?? []).map(slide => applyVars(slide, vars))
+  const outline = (manifest.outline ?? []).map(slide => withDesignLayout(applyVars(slide, vars)))
+  const samples = options.includeSamples === false ? [] : (manifest.samples ?? []).map(slide => withDesignLayout(applyVars(slide, vars)))
   const slides = [...outline, ...samples]
   if (!slides.length) fail('模板没有页面骨架（outline）也没有示例页（samples），无法创建演示文稿')
   const create = { title, slides, ...(manifest.style?.theme ? { theme: manifest.style.theme } : {}) }
@@ -432,12 +553,8 @@ export function templateCreateOptions(template, assets, options = {}) {
     if (brandSource.logo && assets[brandSource.logo]) brand.logo = assets[brandSource.logo].data
     if (Object.keys(brand).length) create.brand = brand
   }
-  const backgrounds = manifest.style?.backgrounds ?? []
-  if (backgrounds.length) {
-    create.style = {
-      backgrounds: backgrounds.map(bg => ({ layoutType: bg.layoutType, src: assets[bg.image]?.data, fit: bg.fit })),
-    }
-  }
+  const styled = engineStyle(manifest, assets)
+  if (styled) create.style = styled
   return { create, lineage: { id: manifest.id, revision: manifest.revision } }
 }
 
@@ -460,7 +577,16 @@ export function templatePreviewOptions(template, assets, options = {}) {
       subtitle: L(lang, '补充说明', 'Supporting note', 'Пояснение') },
     { layout: 'closing', title: L(lang, '谢谢', 'Thank you', 'Спасибо'), subtitle: L(lang, '联系方式', 'Contacts', 'Контакты') },
   ]
-  const { create } = templateCreateOptions({ ...manifest, outline: slides, samples: undefined }, assets, { title: manifest.name, lang })
+  // Если у шаблона есть макеты — по одному слайду на каждый макет, чтобы увидеть все фоны и картинки.
+  const perLayout = (manifest.style?.layouts ?? []).map(layout => {
+    const title = layout.name ?? layout.id
+    const base = { layoutId: layout.id, title }
+    if (layout.layoutType === 'cover') return { ...base, layout: 'cover', subtitle: manifest.description || L(lang, '副标题与日期', 'Subtitle and date', 'Подзаголовок и дата') }
+    if (layout.layoutType === 'section') return { ...base, layout: 'section', kicker: '01', subtitle: L(lang, '一句话说明本章节', 'One line about this section', 'Одна строка о содержании раздела') }
+    if (layout.layoutType === 'closing') return { ...base, layout: 'closing', subtitle: L(lang, '联系方式', 'Contacts', 'Контакты') }
+    return { ...base, layout: 'bullets', bullets: [L(lang, '第一条要点', 'First key point', 'Первый ключевой тезис'), L(lang, '第二条要点', 'Second key point', 'Второй ключевой тезис')] }
+  })
+  const { create } = templateCreateOptions({ ...manifest, outline: perLayout.length ? perLayout : slides, samples: undefined }, assets, { title: manifest.name, lang })
   return { ...create, lang }
 }
 
@@ -478,12 +604,8 @@ export function templateRestyleOptions(template, assets) {
     if (brandSource.logo && assets[brandSource.logo]) brand.logo = assets[brandSource.logo].data
     if (Object.keys(brand).length) restyle.brand = brand
   }
-  const backgrounds = manifest.style?.backgrounds ?? []
-  if (backgrounds.length) {
-    restyle.style = {
-      backgrounds: backgrounds.map(bg => ({ layoutType: bg.layoutType, src: assets[bg.image]?.data, fit: bg.fit })),
-    }
-  }
+  const styled = engineStyle(manifest, assets)
+  if (styled) restyle.style = styled
   if (!Object.keys(restyle).length) fail('模板没有可应用的样式（theme / brand / 背景）')
   return { restyle, lineage: { id: manifest.id, revision: manifest.revision } }
 }
@@ -506,6 +628,34 @@ export function templateFromDeckManifest(deckManifest, options = {}) {
   }
   if (assetsInput['logo.png']) normalizedBrand.logo = 'logo.png'
   if (Object.keys(normalizedBrand).length) style.brand = normalizedBrand
+  // Макеты проекта (картинки с положением) переходят в шаблон вместе с файлами.
+  const deckLayouts = deckManifest.style?.layouts ?? []
+  if (deckLayouts.length) {
+    const nameOf = (assetId, stem) => {
+      const asset = deckAssets[assetId]
+      if (!asset?.data) return undefined
+      const match = /^data:image\/(png|jpeg|svg\+xml);base64,/.exec(asset.data)
+      const ext = match?.[1] === 'jpeg' ? 'jpg' : match?.[1] === 'svg+xml' ? 'svg' : 'png'
+      const name = `${stem}.${ext}`
+      assetsInput[name] = Buffer.from(asset.data.split(',')[1], 'base64')
+      return name
+    }
+    style.layouts = deckLayouts.map((layout, li) => {
+      const entry = { id: layout.id, ...(layout.name ? { name: layout.name } : {}), layoutType: layout.layoutType, images: [] }
+      const bg = layout.backgroundAssetId && nameOf(layout.backgroundAssetId, `layout-${li + 1}-bg`)
+      if (bg) entry.background = { image: bg, fit: layout.fit ?? 'cover' }
+      if (layout.backgroundColor) entry.backgroundColor = layout.backgroundColor
+      for (const [ii, image] of (layout.images ?? []).entries()) {
+        const file = nameOf(image.assetId, `layout-${li + 1}-img-${ii + 1}`)
+        if (!file) continue
+        const item = { image: file, x: image.x, y: image.y, w: image.w, h: image.h, z: image.z, fit: image.fit, ...(image.role ? { role: image.role } : {}) }
+        if (image.svg) { const raw = Buffer.from(image.svg.split(',')[1], 'base64'); const svgName = `layout-${li + 1}-img-${ii + 1}.svg`; assetsInput[svgName] = raw; item.svg = svgName }
+        entry.images.push(item)
+      }
+      if (layout.textZones) entry.textZones = layout.textZones
+      return entry
+    })
+  }
 
   const keepTitle = slide => {
     const title = String(slide.title ?? '').trim()
@@ -515,6 +665,7 @@ export function templateFromDeckManifest(deckManifest, options = {}) {
     // Обложка всегда получает заголовок новой презентации
     const title = index === 0 ? '{{deck.title}}' : (keepTitle(slide) ?? placeholder(lang, 'страницы'))
     const entry = { layout: slide.layout, title }
+    if (slide.designLayout && style.layouts?.some(item => item.id === slide.designLayout)) entry.layoutId = slide.designLayout
     if (slide.kicker) entry.kicker = slide.kicker
     if (slide.layout === 'bullets') entry.bullets = [placeholder(lang, 'конкретные факты, доказательства и следующий шаг')]
     else if (slide.subtitle && index !== 0) entry.subtitle = placeholder(lang, 'дополнение')
@@ -648,8 +799,22 @@ export async function templateFromPptx(source, options = {}) {
     } else if (family) report.warnings.push(L(lang, `字体 ${family} 名称不合规，未采用`, `Font "${family}" has an unsupported name; skipped`, `Шрифт «${family}» имеет неподходящее имя — не принят`))
   }
 
-  // 3) 母版 / 版式背景
-  const layouts = lib.getSlideLayouts(pres)
+  // 3a) Макеты с картинками и положением (новая модель). Если ничего не нашлось — старый путь (фон + логотип).
+  const slideSize = lib.getSlideSize(pres) ?? { width: 9144000, height: 6858000 }
+  const assets = {}
+  let layoutIdByPart = new Map()
+  try {
+    const found = await extractPptxLayouts({ pres, lib, bytes, slideSize, theme, assets, report, lang })
+    const useful = found.layouts.some(layout => layout.background || layout.backgroundColor || layout.images.length)
+    if (useful) { style.layouts = found.layouts; layoutIdByPart = found.layoutIdByPart }
+    else for (const key of Object.keys(assets)) delete assets[key]
+  } catch (error) {
+    report.warnings.push(L(lang, `版式提取失败：${error.message}`, `Layout extraction failed: ${error.message}`, `Не удалось извлечь макеты: ${error.message}`))
+    for (const key of Object.keys(assets)) delete assets[key]
+  }
+
+  // 3) 母版 / 版式背景（旧路径，仅当没有可用版式）
+  const layouts = style.layouts ? [] : lib.getSlideLayouts(pres)
   const masterBytes = new Map(), layoutBytesList = []
   for (const layout of layouts) {
     const master = lib.getSlideMasterBackgroundImageBytes(pres, layout)
@@ -657,7 +822,6 @@ export async function templateFromPptx(source, options = {}) {
     const layoutBg = lib.getSlideLayoutBackgroundImageBytes(pres, layout)
     if (layoutBg) layoutBytesList.push(layoutBg)
   }
-  const assets = {}
   const master = [...masterBytes.values()][0]
   if (master) {
     const name = uniqueAssetName(assets, guessPngName(master))
@@ -673,7 +837,6 @@ export async function templateFromPptx(source, options = {}) {
   }
 
   // 4) Logo：母版/版式上的小图
-  const slideSize = lib.getSlideSize(pres) ?? { width: 9144000, height: 6858000 }
   if (layouts.length) {
     const masterShapes = lib.getSlideMasterShapes(pres, layouts[0])
     const logo = pickLogoShape(pres, lib, slideSize, masterShapes)
@@ -695,9 +858,11 @@ export async function templateFromPptx(source, options = {}) {
     const title = (entry.title ?? '').trim() || firstLine.slice(0, 120)
     const body = (entry.body ?? '').trim() || lineOf(slideText.split(/\r?\n/).slice(1).join('\n'))
     const last = index === list.length - 1 && list.length > 1
-    const layout = index === 0 ? 'cover' : last ? 'closing' : title === '' ? 'section' : 'bullets'
+    const sourceLayoutId = slides[index] ? layoutIdByPart.get(lib.getSlideLayoutPartName(lib.getSlideLayout(slides[index]))) : undefined
+    const sourceType = style.layouts?.find(item => item.id === sourceLayoutId)?.layoutType
+    const layout = index === 0 ? 'cover' : last ? 'closing' : sourceType === 'section' || title === '' ? 'section' : 'bullets'
     // Обложка шаблона всегда получает заголовок новой презентации
-    const slide = { layout, title: index === 0 ? '{{deck.title}}' : (title || placeholder(lang, last ? 'финального слайда' : 'страницы')) }
+    const slide = { layout, ...(sourceLayoutId ? { layoutId: sourceLayoutId } : {}), title: index === 0 ? '{{deck.title}}' : (title || placeholder(lang, last ? 'финального слайда' : 'страницы')) }
     if (layout === 'cover') slide.subtitle = placeholder(lang, 'докладчик и дата')
     else if (layout === 'bullets') slide.bullets = [placeholder(lang, 'конкретные факты, доказательства и следующий шаг')]
     else if (layout === 'closing') slide.subtitle = placeholder(lang, 'следующий шаг и ответственный')

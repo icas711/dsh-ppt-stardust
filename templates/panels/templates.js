@@ -32,6 +32,12 @@ function TemplatesPanel({ onCreated }) {
     const [fromOpen, setFromOpen] = React.useState(false);
     const [fromProject, setFromProject] = React.useState('');
     const [projects, setProjects] = React.useState(null);
+    const [pptxOpen, setPptxOpen] = React.useState(false);
+    const [pptxFile, setPptxFile] = React.useState(null);
+    const [pptxId, setPptxId] = React.useState('');
+    const [pptxName, setPptxName] = React.useState('');
+    const [pptxScope, setPptxScope] = React.useState('user');
+    const [pptxResult, setPptxResult] = React.useState(null); // { key, report }
     const [copyOf, setCopyOf] = React.useState(null); // ключ шаблона для «Дублировать»
     const [copyId, setCopyId] = React.useState('');
     const [copyName, setCopyName] = React.useState('');
@@ -77,6 +83,25 @@ function TemplatesPanel({ onCreated }) {
         link.click();
         link.remove();
         setMessage(tplTr('Скачивание запрошено, проверьте загрузки браузера.', 'Download requested. Check your browser’s downloads.'));
+    }
+    async function uploadPptx() {
+        if (!pptxFile) return;
+        setBusy(true); setError(''); setMessage('');
+        try {
+            const url = new URL('api/dsh-ppt/template-upload', document.baseURI);
+            url.searchParams.set('templateId', pptxId);
+            url.searchParams.set('name', pptxName.trim());
+            url.searchParams.set('scope', pptxScope);
+            url.searchParams.set('lang', languageOf());
+            const response = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/octet-stream', 'x-dsh-ppt-action': '1' }, body: pptxFile });
+            let value;
+            try { value = await response.json(); } catch { throw new Error(tplTr('Не удалось прочитать ответ сервера', 'Could not read the server response')); }
+            if (!response.ok || value.ok === false) throw new Error(value.messageEn && languageOf() !== 'ru' ? value.messageEn : (value.message || 'HTTP ' + response.status));
+            setPptxResult({ key: value.key, report: value.report ?? {} });
+            await refresh();
+        }
+        catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+        finally { setBusy(false); }
     }
     function importFile(file) {
         if (!file) return;
@@ -140,6 +165,7 @@ function TemplatesPanel({ onCreated }) {
         h('div', { className: 'w-toolbar' },
             h(W.Button, { variant: 'primary', icon: 'plus', disabled: busy, onClick: () => setEditing({ key: null, nonce: 0 }) }, tplTr('Новый шаблон', 'New template')),
             h(W.Button, { icon: 'upload', disabled: busy, onClick: () => { setImportScope(isAdmin ? 'public' : 'user'); setImportOpen(true); } }, tplTr('Импорт шаблона', 'Import template')),
+            h(W.Button, { icon: 'upload', disabled: busy, onClick: () => { setPptxFile(null); setPptxId(''); setPptxName(''); setPptxScope(isAdmin ? 'public' : 'user'); setPptxResult(null); setPptxOpen(true); } }, tplTr('Шаблон из PPTX', 'Template from PPTX')),
             h(W.Button, { disabled: busy, onClick: () => { setProjects(null); setFromProject(''); setNewId(''); setNewName(''); setFromOpen(true); } }, tplTr('Шаблон из проекта', 'Template from project')),
             h(W.IconButton, { icon: 'refresh', label: tplTr('Обновить', 'Refresh'), disabled: busy, onClick: () => void refresh() }),
             h('span', { className: 'w-muted' }, isAdmin ? tplTr('Вы администратор: можно править общие и встроенные шаблоны.', 'You are an admin: public and built-in templates are editable.') : tplTr('Общие шаблоны доступны для чтения; сохраните копию, чтобы править.', 'Public templates are read-only; save a copy to edit.'))),
@@ -187,6 +213,33 @@ function TemplatesPanel({ onCreated }) {
                 } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
                 finally { setBusy(false); }
             } }, tplTr('Создать', 'Create'))) : null,
+        pptxOpen ? h(W.Dialog, { title: tplTr('Шаблон из PPTX', 'Template from PPTX'), closeLabel: tplTr('Закрыть', 'Close'), busy, onClose: () => setPptxOpen(false) },
+            pptxResult ? h('div', { className: 'ppt-tpl-import' },
+                h(W.Status, { tone: 'success' }, tplTr('Шаблон создан: ', 'Template created: ') + pptxResult.key),
+                h('ul', { className: 'w-muted' },
+                    h('li', null, tplTr('Макетов: ', 'Layouts: ') + (pptxResult.report.layouts ?? 0)),
+                    h('li', null, tplTr('Картинок на макетах: ', 'Layout images: ') + (pptxResult.report.layoutStats?.images ?? 0) + tplTr(' (из них векторных SVG: ', ' (vector SVG: ') + (pptxResult.report.layoutStats?.svg ?? 0) + ')'),
+                    h('li', null, tplTr('Фонов: ', 'Backgrounds: ') + (pptxResult.report.layoutStats?.backgrounds ?? 0) + tplTr(', цветных плашек: ', ', colour plates: ') + (pptxResult.report.layoutStats?.plates ?? 0)),
+                    pptxResult.report.layoutStats?.shrunk ? h('li', null, tplTr('Сжато крупных изображений: ', 'Large images compressed: ') + pptxResult.report.layoutStats.shrunk) : null,
+                    pptxResult.report.slide?.adapted ? h('li', null, tplTr('Формат слайда исходника ', 'Source slide ratio ') + pptxResult.report.slide.ratio + tplTr(' пересчитан под 16:9.', ' was adapted to 16:9.')) : null,
+                    Object.keys(pptxResult.report.skippedShapes ?? {}).length ? h('li', null, tplTr('Пропущено: ', 'Skipped: ') + Object.entries(pptxResult.report.skippedShapes).map(([k, v]) => k + ' ×' + v).join(', ')) : null,
+                    (pptxResult.report.warnings ?? []).map((w, i) => h('li', { key: i }, w))),
+                h(W.Button, { variant: 'primary', onClick: () => { setPptxOpen(false); setEditing({ key: pptxResult.key, nonce: 0 }); } }, tplTr('Открыть в редакторе', 'Open in editor')))
+            : h('div', { className: 'ppt-tpl-import' },
+                h('p', { className: 'w-muted' }, tplTr('Фон, логотипы, декор и их положение берутся из макетов PPTX. Файл до 64 MiB; крупные картинки сжимаются на сервере.', 'Backgrounds, logos, decor and their positions come from the PPTX layouts. Up to 64 MiB; large images are compressed on the server.')),
+                h('input', { type: 'file', accept: '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation', onChange: e => {
+                    const file = e.target.files?.[0] ?? null; setPptxFile(file);
+                    if (file && !pptxName) setPptxName(file.name.replace(/\.pptx$/i, '').slice(0, 80));
+                } }),
+                pptxFile && pptxFile.size > 64 * 1024 * 1024 ? h(W.Status, { tone: 'error' }, tplTr('Файл больше 64 MiB', 'File exceeds 64 MiB')) : null,
+                h('label', null, tplTr('id шаблона (латиница, цифры, дефис)', 'Template id (latin, digits, hyphen)'),
+                    h('input', { value: pptxId, maxLength: 49, onChange: e => setPptxId(e.target.value.trim().toLowerCase()), placeholder: 'my-corp-template' })),
+                h('label', null, tplTr('Название', 'Name'), h('input', { value: pptxName, maxLength: 81, onChange: e => setPptxName(e.target.value) })),
+                isAdmin ? h('label', null, tplTr('Куда сохранить', 'Save to'),
+                    h('select', { value: pptxScope, onChange: e => setPptxScope(e.target.value) },
+                        h('option', { value: 'user' }, tplTr('Себе (личный)', 'My own (private)')),
+                        h('option', { value: 'public' }, tplTr('В общие (админ)', 'To public (admin)')))) : null,
+                h(W.Button, { variant: 'primary', disabled: busy || !pptxFile || pptxFile.size > 64 * 1024 * 1024 || !/^[a-z0-9][a-z0-9-]{1,48}$/.test(pptxId) || !pptxName.trim(), onClick: () => void uploadPptx() }, busy ? tplTr('Обработка…', 'Processing…') : tplTr('Создать шаблон', 'Create template')))) : null,
         importOpen ? h(W.Dialog, { title: tplTr('Импорт шаблона', 'Import template'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setImportOpen(false) },
             h('div', { className: 'ppt-tpl-import' },
                 h('p', { className: 'w-muted' }, tplTr('Файл .zip (bundle шаблона) или template.json, до 9 MiB.', 'A .zip bundle or template.json file, up to 9 MiB.')),

@@ -42,7 +42,7 @@ test('template manifest: valid template passes and normalizes colors', () => {
 
 test('template manifest: rejects bad id, theme, colors, asset refs', () => {
   assert.throws(() => templates.validateTemplateManifest(baseTemplate({ id: 'Bad_ID' })), /id/)
-  assert.throws(() => templates.validateTemplateManifest(baseTemplate({ schemaVersion: 2 })), /schemaVersion/)
+  assert.throws(() => templates.validateTemplateManifest(baseTemplate({ schemaVersion: 3 })), /schemaVersion/)
   assert.throws(() => templates.validateTemplateManifest(
     { ...baseTemplate(), style: { theme: 'nope' } }), /theme/)
   const bad = baseTemplate()

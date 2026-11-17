@@ -21,6 +21,7 @@ import { MEDIA_LAYOUTS, MEDIA_CSS, normalizeMediaSlide, renderMediaHtml, mediaBo
 import { renderDelivery } from './deck-delivery.mjs'
 import { renderDataView } from './deck-data-view.mjs'
 import { normalizeVisual, visualHtmlStyle, visualShapeXml, VISUAL_CSS } from './deck-visual.mjs'
+import { LAYOUT_CSS, pickDesignLayout, renderLayoutLayer } from './deck-layouts.mjs'
 
 /**
  * manifest 版本跟随发布包 package.json；把 skills/dsh-ppt 独立复制到其他
@@ -946,7 +947,9 @@ const SLIDE_LAYOUTS = new Set(['cover', 'section', 'bullets', 'statement', 'clos
 
 function normalizeSlide(raw, index) {
   const result = normalizeSlideContent(raw, index), visual = normalizeVisual(raw?.visual)
-  return visual ? { ...result, visual } : result
+  // designLayout — ссылка на макет шаблона (style.layouts[].id); неизвестный id при отрисовке игнорируется.
+  const designLayout = typeof raw?.designLayout === 'string' && /^[a-z0-9][a-z0-9-]{0,40}$/.test(raw.designLayout) ? raw.designLayout : undefined
+  return { ...result, ...(visual ? { visual } : {}), ...(designLayout ? { designLayout } : {}) }
 }
 function normalizeSlideContent(raw, index) {
   const source = (raw !== null && typeof raw === 'object') ? raw : {}
@@ -1224,6 +1227,7 @@ body{
 }
 .slide.is-active{display:flex}
 ${backgroundCss}
+${LAYOUT_CSS}
 ${motionCss}
 ${MEDIA_CSS}
 ${VISUAL_CSS}
@@ -1828,7 +1832,9 @@ function renderHtmlSlide(slide, index, ui, langId, manifest = {}, theme) {
   const subtitle = slide.subtitle || ''
   const bullets = Array.isArray(slide.bullets) ? slide.bullets : []
   const number = String(index + 1).padStart(2, '0')
-  const hasBackground = Boolean(manifest.style?.backgrounds?.length)
+  const designLayout = pickDesignLayout(manifest.style?.layouts, slide, backgroundTypeOfLayout(slide.layout))
+  const layerHtml = designLayout ? renderLayoutLayer(designLayout, manifest.assets) : ''
+  const hasBackground = !designLayout && Boolean(manifest.style?.backgrounds?.length)
   let inner = ''
   switch (slide.layout) {
     case 'image':
@@ -1894,7 +1900,7 @@ function renderHtmlSlide(slide, index, ui, langId, manifest = {}, theme) {
   const visualStyle = visualHtmlStyle(slide.visual)
   const bgAttr = hasBackground ? ' data-bgt="' + backgroundTypeOfLayout(slide.layout) + '"' : ''
   return '<section class="slide slide--' + escapeHtml(slide.layout || 'bullets') + '" data-index="' + number + '"' + notesAttr + bgAttr + (visualStyle ? ' style="' + escapeHtml(visualStyle) + '"' : '') + '>' +
-    '<div class="slide-inner">' + inner + '</div>' +
+    layerHtml + '<div class="slide-inner">' + inner + '</div>' +
     (manifest.brand?.logoAssetId ? '<img class="brand-logo" src="' + escapeHtml(manifest.assets?.[manifest.brand.logoAssetId]?.data ?? '') + '" alt="' + escapeHtml(manifest.brand.name || 'Logo') + '"/>' : '') +
     (manifest.brand?.footer ? '<div class="brand-footer">' + escapeHtml(manifest.brand.footer) + '</div>' : '') + '</section>'
 }
