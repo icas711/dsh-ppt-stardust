@@ -1,5 +1,6 @@
 import type { CallerIdentity } from './identity.js';
 import type { PptTemplateSummary } from './types.js';
+import { PptFontLibrary, type LibraryFont } from './font-library.js';
 export interface TemplateRecord {
     manifest: Record<string, any>;
     assets: Record<string, {
@@ -29,8 +30,30 @@ export declare class PptTemplateStore {
     private readonly loader;
     private readonly admins?;
     private cache;
+    readonly fontLibrary: PptFontLibrary;
+    private fontQueue;
     constructor(options: TemplateStoreOptions);
     private mod;
+    /** A template keeps its own portable copy; library lookup only fills missing faces. */
+    withLibraryFonts(manifest: Record<string, any>, assets: Record<string, any>, identity: CallerIdentity, replace?: LibraryFont[]): Promise<{
+        manifest: Record<string, any>;
+        assets: Record<string, any>;
+        added: number;
+    }>;
+    /** Validate every affected template before replacing any stored copy. Uploads are serialized. */
+    uploadFont(input: {
+        family: unknown;
+        variant: unknown;
+        data: unknown;
+    }, identity: CallerIdentity): Promise<{
+        font: LibraryFont;
+        updated: {
+            key: string;
+            previousRevision: number;
+            revision: number;
+        }[];
+    }>;
+    deleteLibraryFont(owner: unknown, id: unknown, identity: CallerIdentity): Promise<void>;
     isAdmin(identity: CallerIdentity): boolean;
     private usersRoot;
     private publicRoot;

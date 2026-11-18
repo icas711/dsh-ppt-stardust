@@ -6,6 +6,34 @@ const tplTr = (ru, en) => languageOf() === 'ru' ? ru : en;
 const TPL_LAYOUTS = ['cover', 'section', 'bullets', 'statement', 'quote', 'closing'];
 const TPL_BG_TYPES = ['cover', 'section', 'content', 'closing'];
 const TPL_FONTS = ['Arial', 'Calibri', 'Cambria', 'Georgia', 'Helvetica', 'Open Sans', 'Roboto', 'Segoe UI', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
+const TPL_FONT_VARIANTS = ['regular', 'bold', 'italic', 'boldItalic'];
+const tplFontVariantLabel = variant => ({ regular: tplTr('Обычное', 'Regular'), bold: tplTr('Полужирное', 'Bold'), italic: tplTr('Курсив', 'Italic'), boldItalic: tplTr('Полужирный курсив', 'Bold italic') })[variant] ?? variant;
+function tplFontFamilies(draft) {
+    const families = new Map();
+    const add = value => { if (typeof value === 'string' && value.trim()) families.set(value.trim().toLowerCase(), value.trim()); };
+    add(draft.fontFamily);
+    for (const face of draft.fonts ?? []) add(face.family);
+    for (const styles of [draft.textStyles, ...(draft.layouts ?? []).map(layout => layout.textStyles)])
+        for (const style of Object.values(styles ?? {})) add(style.fontFamily);
+    return [...families.values()];
+}
+function tplAttachFont(draft, face) {
+    return { ...draft, fonts: [...(draft.fonts ?? []).filter(item => item.family.toLowerCase() !== face.family.toLowerCase() || (item.variant ?? 'regular') !== face.variant), { family: face.family, variant: face.variant, file: face.file }] };
+}
+function TplFontUploads({ draft, disabled, onPick }) {
+    const families = tplFontFamilies(draft);
+    return h('div', null,
+        h('h3', null, tplTr('Файлы шрифтов', 'Font files')),
+        h('p', { className: 'tpe-hint' }, tplTr('Загрузите TTF или OTF для нужного семейства и начертания (до 12 MiB на файл, до 32 MiB в библиотеке). Загрузка сразу сохраняет файл в личную библиотеку и обновляет ваши личные и созданные вами общие шаблоны. Презентации, созданные ранее, сохраняют свои шрифты.', 'Upload a TTF or OTF for the family and face (12 MiB per file, 32 MiB per library). Uploading immediately saves it to your library and updates your private templates and public templates authored by you. Previously created presentations retain their fonts.')),
+        families.length ? families.map(family => h('div', { className: 'tpe-bg', key: family },
+            h('h4', null, family),
+            TPL_FONT_VARIANTS.map(variant => {
+                const face = (draft.fonts ?? []).find(item => item.family.toLowerCase() === family.toLowerCase() && (item.variant ?? 'regular') === variant);
+                const label = family + ' — ' + tplFontVariantLabel(variant);
+                return h('label', { key: variant }, tplFontVariantLabel(variant) + ' · ' + (face ? tplTr('Файл добавлен', 'File included') : tplTr('Файл не добавлен', 'No file included')),
+                    h('input', { type: 'file', accept: '.ttf,.otf,font/ttf,font/otf', disabled, 'aria-label': label, onChange: e => { const file = e.target.files?.[0]; e.target.value = ''; onPick(file, family, variant); } }));
+            }))) : h('p', { className: 'tpe-hint' }, tplTr('Укажите название общего шрифта выше, чтобы загрузить его файл.', 'Enter the default font family above to upload its file.')));
+}
 // Индикатор занятости: оверлей поверх контейнера с классом tpe-busywrap блокирует клики и показывает спиннер.
 const TPL_BUSY_CSS = `.tpe-busywrap{position:relative}
 .tpe-busy{position:absolute;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;gap:10px;min-height:56px;background:color-mix(in srgb,var(--w-bg,#fff) 72%,transparent);cursor:progress;border-radius:inherit;font-size:13px}
@@ -296,6 +324,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
     const [dirty, setDirty] = React.useState(!templateKey);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState('');
+    const [fontMessage, setFontMessage] = React.useState('');
     const [loadError, setLoadError] = React.useState('');
     const [preview, setPreview] = React.useState('');
     const [previewError, setPreviewError] = React.useState('');
@@ -309,6 +338,11 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
         action({ operation: 'template-get', templateId: templateKey }).then(value => {
             if (!live) return;
             setBase(value.template); setDraft(tplDraftFrom(value.template)); setImages(Object.fromEntries(Object.entries(value.template.assetData ?? {}).filter(([, data]) => data.startsWith('data:image/'))));
+            setUploads(value.template.libraryUploads ?? {});
+            if (value.template.libraryFontsAdded && value.template.canEdit) {
+                setDirty(true);
+                setFontMessage(tplTr('Недостающие шрифты добавлены из личной библиотеки. Сохраните шаблон.', 'Missing fonts were added from your library. Save the template.'));
+            }
         }).catch(e => { if (live) setLoadError(e instanceof Error ? e.message : String(e)); });
         return () => { live = false; };
     }, [templateKey]);
@@ -352,6 +386,35 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
         };
         reader.onerror = () => setError(tplTr('Не удалось прочитать файл', 'Could not read the file'));
         reader.readAsDataURL(file);
+    }
+
+    async function pickFont(file, family, variant) {
+        if (!file) return;
+        if (!/\.(ttf|otf)$/i.test(file.name)) { setError(tplTr('Нужен файл TTF или OTF', 'Choose a TTF or OTF file')); return; }
+        if (!file.size || file.size > 12 * 1024 * 1024) { setError(tplTr('Файл шрифта пуст или больше 12 MiB', 'The font file is empty or larger than 12 MiB')); return; }
+        setBusy(true); setError(''); setFontMessage('');
+        try {
+            const bytes = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result ?? '').split(',')[1]);
+                reader.onerror = () => reject(new Error(tplTr('Не удалось прочитать файл', 'Could not read the file')));
+                reader.readAsDataURL(file);
+            });
+            const mime = /\.otf$/i.test(file.name) ? 'font/otf' : 'font/ttf';
+            const value = await action({ operation: 'template-font-upload', family, variant, data: 'data:' + mime + ';base64,' + bytes });
+            const face = value.font;
+            setUploads(previous => {
+                const next = { ...previous, [face.file]: face.data };
+                const wanted = new Set(tplAttachFont(draft, face).fonts.map(item => item.file));
+                for (const name of Object.keys(next)) if (/\.(ttf|otf|fntdata)$/i.test(name) && !wanted.has(name)) delete next[name];
+                return next;
+            });
+            setDraft(previous => tplAttachFont(previous, face)); setDirty(true);
+            const updated = (value.updated ?? []).find(item => item.key === base?.key);
+            if (updated) setBase(previous => previous?.revision === updated.previousRevision ? { ...previous, revision: updated.revision } : previous);
+            setFontMessage([tplTr('Шрифт сохранён. Обновлено шаблонов: ', 'Font saved. Templates updated: ') + (value.updated?.length ?? 0), ...(face.warnings ?? [])].join(' '));
+        } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+        finally { setBusy(false); }
     }
 
     async function save(asCopy) {
@@ -408,6 +471,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
             h('input', { value: draft.fontFamily, list: 'tpe-fonts', disabled, maxLength: 128, placeholder: tplTr('как в теме', 'theme default'), onChange: e => set({ fontFamily: e.target.value }) }),
             h('datalist', { id: 'tpe-fonts' }, TPL_FONTS.map(font => h('option', { key: font, value: font })))),
         draft.fonts?.length ? h('p', { className: 'tpe-hint' }, tplTr('Встроенных начертаний: ', 'Embedded font faces: ') + draft.fonts.length) : null,
+        h(TplFontUploads, { draft, disabled, onPick: pickFont }),
         h('label', null, tplTr('Название бренда', 'Brand name'), h('input', { value: draft.brandName, disabled, maxLength: 100, onChange: e => set({ brandName: e.target.value }) })),
         h('label', null, tplTr('Футер', 'Footer'), h('input', { value: draft.footer, disabled, maxLength: 100, onChange: e => set({ footer: e.target.value }) })),
         h(TplImageField, { label: tplTr('Логотип (PNG / JPEG)', 'Logo (PNG / JPEG)'), name: draft.logo, images, disabled, onPick: file => pickImage(file, 'logo', name => set({ logo: name })), onClear: () => set({ logo: '' }) }),
@@ -440,6 +504,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
             ? tplTr('Это встроенный шаблон. При сохранении появится общая копия с тем же id, которая заменит встроенный для всех пользователей.', 'This is a built-in template. Saving creates a public copy with the same id that replaces the built-in one for everyone.')
             : tplTr('Общая копия заменяет встроенный шаблон. Чтобы вернуть исходный, удалите её в списке («Сбросить к встроенному»).', 'This public copy replaces the built-in template. Delete it in the list (“Reset to built-in”) to restore the original.')) : null,
         error ? h(W.Status, { tone: 'error' }, error) : null,
+        fontMessage ? h(W.Status, { role: 'status' }, fontMessage) : null,
         h('div', { className: 'tpe-grid' },
             h('div', { className: 'tpe-form' },
                 h('div', { className: 'tpe-nav', role: 'group', 'aria-label': tplTr('Разделы шаблона', 'Template sections') },

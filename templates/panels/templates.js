@@ -25,6 +25,7 @@ function TemplatesPanel({ onCreated }) {
     const [message, setMessage] = React.useState('');
     const [error, setError] = React.useState('');
     const [editing, setEditing] = React.useState(null); // { key: string | null, nonce: number }
+    const [fontLibraryOpen, setFontLibraryOpen] = React.useState(false);
     const [applyId, setApplyId] = React.useState(null);
     const [applyTitle, setApplyTitle] = React.useState('');
     const [importOpen, setImportOpen] = React.useState(false);
@@ -117,6 +118,7 @@ function TemplatesPanel({ onCreated }) {
     }
     const scopeLabel = scope => scope === 'builtin' ? tplTr('Встроенный', 'Built-in') : scope === 'public' ? tplTr('Общий', 'Public') : tplTr('Личный', 'Private');
 
+    if (fontLibraryOpen && isAdmin) return h(TemplateFontLibrary, { onClose: () => { setFontLibraryOpen(false); void refresh(); } });
     if (editing) {
         return h('div', { className: 'ppt-templates' },
             h(W.Status, { tone: 'success' }, message),
@@ -167,6 +169,7 @@ function TemplatesPanel({ onCreated }) {
         error ? h(W.Status, { tone: 'error' }, error) : null,
         h('div', { className: 'w-toolbar' },
             h(W.Button, { variant: 'primary', icon: 'plus', disabled: busy, onClick: () => setEditing({ key: null, nonce: 0 }) }, tplTr('Новый шаблон', 'New template')),
+            isAdmin ? h(W.Button, { disabled: busy, onClick: () => setFontLibraryOpen(true) }, tplTr('Библиотеки шрифтов', 'Font libraries')) : null,
             h(W.Button, { icon: 'upload', disabled: busy, onClick: () => { setImportScope(isAdmin ? 'public' : 'user'); setImportOpen(true); } }, tplTr('Импорт шаблона', 'Import template')),
             h(W.Button, { icon: 'upload', disabled: busy, onClick: () => { setPptxFile(null); setPptxId(''); setPptxName(''); setPptxScope(isAdmin ? 'public' : 'user'); setPptxResult(null); setPptxOpen(true); } }, tplTr('Шаблон из PPTX', 'Template from PPTX')),
             h(W.Button, { disabled: busy, onClick: () => { setProjects(null); setFromProject(''); setNewId(''); setNewName(''); setFromOpen(true); } }, tplTr('Шаблон из проекта', 'Template from project')),
@@ -222,6 +225,7 @@ function TemplatesPanel({ onCreated }) {
                 h('ul', { className: 'w-muted' },
                     h('li', null, tplTr('Макетов: ', 'Layouts: ') + (pptxResult.report.layouts ?? 0)),
                     pptxResult.report.fonts ? h('li', null, tplTr('Шрифты: заголовки — ', 'Fonts: headings — ') + (pptxResult.report.fonts.major || '—') + tplTr(', текст — ', ', body — ') + (pptxResult.report.fonts.minor || '—') + tplTr('; встроенных начертаний: ', '; embedded faces: ') + (pptxResult.report.fonts.embedded ?? 0)) : null,
+                    pptxResult.report.fonts?.library ? h('li', null, tplTr('Начертаний добавлено из личной библиотеки: ', 'Faces added from your font library: ') + pptxResult.report.fonts.library) : null,
                     h('li', null, tplTr('Картинок на макетах: ', 'Layout images: ') + (pptxResult.report.layoutStats?.images ?? 0) + tplTr(' (из них векторных SVG: ', ' (vector SVG: ') + (pptxResult.report.layoutStats?.svg ?? 0) + ')'),
                     h('li', null, tplTr('Фонов: ', 'Backgrounds: ') + (pptxResult.report.layoutStats?.backgrounds ?? 0) + tplTr(', цветных плашек: ', ', colour plates: ') + (pptxResult.report.layoutStats?.plates ?? 0)),
                     pptxResult.report.layoutStats?.shrunk ? h('li', null, tplTr('Сжато крупных изображений: ', 'Large images compressed: ') + pptxResult.report.layoutStats.shrunk) : null,

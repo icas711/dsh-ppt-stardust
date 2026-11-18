@@ -23,7 +23,8 @@ export const PPT_WORKBENCH_ROUTE = '/api/dsh-ppt/workbench'
 export const PPT_DOWNLOAD_ROUTE = '/api/dsh-ppt/download'
 export const PPT_TEMPLATE_UPLOAD_ROUTE = '/api/dsh-ppt/template-upload'
 const PPTX_UPLOAD_LIMIT = 64 * 1024 * 1024
-const REQUEST_LIMIT = 12 * 1024 * 1024
+// 32 MiB fonts + 8 MiB images, encoded as base64, plus the draft manifest.
+const REQUEST_LIMIT = 56 * 1024 * 1024
 const FILE_LIMIT = 64 * 1024 * 1024
 const BUNDLE_LIMIT = 128 * 1024 * 1024
 /** Sharing keeps the offline deck, but omits the control for a project not in the ZIP. */
@@ -192,15 +193,24 @@ export class PptWorkbench {
         case 'template-get': {
           const record = await store.get(requireTemplateKey(key), identity)
           const access = store.access(record, identity)
+          const bound = await store.withLibraryFonts(record.manifest, record.assets, identity)
           return {
             ok: true,
             template: {
-              ...record.manifest, key: record.key, readonly: record.readonly, ...access,
-              assets: Object.keys(record.assets),
-              assetData: Object.fromEntries(Object.entries(record.assets).map(([name, asset]) => [name, asset.data])),
+              ...bound.manifest, key: record.key, readonly: record.readonly, ...access, libraryFontsAdded: bound.added,
+              assets: Object.keys(bound.assets),
+              assetData: Object.fromEntries(Object.entries(bound.assets).map(([name, asset]) => [name, asset.data])),
+              libraryUploads: Object.fromEntries(Object.entries(bound.assets).filter(([name]) => !record.assets[name]).map(([name, asset]) => [name, asset.data])),
             },
           }
         }
+        case 'template-font-list':
+          return { ok: true, fonts: store.fontLibrary.adminList(identity) }
+        case 'template-font-delete':
+          await store.deleteLibraryFont(body.owner, body.fontId, identity)
+          return { ok: true }
+        case 'template-font-upload':
+          return { ok: true, ...await store.uploadFont({ family: body.family, variant: body.variant, data: body.data }, identity) }
         case 'template-import': {
           const data = typeof body.data === 'string' ? body.data : ''
           if (!data) throw new Error('Загрузите файл шаблона (.zip или template.json)')
@@ -485,7 +495,9 @@ export class PptWorkbench {
         author: identity.login ?? 'local',
       })
       request.signal.throwIfAborted()
-      const saved = await store.save({ manifest: extracted.manifest, assets: extracted.assets, scope: query.get('scope') === 'public' ? 'public' : 'user', identity })
+      const bound = await store.withLibraryFonts(extracted.manifest, extracted.assets, identity)
+      const saved = await store.save({ manifest: bound.manifest, assets: bound.assets, scope: query.get('scope') === 'public' ? 'public' : 'user', identity })
+      extracted.report.fonts = { ...extracted.report.fonts, library: bound.added }
       return json(200, { ok: true, key: saved.key, template: saved.manifest, report: extracted.report })
     } catch (error) { return fail(400, error instanceof Error ? error.message : String(error)) }
   }
@@ -498,7 +510,7 @@ export class PptWorkbench {
       const reader = request.body?.getReader()
       if (!reader) return fail(400, '缺少请求内容')
       let size = 0; const chunks: Uint8Array[] = []
-      try { for (;;) { const { value, done } = await reader.read(); if (done) break; size += value.byteLength; if (size > REQUEST_LIMIT) { await reader.cancel(); return fail(413, '图片或请求超过 12 MiB，请压缩后重试') } chunks.push(value) } } finally { reader.releaseLock() }
+      try { for (;;) { const { value, done } = await reader.read(); if (done) break; size += value.byteLength; if (size > REQUEST_LIMIT) { await reader.cancel(); return fail(413, 'Запрос больше 56 MiB') } chunks.push(value) } } finally { reader.releaseLock() }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
       if (!body || typeof body !== 'object' || Array.isArray(body)) return fail(400, '请求必须是对象')
       return json(200, await this.action(body, request.signal, identity))

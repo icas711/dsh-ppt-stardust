@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { CallerIdentity } from './identity.js'
 import type { PptTemplateSummary } from './types.js'
+import { PptFontLibrary, fontKey, templateFontFamilies, type LibraryFont } from './font-library.js'
 
 export interface TemplateRecord {
   manifest: Record<string, any>
@@ -51,15 +52,75 @@ export class PptTemplateStore {
   private readonly loader: () => Promise<Record<string, any>>
   private readonly admins?: string[]
   private cache = new Map<string, Promise<TemplateRecord>>()
+  readonly fontLibrary: PptFontLibrary
+  private fontQueue: Promise<unknown> = Promise.resolve()
 
   constructor(options: TemplateStoreOptions) {
     this.root = resolve(options.root)
     this.builtinDir = options.builtinDir ? resolve(options.builtinDir) : undefined
     this.loader = options.templatesModuleLoader
     this.admins = options.admins
+    this.fontLibrary = new PptFontLibrary(join(this.root, 'font-library'))
   }
 
   private mod(): Promise<Record<string, any>> { return this.loader() }
+
+  /** A template keeps its own portable copy; library lookup only fills missing faces. */
+  async withLibraryFonts(manifest: Record<string, any>, assets: Record<string, any>, identity: CallerIdentity, replace?: LibraryFont[]): Promise<{ manifest: Record<string, any>; assets: Record<string, any>; added: number }> {
+    const m = await this.mod(), result = structuredClone(manifest), merged = { ...assets }
+    const families = templateFontFamilies(result), faces = [...(result.style?.fonts ?? [])]
+    let added = 0
+    const library = replace ?? (identity.login ? this.fontLibrary.list(identity) : [])
+    for (const entry of library) {
+      if (!families.has(entry.family.toLowerCase())) continue
+      const index = faces.findIndex(face => fontKey(face) === fontKey(entry))
+      if (!replace && index >= 0 && merged[faces[index].file]) continue
+      const face = { family: entry.family, variant: entry.variant, file: entry.file }
+      if (index >= 0) faces[index] = face
+      else faces.push(face)
+      Object.assign(merged, m.normalizeTemplateAssets({ [entry.file]: entry.data }))
+      added++
+    }
+    if (added) result.style = { ...result.style, fonts: faces }
+    const wanted = referencedAssets(result)
+    return { manifest: result, assets: Object.fromEntries(Object.entries(merged).filter(([name]) => wanted.has(name))), added }
+  }
+
+  /** Validate every affected template before replacing any stored copy. Uploads are serialized. */
+  uploadFont(input: { family: unknown; variant: unknown; data: unknown }, identity: CallerIdentity): Promise<{ font: LibraryFont; updated: { key: string; previousRevision: number; revision: number }[] }> {
+    const work = this.fontQueue.then(async () => {
+      const font = this.fontLibrary.prepare(input, identity), m = await this.mod()
+      const plans = []
+      for (const scope of [SCOPE_USER, SCOPE_PUBLIC]) {
+        for (const id of this.scopeIds(scope, identity)) {
+          const record = await this.load(`${scope}:${id}`, identity)
+          if (scope === SCOPE_PUBLIC && record.manifest.author !== identity.login) continue
+          const bound = await this.withLibraryFonts(record.manifest, record.assets, identity, [font])
+          if (!bound.added) continue
+          const assets = m.normalizeTemplateAssets(bound.assets)
+          m.validateTemplateManifest(bound.manifest, { templateAssets: assets })
+          plans.push({ record, ...bound, assets, scope })
+        }
+      }
+      // Library ownership authorizes updating the owner's public templates as well as private copies.
+      const updated = []
+      for (const plan of plans) {
+        const saved = await this.save({ manifest: plan.manifest, assets: plan.assets, scope: plan.scope,
+          expectedRevision: plan.record.manifest.revision, identity: { ...identity, admin: true } })
+        updated.push({ key: saved.key, previousRevision: plan.record.manifest.revision, revision: saved.manifest.revision })
+      }
+      this.fontLibrary.put(font)
+      return { font, updated }
+    })
+    this.fontQueue = work.catch(() => {})
+    return work
+  }
+
+  async deleteLibraryFont(owner: unknown, id: unknown, identity: CallerIdentity): Promise<void> {
+    const work = this.fontQueue.then(() => this.fontLibrary.delete(owner, id, identity))
+    this.fontQueue = work.catch(() => {})
+    return work
+  }
 
   isAdmin(identity: CallerIdentity): boolean { return identity?.admin === true }
 
@@ -203,7 +264,8 @@ export class PptTemplateStore {
     const assets = await this.draftAssets(input.manifest, input.uploads, base)
     const manifest = { ...input.manifest }
     if (!manifest.author && input.identity?.login) manifest.author = input.identity.login
-    return this.save({ manifest, assets, scope: input.scope, expectedRevision: input.expectedRevision, identity: input.identity })
+    const bound = await this.withLibraryFonts(manifest, assets, input.identity)
+    return this.save({ manifest: bound.manifest, assets: bound.assets, scope: input.scope, expectedRevision: input.expectedRevision, identity: input.identity })
   }
 
   /** Copy any visible template into the caller's own library under a new id. */
