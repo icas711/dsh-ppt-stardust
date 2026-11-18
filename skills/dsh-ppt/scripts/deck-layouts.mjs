@@ -8,6 +8,8 @@
 //     textZones?: [{ kind: title|body, x, y, w, h }] }
 // Форма в движке: то же, но src → assetId, background → backgroundAssetId.
 
+import { normalizeTextStyles } from './deck-fonts.mjs'
+
 export const LAYOUT_TYPES = ['cover', 'section', 'content', 'closing']
 export const MAX_LAYOUTS = 16
 export const MAX_LAYOUT_IMAGES = 12
@@ -65,6 +67,7 @@ export function normalizeDesignLayouts(input, assets, addAsset, fail) {
     seen.add(raw.id)
     if (!LAYOUT_TYPES.includes(raw.layoutType)) fail(`${path}.layoutType 只支持 ${LAYOUT_TYPES.join(' / ')}`)
     const layout = { id: raw.id, layoutType: raw.layoutType, fit: raw.fit ?? 'cover', images: [] }
+    if (raw.textStyles !== undefined) layout.textStyles = normalizeTextStyles(raw.textStyles)
     if (!['cover', 'contain'].includes(layout.fit)) fail(`${path}.fit 只支持 contain / cover`)
     if (raw.name !== undefined) layout.name = String(raw.name).slice(0, 80)
     const bg = raw.background

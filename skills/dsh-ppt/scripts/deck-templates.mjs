@@ -15,6 +15,7 @@ import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
 import { resolveTheme, resolveLanguage } from './deck-core.mjs'
 import { extractPptxLayouts } from './deck-pptx-layouts.mjs'
 import { LAYOUT_TYPES, MAX_LAYOUTS, MAX_LAYOUT_IMAGES, sanitizeSvg } from './deck-layouts.mjs'
+import { FONT_EXT, MAX_FONT, MAX_FONTS, fontInfo, fontFamily, normalizeTextStyles, normalizeFontRefs, extractTypography } from './deck-fonts.mjs'
 
 export const TEMPLATE_SCHEMA_VERSION = 1
 /** Шаблон с style.layouts (макеты с картинками) записывается как schemaVersion 2; версия 1 читается как раньше. */
@@ -25,7 +26,7 @@ const MAX_TEMPLATE_JSON = 1024 * 1024            // 1 MiB manifest
 const MAX_ASSET = 5 * 1024 * 1024                // 5 MiB per asset (= engine MAX_IMAGE)
 const MAX_TEMPLATE_ASSETS = 8 * 1024 * 1024      // 8 MiB total per template
 const MAX_BUNDLE_INPUT = 64 * 1024 * 1024        // 64 MiB compressed input
-const MAX_BUNDLE_UNPACKED = 16 * 1024 * 1024     // zip-bomb guard
+const MAX_BUNDLE_UNPACKED = 64 * 1024 * 1024     // images and separately budgeted fonts
 const MAX_OUTLINE = 120
 const MAX_SAMPLES = 5
 const MAX_BACKGROUNDS = 8
@@ -62,7 +63,7 @@ function checkSvgName(name) {
   if (typeof name !== 'string' || !FILE_PATTERN.test(name) || !/\.svg$/i.test(name)) fail(`SVG 资产文件名不合法：${name}（需 assets/ 下的 .svg）`)
   return name
 }
-const ASSET_EXT = /\.(png|jpe?g|svg)$/i
+const ASSET_EXT = /\.(png|jpe?g|svg|ttf|otf|fntdata)$/i
 const IMAGE_FIT = ['contain', 'cover', 'fill']
 const IMAGE_ROLES = ['logo', 'decor', 'header', 'background', 'photo']
 function checkNumber(value, field, min, max) {
@@ -82,6 +83,7 @@ function validateLayouts(list) {
     seen.add(raw.id)
     if (!LAYOUT_TYPES.includes(raw.layoutType)) fail(`${path}.layoutType 只支持 ${LAYOUT_TYPES.join(' / ')}`)
     const layout = { id: raw.id, ...(raw.name !== undefined ? { name: checkText(String(raw.name), `${path}.name`, 80) } : {}), layoutType: raw.layoutType }
+    if (raw.textStyles !== undefined) layout.textStyles = normalizeTextStyles(raw.textStyles)
     if (raw.background !== undefined && raw.background !== null) {
       const bg = raw.background
       if (typeof bg !== 'object' || Array.isArray(bg)) fail(`${path}.background 必须是对象`)
@@ -141,6 +143,8 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
     try { resolveTheme(style.theme) } catch { fail(`style.theme 需是内置主题之一（${style.theme}）`) }
   }
   const normalizedStyle = {}
+  if (style.textStyles !== undefined) normalizedStyle.textStyles = normalizeTextStyles(style.textStyles)
+  if (style.fonts !== undefined) normalizedStyle.fonts = normalizeFontRefs(style.fonts)
   if (style.theme !== undefined) normalizedStyle.theme = style.theme
   if (style.brand !== undefined) {
     const brand = style.brand
@@ -151,8 +155,7 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
     }
     if (brand.fontFamily !== undefined) {
       const font = String(brand.fontFamily).trim()
-      if (!font || font.length > 80 || !/^[\p{L}\p{N} _-]+$/u.test(font)) fail('style.brand.fontFamily 需为单个字体名称，最多 80 字符')
-      out.fontFamily = font
+      out.fontFamily = fontFamily(font)
     }
     if (brand.name !== undefined) out.name = checkText(brand.name, 'style.brand.name', 100)
     if (brand.footer !== undefined) {
@@ -216,6 +219,7 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
 
   // 引用完整性：brand.logo / backgrounds[].image / outline/sample 图片需在资产里。
   const referenced = new Set()
+  for (const face of manifest.style?.fonts ?? []) referenced.add(face.file)
   if (manifest.style?.brand?.logo) referenced.add(manifest.style.brand.logo)
   for (const bg of manifest.style?.backgrounds ?? []) referenced.add(bg.image)
   for (const name of layoutAssetNames(manifest)) referenced.add(name)
@@ -229,6 +233,7 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
   if (templateAssets !== undefined) {
     for (const name of referenced) {
       if (!templateAssets[name]) fail(`模板资产缺失：assets/${name}`)
+      if (FONT_EXT.test(name)) { fontInfo(templateAssets[name].bytes); continue }
       const vector = templateAssets[name].mime === 'image/svg+xml'
       if (vector !== /\.svg$/i.test(name)) fail(`模板资产类型与文件名不符：${name}`)
     }
@@ -266,6 +271,7 @@ export function summarizeTemplate(manifest) {
 
 export function countTemplateAssets(manifest) {
   const names = new Set()
+  for (const face of manifest.style?.fonts ?? []) names.add(face.file)
   if (manifest.style?.brand?.logo) names.add(manifest.style.brand.logo)
   for (const bg of manifest.style?.backgrounds ?? []) names.add(bg.image)
   for (const name of layoutAssetNames(manifest)) names.add(name)
@@ -322,27 +328,30 @@ function imageInfo(bytes) {
 /** 模板资产表：name → { bytes, mime, width, height, data(data URI) } */
 export function normalizeTemplateAssets(input = {}) {
   const assets = {}
-  let total = 0
+  let total = 0, fontTotal = 0
   for (const [name, value] of Object.entries(input)) {
+    const isFont = FONT_EXT.test(name), limit = isFont ? MAX_FONT : MAX_ASSET
     if (!FILE_PATTERN.test(name) || !ASSET_EXT.test(name)) fail(`资产文件名不合法：${name}（需 assets/ 下的 PNG/JPEG/SVG）`)
     let bytes
     if (value && typeof value === 'object' && Buffer.isBuffer(value)) bytes = value
     else if (value && typeof value === 'object' && value.bytes) bytes = Buffer.from(value.bytes)
-    else if (typeof value === 'string' && value.startsWith('data:image/')) {
-      const match = /^data:image\/(png|jpeg|svg\+xml);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(value)
+    else if (typeof value === 'string' && value.startsWith('data:')) {
+      const match = /^data:(?:image\/(png|jpeg|svg\+xml)|font\/(ttf|otf)|application\/(x-fontdata));base64,([A-Za-z0-9+/=\r\n]+)$/.exec(value)
       if (!match) fail(`模板资产 ${name} 的 data URI 无效`)
-      bytes = Buffer.from(match[2], 'base64')
+      bytes = Buffer.from(match[4], 'base64')
     } else if (typeof value === 'string') {
       const path = resolve(String(value))
       let size
       try { size = statSync(path).size } catch { fail(`模板资产文件不存在：${value}`) }
-      if (size > MAX_ASSET) fail(`模板资产超过 5 MiB：${value}`)
+      if (size > limit) fail(`Asset exceeds ${limit} bytes: ${name}`)
       bytes = readFileSync(path)
     } else fail(`模板资产 ${name} 类型无效`)
-    if (bytes.length > MAX_ASSET) fail(`模板资产超过 5 MiB：${name}`)
-    total += bytes.length
+    if (bytes.length > limit) fail(`Asset exceeds ${isFont ? 12 : 5} MiB: ${name}`)
+    if (isFont) fontTotal += bytes.length
+    else total += bytes.length
+    if (fontTotal > MAX_FONTS) fail('Template fonts exceed 32 MiB')
     if (total > MAX_TEMPLATE_ASSETS) fail('模板资产总量超过 8 MiB，请压缩图片')
-    const info = imageInfo(bytes)
+    const info = isFont ? { mime: fontInfo(bytes).mime } : imageInfo(bytes)
     assets[name] = { ...info, bytes, data: `data:${info.mime};base64,${bytes.toString('base64')}` }
   }
   return assets
@@ -405,7 +414,7 @@ export function readTemplateBundle(source, { cwd } = {}) {
   const bytes = readFileSync(path)
   if (bytes.length > MAX_BUNDLE_INPUT) fail('模板 bundle 超过 64 MiB')
   let entries
-  try { entries = unzipSync(new Uint8Array(bytes)) } catch { fail('模板 ZIP 无法解压：' + source) }
+  try { entries = unzipTemplate(bytes) } catch (error) { fail('模板 ZIP 无法解压：' + error.message) }
   return readTemplateEntries(entries)
 }
 
@@ -414,17 +423,26 @@ export function readTemplateZip(bytes) {
   if (!(bytes instanceof Uint8Array)) bytes = new Uint8Array(bytes)
   if (bytes.byteLength > MAX_BUNDLE_INPUT) fail('模板 bundle 超过 64 MiB')
   let entries
-  try { entries = unzipSync(bytes) } catch { fail('模板 ZIP 无法解压') }
+  try { entries = unzipTemplate(bytes) } catch (error) { fail('模板 ZIP 无法解压：' + error.message) }
   return readTemplateEntries(entries)
 }
 
 /** 从已解压的 ZIP 条目读取 bundle。 */
+function unzipTemplate(bytes) {
+  let total = 0
+  return unzipSync(new Uint8Array(bytes), { filter: entry => {
+    total += entry.originalSize
+    if (total > MAX_BUNDLE_UNPACKED) fail('Template ZIP exceeds 64 MiB unpacked')
+    return true
+  } })
+}
+
 export function readTemplateEntries(entries) {
   const names = Object.keys(entries)
   let total = 0
   for (const name of names) {
     total += entries[name].length
-    if (total > MAX_BUNDLE_UNPACKED) fail('模板 ZIP 解压后超过 16 MiB')
+    if (total > MAX_BUNDLE_UNPACKED) fail('模板 ZIP 解压后超过 64 MiB')
   }
   const manifestEntry = entries[TEMPLATE_JSON]
   if (!manifestEntry) fail('模板 ZIP 缺少 template.json')
@@ -436,15 +454,11 @@ export function readTemplateEntries(entries) {
     if (name === TEMPLATE_JSON) continue
     const assetName = entryName(name)
     if (assetName === null) continue
-    const bytes = Buffer.from(entries[name])
-    if (bytes.length > MAX_ASSET) fail(`模板资产超过 5 MiB：${assetName}`)
-    const info = imageInfo(bytes)
-    assets[assetName] = { ...info, bytes, data: `data:${info.mime};base64,${bytes.toString('base64')}` }
+    assets[assetName] = Buffer.from(entries[name])
   }
-  const totalAssets = Object.values(assets).reduce((sum, a) => sum + a.bytes.length, 0)
-  if (totalAssets > MAX_TEMPLATE_ASSETS) fail('模板资产总量超过 8 MiB')
-  const manifest = validateTemplateManifest(parsed, { templateAssets: assets })
-  return { manifest, assets }
+  const normalizedAssets = normalizeTemplateAssets(assets)
+  const manifest = validateTemplateManifest(parsed, { templateAssets: normalizedAssets })
+  return { manifest, assets: normalizedAssets }
 }
 
 /** 把模板（清单 + 资产）写成一个模板目录（template.json + assets/*）。 */
@@ -507,6 +521,8 @@ function applyVars(slide, vars) {
 /** style.backgrounds + style.layouts → 引擎 style 参数（src 为 data URI；SVG 以 data URI 放入图片的 svg 字段）。 */
 function engineStyle(manifest, assets) {
   const out = {}
+  if (manifest.style?.textStyles) out.textStyles = clone(manifest.style.textStyles)
+  if (manifest.style?.fonts) out.fonts = manifest.style.fonts.map(face => ({ family: face.family, variant: face.variant, src: assets[face.file]?.data }))
   const backgrounds = manifest.style?.backgrounds ?? []
   if (backgrounds.length) out.backgrounds = backgrounds.map(bg => ({ layoutType: bg.layoutType, src: assets[bg.image]?.data, fit: bg.fit }))
   const layouts = manifest.style?.layouts ?? []
@@ -520,6 +536,7 @@ function engineStyle(manifest, assets) {
         ...(image.role ? { role: image.role } : {}), ...(image.svg ? { svg: assets[image.svg]?.data } : {}),
       })),
       ...(layout.textZones ? { textZones: layout.textZones } : {}),
+      ...(layout.textStyles ? { textStyles: clone(layout.textStyles) } : {}),
     }))
   }
   return Object.keys(out).length ? out : undefined
@@ -622,6 +639,14 @@ export function templateFromDeckManifest(deckManifest, options = {}) {
   const brand = deckManifest.brand ?? {}
   if (brand.logoAssetId && deckAssets[brand.logoAssetId]) assetsInput['logo.png'] = dataUriBytes(deckAssets[brand.logoAssetId].data, 'logo')
   const style = { theme: deckManifest.theme }
+  if (deckManifest.style?.textStyles) style.textStyles = clone(deckManifest.style.textStyles)
+  if (deckManifest.style?.fonts?.length) style.fonts = deckManifest.style.fonts.map((face, i) => {
+    const asset = deckAssets[face.assetId]
+    const bytes = Buffer.from(asset.data.split(',')[1], 'base64'), info = fontInfo(bytes)
+    const file = `font-${i + 1}.${info.mime === 'application/x-fontdata' ? 'fntdata' : info.mime === 'font/otf' ? 'otf' : 'ttf'}`
+    assetsInput[file] = bytes
+    return { family: face.family, variant: face.variant, file }
+  })
   const normalizedBrand = {}
   for (const key of ['primaryColor', 'backgroundColor', 'textColor', 'fontFamily', 'name', 'footer']) {
     if (brand[key] !== undefined) normalizedBrand[key] = brand[key]
@@ -653,6 +678,7 @@ export function templateFromDeckManifest(deckManifest, options = {}) {
         entry.images.push(item)
       }
       if (layout.textZones) entry.textZones = layout.textZones
+      if (layout.textStyles) entry.textStyles = clone(layout.textStyles)
       return entry
     })
   }
@@ -805,13 +831,16 @@ export async function templateFromPptx(source, options = {}) {
   let layoutIdByPart = new Map()
   try {
     const found = await extractPptxLayouts({ pres, lib, bytes, slideSize, theme, assets, report, lang })
-    const useful = found.layouts.some(layout => layout.background || layout.backgroundColor || layout.images.length)
+    const useful = found.layouts.length > 0
     if (useful) { style.layouts = found.layouts; layoutIdByPart = found.layoutIdByPart }
-    else for (const key of Object.keys(assets)) delete assets[key]
+    else for (const key of Object.keys(assets)) if (!FONT_EXT.test(key)) delete assets[key]
   } catch (error) {
     report.warnings.push(L(lang, `版式提取失败：${error.message}`, `Layout extraction failed: ${error.message}`, `Не удалось извлечь макеты: ${error.message}`))
-    for (const key of Object.keys(assets)) delete assets[key]
+    for (const key of Object.keys(assets)) if (!FONT_EXT.test(key)) delete assets[key]
   }
+
+  try { Object.assign(style, extractTypography(bytes, style.layouts ?? [], layoutIdByPart, assets, report)) }
+  catch (error) { report.warnings.push(`Не удалось извлечь оформление текста и шрифты: ${error.message}`) }
 
   // 3) 母版 / 版式背景（旧路径，仅当没有可用版式）
   const layouts = style.layouts ? [] : lib.getSlideLayouts(pres)

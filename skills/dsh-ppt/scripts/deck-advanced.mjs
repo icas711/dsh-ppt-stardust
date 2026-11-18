@@ -7,6 +7,7 @@ import { MEDIA_LAYOUTS, mediaBoxes, LOGO_BOX, FOOTER_BOX, chartColors, normalize
 import { normalizeDataModel, prepareDataSlides, validateDataSnapshot, previewDataChange, dataNotes, dataReport } from './deck-data.mjs'
 import { normalizeVisual, applyVisualActions } from './deck-visual.mjs'
 import { normalizeDesignLayouts, pickDesignLayout, layoutAssetIds } from './deck-layouts.mjs'
+import { fontFamily, normalizeTextStyles, embedFontAssets, embedPptxFonts, MAX_FONTS } from './deck-fonts.mjs'
 export { readRenderReceipt } from './deck-render.mjs'
 export { dataNotes, dataReport } from './deck-data.mjs'
 export { buildDeck, buildThemePreview, listThemes, resolveTheme, resolveLanguage } from './deck-core.mjs'
@@ -111,8 +112,7 @@ function normalizeBrand(input, assets, cwd) {
   }
   if (input.fontFamily) {
     const font = String(input.fontFamily).trim()
-    if (font.length > 80 || !/^[\p{L}\p{N} _-]+$/u.test(font)) fail('brand.fontFamily 需单个字体名称，最多 80 字符')
-    brand.fontFamily = font
+    brand.fontFamily = fontFamily(font)
   }
   if (input.name) brand.name = String(input.name).slice(0, 100)
   if (input.footer) {
@@ -131,7 +131,9 @@ function brandedTheme(manifest) {
   if (brand?.primaryColor) theme.palette.accent = brand.primaryColor
   if (brand?.backgroundColor) theme.palette.bg = brand.backgroundColor
   if (brand?.textColor) theme.palette.fg = brand.textColor
-  if (brand?.fontFamily) theme.fonts = { heading: brand.fontFamily, body: brand.fontFamily }
+  if (brand?.fontFamily) theme.fonts = { heading: JSON.stringify(brand.fontFamily), body: JSON.stringify(brand.fontFamily) }
+  if (manifest.style?.textStyles?.title?.fontFamily) theme.fonts.heading = JSON.stringify(manifest.style.textStyles.title.fontFamily)
+  if (manifest.style?.textStyles?.body?.fontFamily) theme.fonts.body = JSON.stringify(manifest.style.textStyles.body.fontFamily)
   return theme
 }
 // Template slide backgrounds by page type: cover / section / content / closing.
@@ -140,6 +142,8 @@ function normalizeStyle(input, assets, cwd) {
   if (typeof input !== 'object' || Array.isArray(input)) fail('style 必须是对象')
   const backgrounds = input.backgrounds ?? []
   const layouts = normalizeDesignLayouts(input.layouts, assets, (image, page) => addAsset(image, assets, cwd, page), fail)
+  const fonts = input.fonts === undefined ? undefined : embedFontAssets(input.fonts, assets)
+  const textStyles = normalizeTextStyles(input.textStyles)
   if (!Array.isArray(backgrounds) || backgrounds.length > 8) fail('style.backgrounds 需为不超过 8 项的数组')
   const seen = new Set(), normalized = []
   for (const [index, bg] of backgrounds.entries()) {
@@ -156,8 +160,8 @@ function normalizeStyle(input, assets, cwd) {
       : addAsset({ src: bg.src }, assets, cwd, `背景 ${type}`)
     normalized.push({ layoutType: type, assetId, fit: bg.fit ?? 'cover' })
   }
-  if (!normalized.length && !layouts) return undefined
-  return { ...(normalized.length ? { backgrounds: normalized } : {}), ...(layouts ? { layouts } : {}) }
+  if (!normalized.length && !layouts && !fonts?.length && !textStyles) return undefined
+  return { ...(normalized.length ? { backgrounds: normalized } : {}), ...(layouts ? { layouts } : {}), ...(fonts?.length ? { fonts } : {}), ...(textStyles ? { textStyles } : {}) }
 }
 function embedSlides(slides, assets, cwd) {
   return slides.map((slide, index) => {
@@ -186,12 +190,15 @@ function collectAssets(manifest) {
   const ids = new Set()
   for (const state of [manifest, ...(manifest.history ?? [])]) {
     if (state.brand?.logoAssetId) ids.add(state.brand.logoAssetId)
+    for (const face of state.style?.fonts ?? []) ids.add(face.assetId)
     for (const bg of state.style?.backgrounds ?? []) ids.add(bg.assetId)
     for (const layout of state.style?.layouts ?? []) for (const id of layoutAssetIds(layout)) ids.add(id)
     for (const slide of state.slides) if (slide.image?.assetId) ids.add(slide.image.assetId)
   }
   manifest.assets = Object.fromEntries([...ids].map(id => [id, manifest.assets[id]]))
-  const size = Object.values(manifest.assets).reduce((sum, asset) => sum + (asset?.data?.length ?? 0), 0)
+  const size = Object.entries(manifest.assets).filter(([id]) => !id.startsWith('font-')).reduce((sum, [, asset]) => sum + (asset?.data?.length ?? 0), 0)
+  const fontSize = Object.entries(manifest.assets).filter(([id]) => id.startsWith('font-')).reduce((sum, [, asset]) => sum + (asset?.data?.length ?? 0), 0)
+  if (fontSize > MAX_FONTS * 1.4) fail('Project fonts exceed 32 MiB')
   if (size > MAX_ASSETS * 1.4) fail('工程内图片总量超过 32 MiB，请压缩图片或减少图片')
 }
 
@@ -416,7 +423,7 @@ const SLIDE_W_IN = 13.333333, SLIDE_H_IN = 7.5
 async function exportPptx(manifest, theme, language, signal) {
   const base = buildPptx({ ...manifest, slides: manifest.slides.map(s => ({ ...s, notes: dataNotes(manifest,s) })) }, theme, language)
   const hasBackgrounds = (Array.isArray(manifest.style?.backgrounds) && manifest.style.backgrounds.some(bg => manifest.assets?.[bg.assetId]?.data)) || Boolean(manifest.style?.layouts?.length)
-  if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !hasBackgrounds && !manifest.slides.some(s => s.image || s.chart)) return base
+  if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !hasBackgrounds && !manifest.slides.some(s => s.image || s.chart)) return embedPptxFonts(base, manifest)
   abort(signal)
   let lib
   try { lib = await import('@office-kit/pptx') } catch (error) { fail('图片、图表和品牌导出需要 @office-kit/pptx@0.21.0。插件请重新安装；独立技能请在技能目录运行 npm install --ignore-scripts。' + error.message) }
@@ -498,7 +505,7 @@ async function exportPptx(manifest, theme, language, signal) {
   if (invalid.length) fail('PPTX 结构校验失败：' + invalid.map(i => i.message).join('；'))
   const bytes = await lib.savePresentation(presentation)
   abort(signal)
-  return Buffer.from(bytes)
+  return embedPptxFonts(Buffer.from(bytes), manifest)
 }
 
 function documentBytes(manifest) {

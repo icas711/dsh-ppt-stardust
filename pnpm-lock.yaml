@@ -26,9 +26,18 @@ importers:
       fflate:
         specifier: 0.8.3
         version: 0.8.3
+      jpeg-js:
+        specifier: 0.4.4
+        version: 0.4.4
       jsep:
         specifier: 1.4.0
         version: 1.4.0
+      mtx-decompressor:
+        specifier: 1.9.0
+        version: 1.9.0
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -195,6 +204,9 @@ packages:
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
+  jpeg-js@0.4.4:
+    resolution: {integrity: sha512-WZzeDOEtTOBK4Mdsar0IqEU5sMr3vSV2RqkAIzUEV2BHnUfKGyswWFPFwK5EeDo93K3FohSHbLAjj0s1Wzd+dg==}
+
   jsep@1.4.0:
     resolution: {integrity: sha512-B7qPcEVE3NVkmSJbaYxvv4cHkVW7DQsZz13pUMrfS8z8Q/BuShN+gcTXrUlPiGqM2/t/EEaI030bpxMqY8gMlw==}
     engines: {node: '>= 10.16.0'}
@@ -202,8 +214,15 @@ packages:
   koffi@3.1.1:
     resolution: {integrity: sha512-mRX6AMeeKCxSOeOopqAcLAl5jcNvge7NAG8l7rF/8gGJATI0tdHFYjteIdE0mGOtWdsrJOij+PjnP8Q9c1gwgA==}
 
+  mtx-decompressor@1.9.0:
+    resolution: {integrity: sha512-gQ+oQRw5BSolUlvO4CjTKgAg2K28cb0aAafdcyN2V9GxsxZAFyfrqyZ7z48f+3CGpnTC2bAeNal2HtNpFunBvQ==}
+
   pako@0.2.9:
     resolution: {integrity: sha512-NUcwaKxUxWrZLpDG+z/xZaCgQITkA/Dv4V/T6bw7VON6l1Xz/VnrBqrYjZQ12TamKHzITTfOEIYUj48y2KXImA==}
+
+  pngjs@7.0.0:
+    resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
+    engines: {node: '>=14.19.0'}
 
   proper-lockfile@4.1.2:
     resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
@@ -375,6 +394,8 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
+  jpeg-js@0.4.4: {}
+
   jsep@1.4.0: {}
 
   koffi@3.1.1:
@@ -395,7 +416,11 @@ snapshots:
       '@koromix/koffi-win32-ia32': 3.1.1
       '@koromix/koffi-win32-x64': 3.1.1
 
+  mtx-decompressor@1.9.0: {}
+
   pako@0.2.9: {}
+
+  pngjs@7.0.0: {}
 
   proper-lockfile@4.1.2:
     dependencies:

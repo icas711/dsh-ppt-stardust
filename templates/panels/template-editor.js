@@ -75,6 +75,7 @@ function tplDraftFrom(manifest) {
         primaryColor: brand.primaryColor ?? '', backgroundColor: brand.backgroundColor ?? '', textColor: brand.textColor ?? '',
         fontFamily: brand.fontFamily ?? '', brandName: brand.name ?? '', footer: brand.footer ?? '', logo: brand.logo ?? '',
         backgrounds, layouts: tplClone(style.layouts ?? []),
+        fonts: tplClone(style.fonts ?? []), textStyles: tplClone(style.textStyles ?? {}),
         outline: tplClone(manifest?.outline ?? []), samples: tplClone(manifest?.samples ?? []),
     };
 }
@@ -90,6 +91,7 @@ function tplCleanLayout(layout) {
         return item;
     }) };
     if (layout.name && layout.name.trim()) out.name = layout.name.trim();
+    if (layout.textStyles) out.textStyles = tplClone(layout.textStyles);
     if (layout.background?.image) out.background = { image: layout.background.image, fit: layout.background.fit || 'cover' };
     if (layout.backgroundColor) out.backgroundColor = layout.backgroundColor;
     if (layout.textZones?.length) out.textZones = layout.textZones.map(zone => ({ kind: zone.kind === 'title' ? 'title' : 'body', x: Math.min(100, Math.max(0, tplNum(zone.x))), y: Math.min(100, Math.max(0, tplNum(zone.y))), w: Math.min(100, Math.max(1, tplNum(zone.w))), h: Math.min(100, Math.max(1, tplNum(zone.h))) }));
@@ -117,6 +119,8 @@ function tplBuild(draft, base) {
     if (draft.footer.trim()) brand.footer = draft.footer;
     if (draft.logo) brand.logo = draft.logo;
     const style = {};
+    if (draft.fonts?.length) style.fonts = tplClone(draft.fonts);
+    if (Object.keys(draft.textStyles ?? {}).length) style.textStyles = tplClone(draft.textStyles);
     if (draft.theme) style.theme = draft.theme;
     if (Object.keys(brand).length) style.brand = brand;
     const backgrounds = TPL_BG_TYPES.filter(type => draft.backgrounds[type]?.image)
@@ -142,7 +146,7 @@ function tplStyleProblem(draft) {
         if (draft[key] && !TPL_HEX.test(draft[key])) return label + tplTr(': нужен формат #RRGGBB', ': use the #RRGGBB format');
     }
     const font = draft.fontFamily.trim();
-    if (font && (font.length > 80 || !/^[\p{L}\p{N} _-]+$/u.test(font))) return tplTr('Шрифт: одно название (буквы, цифры, пробел, дефис)', 'Font: a single family name (letters, digits, space, hyphen)');
+    if (font && (font.length > 128 || !/^[\p{L}\p{N} _().&+\-]+$/u.test(font))) return tplTr('Шрифт: одно название, до 128 символов', 'Font: a single family name, up to 128 characters');
     if (draft.footer.length > 100) return tplTr('Футер: не больше 100 символов', 'Footer: at most 100 characters');
     return '';
 }
@@ -304,7 +308,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
         let live = true;
         action({ operation: 'template-get', templateId: templateKey }).then(value => {
             if (!live) return;
-            setBase(value.template); setDraft(tplDraftFrom(value.template)); setImages(value.template.assetData ?? {});
+            setBase(value.template); setDraft(tplDraftFrom(value.template)); setImages(Object.fromEntries(Object.entries(value.template.assetData ?? {}).filter(([, data]) => data.startsWith('data:image/'))));
         }).catch(e => { if (live) setLoadError(e instanceof Error ? e.message : String(e)); });
         return () => { live = false; };
     }, [templateKey]);
@@ -400,9 +404,10 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
         h(TplColorField, { label: tplTr('Основной цвет (акцент)', 'Primary colour (accent)'), value: draft.primaryColor, fallback: palette.accent, disabled, onChange: value => set({ primaryColor: value }) }),
         h(TplColorField, { label: tplTr('Цвет фона', 'Background colour'), value: draft.backgroundColor, fallback: palette.bg, disabled, onChange: value => set({ backgroundColor: value }) }),
         h(TplColorField, { label: tplTr('Цвет текста', 'Text colour'), value: draft.textColor, fallback: palette.fg, disabled, onChange: value => set({ textColor: value }) }),
-        h('label', null, tplTr('Шрифт', 'Font family'),
-            h('input', { value: draft.fontFamily, list: 'tpe-fonts', disabled, maxLength: 80, placeholder: tplTr('как в теме', 'theme default'), onChange: e => set({ fontFamily: e.target.value }) }),
+        h('label', null, tplTr('Общий шрифт (для ролей без своего шрифта)', 'Default font (for roles without their own font)'),
+            h('input', { value: draft.fontFamily, list: 'tpe-fonts', disabled, maxLength: 128, placeholder: tplTr('как в теме', 'theme default'), onChange: e => set({ fontFamily: e.target.value }) }),
             h('datalist', { id: 'tpe-fonts' }, TPL_FONTS.map(font => h('option', { key: font, value: font })))),
+        draft.fonts?.length ? h('p', { className: 'tpe-hint' }, tplTr('Встроенных начертаний: ', 'Embedded font faces: ') + draft.fonts.length) : null,
         h('label', null, tplTr('Название бренда', 'Brand name'), h('input', { value: draft.brandName, disabled, maxLength: 100, onChange: e => set({ brandName: e.target.value }) })),
         h('label', null, tplTr('Футер', 'Footer'), h('input', { value: draft.footer, disabled, maxLength: 100, onChange: e => set({ footer: e.target.value }) })),
         h(TplImageField, { label: tplTr('Логотип (PNG / JPEG)', 'Logo (PNG / JPEG)'), name: draft.logo, images, disabled, onPick: file => pickImage(file, 'logo', name => set({ logo: name })), onClear: () => set({ logo: '' }) }),

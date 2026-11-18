@@ -221,6 +221,7 @@ function TemplatesPanel({ onCreated }) {
                 h(W.Status, { tone: 'success' }, tplTr('Шаблон создан: ', 'Template created: ') + pptxResult.key),
                 h('ul', { className: 'w-muted' },
                     h('li', null, tplTr('Макетов: ', 'Layouts: ') + (pptxResult.report.layouts ?? 0)),
+                    pptxResult.report.fonts ? h('li', null, tplTr('Шрифты: заголовки — ', 'Fonts: headings — ') + (pptxResult.report.fonts.major || '—') + tplTr(', текст — ', ', body — ') + (pptxResult.report.fonts.minor || '—') + tplTr('; встроенных начертаний: ', '; embedded faces: ') + (pptxResult.report.fonts.embedded ?? 0)) : null,
                     h('li', null, tplTr('Картинок на макетах: ', 'Layout images: ') + (pptxResult.report.layoutStats?.images ?? 0) + tplTr(' (из них векторных SVG: ', ' (vector SVG: ') + (pptxResult.report.layoutStats?.svg ?? 0) + ')'),
                     h('li', null, tplTr('Фонов: ', 'Backgrounds: ') + (pptxResult.report.layoutStats?.backgrounds ?? 0) + tplTr(', цветных плашек: ', ', colour plates: ') + (pptxResult.report.layoutStats?.plates ?? 0)),
                     pptxResult.report.layoutStats?.shrunk ? h('li', null, tplTr('Сжато крупных изображений: ', 'Large images compressed: ') + pptxResult.report.layoutStats.shrunk) : null,

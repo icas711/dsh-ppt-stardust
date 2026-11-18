@@ -305,6 +305,7 @@ export class PptTemplateStore {
 /** Names of the image assets a manifest refers to (logo, backgrounds, slide images). */
 function referencedAssets(manifest: Record<string, any>): Set<string> {
   const names = new Set<string>()
+  for (const face of Array.isArray(manifest?.style?.fonts) ? manifest.style.fonts : []) if (typeof face?.file === 'string') names.add(face.file)
   const logo = manifest?.style?.brand?.logo
   if (typeof logo === 'string') names.add(logo)
   for (const bg of Array.isArray(manifest?.style?.backgrounds) ? manifest.style.backgrounds : []) if (typeof bg?.image === 'string') names.add(bg.image)
