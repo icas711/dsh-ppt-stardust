@@ -1,13 +1,13 @@
+import { extractSlotTypography } from './deck-text-slots.mjs'
 // deck-pptx-layouts.mjs —— извлечение макетов (фон + картинки с положением) из PPTX.
 // Используется templateFromPptx. Положение хранится в долях слайда (%), поэтому не зависит от формата
-// исходного слайда; для не-16:9 (например A4) положение пересчитывается с сохранением физических пропорций.
+// исходного слайда. Размер страницы сохраняется без адаптации под экран.
 
 import { createHash } from 'node:crypto'
 import { deflateSync } from 'node:zlib'
 import { unzipSync, strFromU8 } from 'fflate'
 import { sanitizeSvg, MAX_LAYOUT_IMAGES, MAX_LAYOUTS } from './deck-layouts.mjs'
 
-const TARGET_RATIO = 16 / 9
 const RASTER_SHRINK_BYTES = 700 * 1024     // крупнее — пробуем ужать
 const RASTER_MAX_SIDE = 2560
 const HARD_MAX_ASSET = 5 * 1024 * 1024
@@ -113,10 +113,10 @@ function resolveColor(color, theme) {
 function svgPairs(bytes, report) {
   const pairs = new Map(), files = new Map()
   try {
-    const entries = unzipSync(new Uint8Array(bytes), { filter: file => /^ppt\/(slideLayouts|slideMasters)\/(_rels\/)?[^/]+\.(xml|rels)$/.test(file.name) || /^ppt\/media\/[^/]+\.svg$/i.test(file.name) })
+    const entries = unzipSync(new Uint8Array(bytes), { filter: file => /^ppt\/(slides|slideLayouts|slideMasters)\/(_rels\/)?[^/]+\.(xml|rels)$/.test(file.name) || /^ppt\/media\/[^/]+\.svg$/i.test(file.name) })
     for (const [name, data] of Object.entries(entries)) {
       if (/\.svg$/i.test(name)) { files.set(name.split('/').pop(), Buffer.from(data)); continue }
-      if (!/\/(slideLayouts|slideMasters)\/[^/]+\.xml$/.test(name)) continue
+      if (!/\/(slides|slideLayouts|slideMasters)\/[^/]+\.xml$/.test(name)) continue
       const xml = strFromU8(data), relsName = name.replace(/([^/]+)$/, '_rels/$1.rels'), rels = entries[relsName] ? strFromU8(entries[relsName]) : ''
       const target = id => new RegExp(`<Relationship [^>]*Id="${id}"[^>]*Target="([^"]+)"|<Relationship [^>]*Target="([^"]+)"[^>]*Id="${id}"`).exec(rels)
       for (const blip of xml.matchAll(/<a:blip\b[^>]*\br:embed="(rId\d+)"[^>]*>([\s\S]*?)<\/a:blip>/g)) {
@@ -137,13 +137,21 @@ function svgPairs(bytes, report) {
 export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, assets, report, lang }) {
   const slideW = num(slideSize.width), slideH = num(slideSize.height)
   const srcRatio = slideW / slideH
-  const adapt = Math.abs(srcRatio - TARGET_RATIO) > 0.02
-  const widthScale = adapt ? srcRatio / TARGET_RATIO : 1
-  report.slide = { ratio: round3(srcRatio), adapted: adapt }
+  report.slide = { width: slideW, height: slideH, ratio: round3(srcRatio), adapted: false }
   const { pairs, files: svgFiles } = svgPairs(bytes, report)
   const byHash = new Map()
   const skipped = {}
-  const skip = kind => { skipped[kind] = (skipped[kind] ?? 0) + 1 }
+  const details = new Map()
+  const skip = (kind, shape, ctx, reason = 'Этот тип объекта пока не поддерживается при извлечении оформления') => {
+    const name = shape ? lib.getShapeName(shape) || kind : kind
+    const key = JSON.stringify([ctx?.source, shape ? lib.getShapeId(shape) : name, reason])
+    if (!details.has(key)) {
+      skipped[kind] = (skipped[kind] ?? 0) + 1
+      details.set(key, { kind, name, source: ctx?.source ?? '', sourceLabel: ctx?.sourceLabel ?? '', reason, slides: [] })
+    }
+    const entry = details.get(key)
+    if (ctx?.slide && !entry.slides.includes(ctx.slide)) entry.slides.push(ctx.slide)
+  }
   const stats = { images: 0, backgrounds: 0, plates: 0, svg: 0, shrunk: 0, zones: 0 }
 
   const storeBytes = async (raw, hint) => {
@@ -179,17 +187,15 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
     return plateCache.get(key)
   }
 
-  // Бокс в EMU → доли слайда с пересчётом под 16:9
-  const toBox = bounds => {
-    let x = num(bounds.x) / slideW * 100, y = num(bounds.y) / slideH * 100, w = num(bounds.w) / slideW * 100, h = num(bounds.h) / slideH * 100
-    if (adapt && w < 95) {
-      const nw = w * widthScale, center = x + w / 2
-      if (center < 40) x = x * widthScale
-      else if (center > 60) x = 100 - (100 - (x + w)) * widthScale - nw
-      else x = 50 - nw / 2
-      w = nw
-    }
-    return { x: round3(x), y: round3(y), w: round3(Math.max(w, 0.1)), h: round3(Math.max(h, 0.1)) }
+  // Координаты в процентах исходной страницы, без изменения пропорций.
+  const toBox = bounds => ({ x: round3(num(bounds.x) / slideW * 100), y: round3(num(bounds.y) / slideH * 100),
+    w: round3(Math.max(num(bounds.w) / slideW * 100, 0.1)), h: round3(Math.max(num(bounds.h) / slideH * 100, 0.1)) })
+  const addZone = (shape, bounds, ctx, kind) => {
+    const box = toBox(bounds)
+    const x = Math.max(0, box.x), y = Math.max(0, box.y)
+    const w = Math.min(100, box.x + box.w) - x, h = Math.min(100, box.y + box.h) - y
+    if (w < 1 || h < 1) { skip(lib.getShapeKind(shape), shape, ctx, 'Область контента вне страницы или слишком мала'); return }
+    ctx.zones.push({ kind, x, y, w: round3(w), h: round3(h), ...(kind !== 'image' ? extractSlotTypography(lib, pres, shape) : {}) })
   }
   const project = (bounds, transform) => {
     if (!transform) return bounds
@@ -201,7 +207,11 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
   const collect = async (shapes, push, ctx) => {
     for (const shape of shapes) {
       const kind = lib.getShapeKind(shape)
-      if (lib.isShapePlaceholder(shape)) continue
+      const placeholder = lib.getShapePlaceholderType(shape)
+      if (['sldNum', 'dt', 'ftr', 'hdr'].includes(placeholder)) {
+        if (ctx.level === 'slide') skip(kind, shape, ctx, 'Автоматическое поле номера, даты или колонтитула не переносится')
+        continue
+      }
       if (kind === 'group') {
         const transform = lib.getGroupTransform(shape)
         const children = lib.getGroupChildren(shape)
@@ -211,12 +221,23 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
       }
       if (ctx.nested.has(nestedKey(lib, shape)) && !ctx.transform) continue   // плоская копия вложенной картинки
       const raw = lib.getShapeBoundsResolved(ctx.pres, shape)
-      if (!raw) { skip(kind); continue }
+      if (!raw) { skip(kind, shape, ctx, 'Не удалось определить положение объекта'); continue }
       const bounds = ctx.transform ? project(raw, ctx.transform) : raw
+      const text = String(lib.getShapeText(shape) ?? '').trim()
+      if (kind === 'shape' && (text || lib.isShapePlaceholder(shape))) {
+        if (ctx.level === 'slide' || lib.isShapePlaceholder(shape)) {
+          const title = /title|ctrTitle/.test(placeholder ?? '') || /(^|[\s_])заголовок|(^|[\s_])title/i.test(lib.getShapeName(shape)) || /^(заголовок|title)$/i.test(text)
+          addZone(shape, bounds, ctx, title ? 'title' : 'body')
+        } else skip(kind, shape, ctx, 'Статический текст оформления требует ручного переноса')
+        continue
+      }
       if (kind === 'picture' && lib.hasShapeImage(shape)) {
+        const box = toBox(bounds)
+        const logo = /logo|логотип|эмблем/i.test(lib.getShapeName(shape)) || (box.w <= 30 && box.h <= 20 && (box.y < 25 || box.y > 75))
+        if (ctx.level === 'slide' && !logo) { addZone(shape, bounds, ctx, 'image'); continue }
         const data = lib.getShapeImageBytes(shape)
         const name = data ? await storeBytes(data, lib.getShapeName(shape)) : null
-        if (!name) { skip('picture'); continue }
+        if (!name) { skip('picture', shape, ctx, 'Изображение не удалось прочитать или оно превышает лимит'); continue }
         const svg = storeSvg(lib.getShapeImagePartName(shape))
         push({ image: name, ...(svg ? { svg } : {}), ...toBox(bounds), fit: 'fill', hint: lib.getShapeName(shape) })
         stats.images++
@@ -232,52 +253,76 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
           continue
         }
       }
-      skip(kind)
+      skip(kind, shape, ctx)
     }
   }
 
-  const layouts = [], layoutIdByPart = new Map(), partNames = new Set()
-  for (const layout of lib.getSlideLayouts(pres)) {
-    if (layouts.length >= MAX_LAYOUTS) { skip('layout'); continue }
-    const part = lib.getSlideLayoutPartName(layout)
-    const number = /(\d+)\.xml$/.exec(part)?.[1] ?? String(layouts.length + 1)
-    let id = `layout-${number}`
-    while (partNames.has(id)) id += 'x'
-    partNames.add(id)
-    const name = lib.getSlideLayoutName(layout) || id
-    const entry = { id, name: name.slice(0, 80), layoutType: layoutTypeByName(name), images: [] }
-
-    // фон: картинка макета → картинка мастера → однотонный цвет
-    const bgBytes = lib.getSlideLayoutBackgroundImageBytes(pres, layout) ?? lib.getSlideMasterBackgroundImageBytes(pres, layout)
+  const layouts = [], layoutIdByPart = new Map(), layoutIdBySlide = new Map()
+  const families = new Map(), variants = new Map()
+  const slides = lib.getSlides(pres)
+  for (const [index, slide] of slides.entries()) {
+    const layout = lib.getSlideLayout(slide)
+    const part = layout ? lib.getSlideLayoutPartName(layout) : ''
+    const name = layout ? lib.getSlideLayoutName(layout) : `Слайд ${index + 1}`
+    const slideTitle = lib.getSlideTitle(slide) || lib.getSlideShapes(slide).filter(s => /^(title|заголовок)(?:[ _]|$)/i.test(lib.getShapeName(s))).map(s => lib.getShapeText(s)).join(' ')
+    const closing = index === slides.length - 1 && index > 0 && /^(контакты|спасибо|благодар|thank(?:s| you)|contact)/i.test(slideTitle.trim())
+    const entry = { id: `layout-${index + 1}`, name: name.slice(0, 80), layoutType: index === 0 ? 'cover' : closing ? 'closing' : layoutTypeByName(name), images: [] }
+    const slideBg = lib.getSlideBackground(slide)
+    const bgBytes = lib.getSlideBackgroundImageBytes(slide) ?? (slideBg?.kind === 'inherit' && layout ? (lib.getSlideLayoutBackgroundImageBytes(pres, layout) ?? lib.getSlideMasterBackgroundImageBytes(pres, layout)) : null)
     if (bgBytes) {
       const bgName = await storeBytes(bgBytes, `фон «${name}»`)
       if (bgName) { entry.background = { image: bgName, fit: 'cover' }; stats.backgrounds++ }
     } else {
-      const bg = lib.getSlideLayoutBackground(layout)
+      const bg = slideBg?.kind === 'solid' ? slideBg : layout && (lib.getSlideLayoutBackground(layout) ?? lib.getSlideMasterBackground(pres, layout))
       const color = bg?.kind === 'solid' ? resolveColor(bg.color, theme) : undefined
       if (color) entry.backgroundColor = color
     }
-
-    const found = []
-    const ctx = { pres, theme, nested: new Set(), transform: null }
-    // мастер → макет; вложенные дубликаты отсекаются по nestedKey
-    await collect(lib.getSlideMasterShapes(pres, layout), box => found.push(box), { ...ctx, nested: new Set() })
-    await collect(lib.getSlideLayoutShapes(pres, layout), box => found.push(box), ctx)
-    if (found.length > MAX_LAYOUT_IMAGES) { skip('image-over-limit'); found.length = MAX_LAYOUT_IMAGES }
-    entry.images = found.map((box, index) => {
-      const { hint, ...rest } = box
-      // Полноэкранная картинка без фона макета считается фоном
-      return { ...rest, z: index, role: rest.role ?? roleOf(rest) }
-    })
-    const zone = deriveTextZone(entry.images)
-    if (zone) { entry.textZones = [zone]; stats.zones++ }
-    layouts.push(entry)
-    layoutIdByPart.set(part, id)
+    const found = [], inherited = [], local = []
+    const ctx = { pres, theme, nested: new Set(), transform: null, slide: index + 1 }
+    if (layout) {
+      await collect(lib.getSlideMasterShapes(pres, layout), box => found.push(box), { ...ctx, nested: new Set(), level: 'master', source: lib.getSlideMasterPartName(slide), sourceLabel: 'Образец слайдов', zones: inherited })
+      await collect(lib.getSlideLayoutShapes(pres, layout), box => found.push(box), { ...ctx, nested: new Set(), level: 'layout', source: part, sourceLabel: `Макет «${name}»`, zones: inherited })
+    }
+    await collect(lib.getSlideShapes(slide), box => found.push(box), { ...ctx, nested: new Set(), level: 'slide', source: lib.getSlidePartName(slide), sourceLabel: `Слайд ${index + 1}`, zones: local })
+    for (const box of found.slice(MAX_LAYOUT_IMAGES)) skip('picture', null, ctx, 'Превышен лимит изображений макета')
+    entry.images = found.slice(0, MAX_LAYOUT_IMAGES).map((box, z) => { const { hint, ...rest } = box; return { ...rest, z, role: rest.role ?? roleOf(rest) } })
+    // Реальные области слайда имеют приоритет над заполнителями мастера/макета.
+    const zones = local.length ? local : inherited
+    const unique = [...new Map(zones.map(zone => [JSON.stringify(zone), zone])).values()]
+    if (unique.length) entry.textZones = unique.slice(0, 6)
+    else { const zone = deriveTextZone(entry.images); if (zone) entry.textZones = [zone] }
+    if (unique.length > 6) skip('content-area', null, ctx, 'Превышен лимит: 6 областей контента в варианте макета')
+    if (entry.layoutType === 'content' && !entry.textZones?.some(z => z.kind === 'body')) {
+      const derived = deriveTextZone(entry.images) ?? { kind: 'body', x: 6, y: 22, w: 88, h: 71 }
+      const top = Math.max(derived.y, ...((entry.textZones ?? []).filter(z => z.kind === 'title').map(z => z.y + z.h + 2)))
+      if (top < 92 && (entry.textZones?.length ?? 0) < 6) entry.textZones = [...(entry.textZones ?? []), { ...derived, y: round3(top), h: round3(93 - top) }]
+    }
+    stats.zones += entry.textZones?.length ?? 0
+    const signature = JSON.stringify([entry.background ?? null, entry.backgroundColor ?? null, entry.images])
+    const familyKey = JSON.stringify([entry.background ?? null, entry.backgroundColor ?? null, entry.images.map(image => ({ ...image, x: Math.round(image.x), y: Math.round(image.y), w: Math.round(image.w), h: Math.round(image.h) }))])
+    if (!families.has(familyKey)) families.set(familyKey, `family-${families.size + 1}`)
+    entry.familyId = families.get(familyKey)
+    const formats = [...new Set(lib.getSlideShapes(slide).flatMap(shape => [...lib.getShapeXmlString(shape).matchAll(/<a:(?:rPr|defRPr)\b[^>]*(?:\/>|>[\s\S]*?<\/a:(?:rPr|defRPr)>)/g)].map(m => m[0].replace(/ (?:lang|dirty)="[^"]*"/g, ''))))].sort()
+    const variantKey = JSON.stringify([signature, entry.layoutType, entry.textZones ?? [], formats])
+    let id = variants.get(variantKey)
+    if (!id) {
+      if (layouts.length >= MAX_LAYOUTS) { skip('layout', null, ctx, `Превышен лимит: ${MAX_LAYOUTS} вариантов макета`); continue }
+      id = entry.id
+      variants.set(variantKey, id)
+      layouts.push(entry)
+    }
+    layoutIdBySlide.set(lib.getSlidePartName(slide), id)
+    // Типографика извлекается из конкретного слайда, а не первого слайда данного макета.
+    layoutIdByPart.set(lib.getSlidePartName(slide), id)
   }
-  report.layouts = layouts.length
+  report.layouts = new Set(layouts.map(l => l.familyId)).size
+  report.layoutVariants = layouts.length
+  report.sourceSlides = slides.length
   report.layoutStats = stats
   report.skippedShapes = skipped
-  return { layouts, layoutIdByPart }
+  report.skippedObjects = [...details.values()]
+  return { layouts, layoutIdByPart, layoutIdBySlide }
+
 }
 
 function roleOf(box) {

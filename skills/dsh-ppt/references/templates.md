@@ -18,8 +18,8 @@ offer them, never pass `theme` to `ppt_create` when a `templateId` is used.
   `textColor`), font, logo, footer, per-page-type backgrounds
   (`cover / section / content / closing`), and optional layouts
   `style.layouts[]` (each: background image/color, positioned images with
-  `z` order, `textZones`). Up to 16 layouts, up to 12 images per layout;
-  coordinates are percent of the slide.
+  `z` order, `textZones`). Up to 120 layout variants, up to 12 images per layout;
+  coordinates are percent of the slide. `style.pageSize` stores exact physical dimensions in EMU; preserve these for print and screen decks. PPTX import uses actual slides, groups common artwork with `familyId`, and replaces content with positioned title/body/image areas. Unused internal layouts are excluded; losses are listed by object, source, affected slides and reason.
 - **Typography**: `style.textStyles` supplies default role styles; each layout
   can override them with `textStyles`. Roles are `title`, `subtitle`, `body`,
   `kicker`, `footer`, `caption`, `quote`, `attribution`, `table`. Each role stores

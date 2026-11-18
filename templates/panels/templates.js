@@ -223,18 +223,18 @@ function TemplatesPanel({ onCreated }) {
             pptxResult ? h('div', { className: 'ppt-tpl-import' },
                 h(W.Status, { tone: 'success' }, tplTr('Шаблон создан: ', 'Template created: ') + pptxResult.key),
                 h('ul', { className: 'w-muted' },
-                    h('li', null, tplTr('Макетов: ', 'Layouts: ') + (pptxResult.report.layouts ?? 0)),
+                    h('li', null, tplTr('Групп оформления: ', 'Design groups: ') + (pptxResult.report.layouts ?? 0) + tplTr(', вариантов структуры: ', ', structure variants: ') + (pptxResult.report.layoutVariants ?? pptxResult.report.layouts ?? 0)),
                     pptxResult.report.fonts ? h('li', null, tplTr('Шрифты: заголовки — ', 'Fonts: headings — ') + (pptxResult.report.fonts.major || '—') + tplTr(', текст — ', ', body — ') + (pptxResult.report.fonts.minor || '—') + tplTr('; встроенных начертаний: ', '; embedded faces: ') + (pptxResult.report.fonts.embedded ?? 0)) : null,
                     pptxResult.report.fonts?.library ? h('li', null, tplTr('Начертаний добавлено из личной библиотеки: ', 'Faces added from your font library: ') + pptxResult.report.fonts.library) : null,
                     h('li', null, tplTr('Картинок на макетах: ', 'Layout images: ') + (pptxResult.report.layoutStats?.images ?? 0) + tplTr(' (из них векторных SVG: ', ' (vector SVG: ') + (pptxResult.report.layoutStats?.svg ?? 0) + ')'),
                     h('li', null, tplTr('Фонов: ', 'Backgrounds: ') + (pptxResult.report.layoutStats?.backgrounds ?? 0) + tplTr(', цветных плашек: ', ', colour plates: ') + (pptxResult.report.layoutStats?.plates ?? 0)),
                     pptxResult.report.layoutStats?.shrunk ? h('li', null, tplTr('Сжато крупных изображений: ', 'Large images compressed: ') + pptxResult.report.layoutStats.shrunk) : null,
-                    pptxResult.report.slide?.adapted ? h('li', null, tplTr('Формат слайда исходника ', 'Source slide ratio ') + pptxResult.report.slide.ratio + tplTr(' пересчитан под 16:9.', ' was adapted to 16:9.')) : null,
-                    Object.keys(pptxResult.report.skippedShapes ?? {}).length ? h('li', null, tplTr('Пропущено: ', 'Skipped: ') + Object.entries(pptxResult.report.skippedShapes).map(([k, v]) => k + ' ×' + v).join(', ')) : null,
+                    pptxResult.report.slide ? h('li', null, tplTr('Размер сохранён: ', 'Original size preserved: ') + (pptxResult.report.slide.width / 36000).toFixed(2) + ' × ' + (pptxResult.report.slide.height / 36000).toFixed(2) + tplTr(' мм', ' mm')) : null,
+                    ...(pptxResult.report.skippedObjects ?? []).map((item, i) => h('li', { key: 'skip-' + i }, tplTr('Пропущен объект «', 'Skipped object “') + item.name + tplTr('». Слайды: ', '”. Slides: ') + item.slides.join(', ') + '. ' + (item.sourceLabel || item.source) + ': ' + item.reason)),
                     (pptxResult.report.warnings ?? []).map((w, i) => h('li', { key: i }, w))),
                 h(W.Button, { variant: 'primary', onClick: () => { setPptxOpen(false); setEditing({ key: pptxResult.key, nonce: 0 }); } }, tplTr('Открыть в редакторе', 'Open in editor')))
             : h('div', { className: 'ppt-tpl-import' },
-                h('p', { className: 'w-muted' }, tplTr('Фон, логотипы, декор и их положение берутся из макетов PPTX. Файл до 64 MiB; крупные картинки сжимаются на сервере.', 'Backgrounds, logos, decor and their positions come from the PPTX layouts. Up to 64 MiB; large images are compressed on the server.')),
+                h('p', { className: 'w-muted' }, tplTr('Шаблон строится по существующим слайдам. Общее оформление объединяется, структура контента сохраняется в вариантах. Размер страницы сохраняется. Файл до 64 MiB; крупные картинки сжимаются на сервере.', 'The template uses actual slides, grouping common artwork with content structure variants. Original page dimensions are preserved. Up to 64 MiB; large images are compressed on the server.')),
                 h('input', { type: 'file', accept: '.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation', onChange: e => {
                     const file = e.target.files?.[0] ?? null; setPptxFile(file);
                     if (file && !pptxName) setPptxName(file.name.replace(/\.pptx$/i, '').slice(0, 80));

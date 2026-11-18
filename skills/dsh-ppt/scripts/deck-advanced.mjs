@@ -1,3 +1,4 @@
+import { normalizePageSize, pageSize } from './deck-page.mjs'
 import { mkdirSync, readFileSync, statSync, openSync, closeSync, rmSync, existsSync, unlinkSync } from 'node:fs'
 import { resolve, dirname, extname, basename, join, isAbsolute } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
@@ -7,7 +8,7 @@ import { MEDIA_LAYOUTS, mediaBoxes, LOGO_BOX, FOOTER_BOX, chartColors, normalize
 import { normalizeDataModel, prepareDataSlides, validateDataSnapshot, previewDataChange, dataNotes, dataReport } from './deck-data.mjs'
 import { normalizeVisual, applyVisualActions } from './deck-visual.mjs'
 import { normalizeDesignLayouts, pickDesignLayout, layoutAssetIds } from './deck-layouts.mjs'
-import { fontFamily, normalizeTextStyles, embedFontAssets, embedPptxFonts, MAX_FONTS } from './deck-fonts.mjs'
+import { fontFamily, normalizeTextStyles, normalizeThemeFonts, embedFontAssets, embedPptxFonts, MAX_FONTS } from './deck-fonts.mjs'
 import { projectPaths, storedProjectPaths, pluginStorageDir } from './deck-storage.mjs'
 export { readRenderReceipt } from './deck-render.mjs'
 export { dataNotes, dataReport } from './deck-data.mjs'
@@ -141,6 +142,8 @@ function brandedTheme(manifest) {
 function normalizeStyle(input, assets, cwd) {
   if (input === undefined || input === null) return undefined
   if (typeof input !== 'object' || Array.isArray(input)) fail('style 必须是对象')
+  const pageSize = normalizePageSize(input.pageSize)
+  const themeFonts = normalizeThemeFonts(input.themeFonts)
   const backgrounds = input.backgrounds ?? []
   const layouts = normalizeDesignLayouts(input.layouts, assets, (image, page) => addAsset(image, assets, cwd, page), fail)
   const fonts = input.fonts === undefined ? undefined : embedFontAssets(input.fonts, assets)
@@ -161,8 +164,8 @@ function normalizeStyle(input, assets, cwd) {
       : addAsset({ src: bg.src }, assets, cwd, `背景 ${type}`)
     normalized.push({ layoutType: type, assetId, fit: bg.fit ?? 'cover' })
   }
-  if (!normalized.length && !layouts && !fonts?.length && !textStyles) return undefined
-  return { ...(normalized.length ? { backgrounds: normalized } : {}), ...(layouts ? { layouts } : {}), ...(fonts?.length ? { fonts } : {}), ...(textStyles ? { textStyles } : {}) }
+  if (!normalized.length && !layouts && !fonts?.length && !textStyles && !pageSize && !themeFonts) return undefined
+  return { ...(themeFonts ? { themeFonts } : {}), ...(pageSize ? { pageSize } : {}), ...(normalized.length ? { backgrounds: normalized } : {}), ...(layouts ? { layouts } : {}), ...(fonts?.length ? { fonts } : {}), ...(textStyles ? { textStyles } : {}) }
 }
 function embedSlides(slides, assets, cwd) {
   return slides.map((slide, index) => {
@@ -390,7 +393,9 @@ export function checkManifest(manifest) {
     const lines = bullets.reduce((sum, b) => sum + Math.max(1, Math.ceil(textWidth(b) / width)), 0)
       + (slide.subtitle ? Math.ceil(textWidth(slide.subtitle) / width) : 0)
     if (lines > (mixed ? 9 : 11)) issue(i, 'body-overflow')
-    if ([slide.title, slide.subtitle, ...bullets].some(s => /待填写|To fill:|Заполнить:/i.test(String(s)))) issue(i, 'template-unfilled')
+    const design = pickDesignLayout(manifest.style?.layouts, slide, backgroundTypeOfLayout(slide.layout))
+    const missingImage = design?.familyId && (design.textZones?.filter(z => z.kind === 'image').length ?? 0) > (slide.image ? 1 : 0)
+    if (missingImage || [slide.title, slide.subtitle, ...bullets].some(s => /待填写|To fill:|Заполнить:/i.test(String(s)))) issue(i, 'template-unfilled')
     if (slide.layout === 'table') {
       if ((slide.rows?.[0]?.length ?? 0) > 6) issue(i, 'small-font')
       if (slide.rows?.some(row => row.some(c => textWidth(c) > 18))) issue(i, 'table-density')
@@ -420,8 +425,8 @@ export function checkManifest(manifest) {
     noteRu: 'Размеры текста и переполнение — статическая оценка; итоговую вёрстку проверяйте в HTML-показе и в PowerPoint / WPS. Мелкий текст колонтитула и номеров страниц телом слайда не считается.' }
 }
 
-const SLIDE_W_IN = 13.333333, SLIDE_H_IN = 7.5
 async function exportPptx(manifest, theme, language, signal) {
+  const size = pageSize(manifest), SLIDE_W_IN = size.width / 914400, SLIDE_H_IN = size.height / 914400
   const base = buildPptx({ ...manifest, slides: manifest.slides.map(s => ({ ...s, notes: dataNotes(manifest,s) })) }, theme, language)
   const hasBackgrounds = (Array.isArray(manifest.style?.backgrounds) && manifest.style.backgrounds.some(bg => manifest.assets?.[bg.assetId]?.data)) || Boolean(manifest.style?.layouts?.length)
   if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !hasBackgrounds && !manifest.slides.some(s => s.image || s.chart)) return embedPptxFonts(base, manifest)
@@ -430,6 +435,7 @@ async function exportPptx(manifest, theme, language, signal) {
   try { lib = await import('@office-kit/pptx') } catch (error) { fail('图片、图表和品牌导出需要 @office-kit/pptx@0.21.0。插件请重新安装；独立技能请在技能目录运行 npm install --ignore-scripts。' + error.message) }
   abort(signal)
   const presentation = await lib.loadPresentation(base), slides = lib.getSlides(presentation)
+  const scaleBox = box => ({ x: box.x * SLIDE_W_IN / 13.3333333333, y: box.y * SLIDE_H_IN / 7.5, w: box.w * SLIDE_W_IN / 13.3333333333, h: box.h * SLIDE_H_IN / 7.5 })
   const emu = box => Object.fromEntries(Object.entries(box).map(([k, v]) => [k, Math.round(v * 914400)]))
   // 模板背景：按页面类型铺底图（cover / section / content / closing）
   const backgrounds = Array.isArray(manifest.style?.backgrounds) ? manifest.style.backgrounds : []
@@ -467,6 +473,7 @@ async function exportPptx(manifest, theme, language, signal) {
     if (!layout) return
     const slide = slides[index], bgAsset = layout.backgroundAssetId && manifest.assets?.[layout.backgroundAssetId]
     const layers = []
+    if (layout.backgroundColor) lib.setSlideBackground(slide, layout.backgroundColor)
     if (bgAsset?.data) layers.push(['Template background', layout.backgroundAssetId, { x: 0, y: 0, w: SLIDE_W_IN, h: SLIDE_H_IN }, layout.fit === 'contain' ? 'contain' : 'cover'])
     for (const image of [...(layout.images ?? [])].sort((a, b) => a.z - b.z)) {
       if (!manifest.assets?.[image.assetId]?.data) continue
@@ -479,11 +486,14 @@ async function exportPptx(manifest, theme, language, signal) {
   manifest.slides.forEach((source, index) => {
     abort(signal)
     const slide = slides[index], boxes = mediaBoxes(source.layout)
-    if (source.image) putImage(slide, source.image.assetId, boxes.image, source.image.fit, 'Slide image', source.image.alt)
+    const design = pickDesignLayout(manifest.style?.layouts, source, backgroundTypeOfLayout(source.layout))
+    const imageZone = design?.familyId && design.textZones?.find(z => z.kind === 'image')
+    const imageBox = imageZone ? { x: imageZone.x / 100 * SLIDE_W_IN, y: imageZone.y / 100 * SLIDE_H_IN, w: imageZone.w / 100 * SLIDE_W_IN, h: imageZone.h / 100 * SLIDE_H_IN } : scaleBox(boxes.image)
+    if (source.image) putImage(slide, source.image.assetId, imageBox, source.image.fit, 'Slide image', source.image.alt)
     if (source.chart) {
       const colors = chartColors(theme), font = pptxEastAsianFont(theme.fonts.body)
       const style = { font, sizePt: source.visual?.chartLabelSize ?? 17, color: theme.palette.fg }
-      lib.addSlideChart(slide, { ...emu(boxes.chart), name: 'Editable data chart', spec: {
+      lib.addSlideChart(slide, { ...emu(scaleBox(boxes.chart)), name: 'Editable data chart', spec: {
         kind: source.chart.kind, categories: source.chart.categories,
         series: source.chart.series.map((s, i) => ({ ...s, color: colors[i], ...(source.chart.kind === 'pie' ? { pointColors: source.chart.categories.map((_, j) => colors[j % colors.length]) } : {}) })),
         chartAreaFill: theme.palette.bg, chartAreaStrokeColor: theme.palette.bg, plotAreaFill: theme.palette.bg,
@@ -496,9 +506,9 @@ async function exportPptx(manifest, theme, language, signal) {
         legend: { position: 'b', textStyle: style },
       } })
     }
-    if (manifest.brand?.logoAssetId) putImage(slide, manifest.brand.logoAssetId, LOGO_BOX, 'contain', 'Brand logo', manifest.brand.name)
+    if (manifest.brand?.logoAssetId) putImage(slide, manifest.brand.logoAssetId, scaleBox(LOGO_BOX), 'contain', 'Brand logo', manifest.brand.name)
     if (manifest.brand?.footer) {
-      const footer = lib.addSlideTextBox(slide, { ...emu(FOOTER_BOX), text: manifest.brand.footer, name: 'Brand footer' })
+      const footer = lib.addSlideTextBox(slide, { ...emu(scaleBox(FOOTER_BOX)), text: manifest.brand.footer, name: 'Brand footer' })
       lib.setShapeTextFormat(footer, { size: 10, font: pptxEastAsianFont(theme.fonts.body), color: theme.palette.muted })
     }
   })

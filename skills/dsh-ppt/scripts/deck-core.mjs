@@ -1,4 +1,6 @@
 #! /usr/bin/env node
+import { zoneContents } from './deck-zones.mjs'
+import { pageSize, resizeSlideXml } from './deck-page.mjs'
 /**
  * deck-core.mjs —— dsh-ppt 的零依赖演示文稿引擎。
  *
@@ -22,7 +24,7 @@ import { renderDelivery } from './deck-delivery.mjs'
 import { renderDataView } from './deck-data-view.mjs'
 import { normalizeVisual, visualHtmlStyle, visualShapeXml, VISUAL_CSS } from './deck-visual.mjs'
 import { LAYOUT_CSS, pickDesignLayout, renderLayoutLayer, zoneInnerStyle, remapTextShapes } from './deck-layouts.mjs'
-import { typographyCss, applyTextStylesPptx } from './deck-fonts.mjs'
+import { typographyCss, applyTextStylesPptx, slotColorXml } from './deck-fonts.mjs'
 
 /**
  * manifest 版本跟随发布包 package.json；把 skills/dsh-ppt 独立复制到其他
@@ -1157,6 +1159,7 @@ export function renderHtml(manifest, theme, language, files = {}) {
   const t = theme
   const lang = language
   const ui = lang.ui
+  const size = pageSize(manifest)
   const motion = manifest.motion !== false
   // 模板页面背景（按页面类型 cover/section/content/closing），z-index 与 ::before 装饰层同为 -1，
   // ::after 声明在后因此绘制在其上、正文之下。
@@ -1213,11 +1216,11 @@ body{
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
 }
 #stage{position:fixed;inset:0}
-.slide-frame{position:fixed;inset:0;pointer-events:none}
+.slide-frame{position:fixed;inset:0;margin:auto;width:min(100vw,${100 * size.width / size.height}vh);height:min(100vh,${100 * size.height / size.width}vw);pointer-events:none}
 .slide-frame.is-current,body.overview .slide-frame{pointer-events:auto}
 .slide{
   position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
-  padding:clamp(34px,7vw,110px);overflow:hidden;
+  padding:clamp(34px,7vw,110px);overflow:hidden;container-type:inline-size;
 }
 .slide::before{
   content:"";position:absolute;inset:-20%;pointer-events:none;z-index:-1;
@@ -1349,7 +1352,7 @@ body.overview #stage{
   padding:18px 18px 92px;position:fixed;inset:0;overflow:auto;align-content:start;
 }
 body.overview .slide-frame{
-  position:relative;inset:auto;width:100%;aspect-ratio:16/9;overflow:hidden;
+  position:relative;inset:auto;width:100%;aspect-ratio:${size.width}/${size.height};overflow:hidden;
   border:1px solid color-mix(in srgb, var(--muted) 35%, transparent);border-radius:12px;
   cursor:pointer;background:var(--bg);outline:none;
 }
@@ -1363,12 +1366,12 @@ body.overview .slide-frame::after{
   padding:1px 7px;font-variant-numeric:tabular-nums;
 }
 body.overview .slide{
-  display:flex !important;position:absolute;inset:0;width:1280px;height:720px;
+  display:flex !important;position:absolute;inset:0;width:1280px;height:${1280 * size.height / size.width}px;
   transform:scale(var(--deck-thumb-scale,.25));transform-origin:top left;pointer-events:none;
   animation:none !important;
 }
 body.overview .bullets li{opacity:1 !important;animation:none !important}
-body.overview .media-canvas{width:1280px;height:720px}
+body.overview .media-canvas{width:1280px;height:${1280 * size.height / size.width}px}
 body.overview #notes-panel,body.presenting #notes-panel{display:none !important}
 body.presenting #notes-toggle{opacity:.55}
 body.presenting #hud{opacity:0;pointer-events:none;transition:opacity .25s}
@@ -1395,9 +1398,10 @@ body.presenting #hud:hover{opacity:1;pointer-events:auto}
   *,*::before,*::after{animation:none !important;transition:none !important}
 }
 @media print{
+  @page{size:${size.width / 36000}mm ${size.height / 36000}mm;margin:0}
   html,body{height:auto;overflow:visible;background:#fff}
-  .slide-frame{position:relative;display:block !important}
-  .slide{position:relative;display:block !important;height:100vh;page-break-after:always;padding:48px}
+  .slide-frame{position:relative;display:block !important;width:${size.width / 36000}mm;height:${size.height / 36000}mm;margin:0}
+  .slide{position:relative;display:block !important;height:100%;page-break-after:always;padding:48px}
   ${motion ? 'body.motion .bullets li{opacity:1 !important;animation:none !important}' : ''}
   #progress,#hud,#notes-panel,#help-panel,#toast{display:none !important}
 }
@@ -1552,7 +1556,7 @@ ${slides}
       const width = frames[0] ? frames[0].getBoundingClientRect().width : 0;
       if (width > 0) {
         document.documentElement.style.setProperty('--deck-thumb-scale', String(width / 1280));
-        document.documentElement.style.setProperty('--deck-thumb-height', String(width * 9 / 16) + 'px');
+        document.documentElement.style.setProperty('--deck-thumb-height', String(width * ${size.height} / ${size.width}) + 'px');
       }
     });
   }
@@ -1591,12 +1595,12 @@ ${slides}
       '.card{background:var(--panel);border:1px solid color-mix(in srgb, var(--muted) 30%, transparent);border-radius:12px;padding:10px 12px;min-height:0;display:flex;flex-direction:column;gap:6px}',
       '.card-notes{flex:1}',
       '.lbl{color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}',
-      '.pv{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:8px;background:var(--bg);border:1px solid color-mix(in srgb, var(--muted) 25%, transparent);--pv-scale:.3}',
+      '.pv{position:relative;width:100%;aspect-ratio:${size.width}/${size.height};overflow:hidden;border-radius:8px;background:var(--bg);border:1px solid color-mix(in srgb, var(--muted) 25%, transparent);--pv-scale:.3}',
       '.pv-slide{position:absolute;left:0;top:0;transform:translate(var(--pv-x,0px),var(--pv-y,0px)) scale(var(--pv-scale,.25));transform-origin:top left}',
       '.pv-slide .slide{display:flex !important;position:absolute;left:0;top:0;width:100vw;height:100vh;animation:none !important}',
       '.pv-slide .bullets li{opacity:1 !important;animation:none !important}',
       '#thumbs{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}',
-      '#thumbs .thumb{position:relative;flex:0 0 128px;aspect-ratio:16/9;border-radius:8px;overflow:hidden;border:1px solid color-mix(in srgb, var(--muted) 35%, transparent);cursor:pointer;background:var(--bg);--pv-scale:.09}',
+      '#thumbs .thumb{position:relative;flex:0 0 128px;aspect-ratio:${size.width}/${size.height};border-radius:8px;overflow:hidden;border:1px solid color-mix(in srgb, var(--muted) 35%, transparent);cursor:pointer;background:var(--bg);--pv-scale:.09}',
       '#thumbs .thumb.is-current{outline:2px solid var(--accent);outline-offset:1px}',
       '#pnotes{font-size:var(--notes-size,19px);line-height:1.6;white-space:pre-wrap;overflow:auto;flex:1}',
       'footer{display:flex;align-items:center;gap:8px;padding:9px 16px;border-top:1px solid color-mix(in srgb, var(--muted) 40%, transparent);flex-wrap:wrap}',
@@ -1899,10 +1903,31 @@ function renderHtmlSlide(slide, index, ui, langId, manifest = {}, theme) {
   const notesAttr = typeof slide.notes === 'string' && slide.notes.trim() !== ''
     ? ' data-notes="' + escapeHtml(slide.notes) + '"'
     : ''
+  const slots = zoneContents(slide, designLayout)
+  if (slots && !['table', 'chart'].includes(slide.layout)) {
+    inner = slots.map(({ zone, role, lines, filled }) => {
+      const pos = `position:absolute;left:${zone.x}%;top:${zone.y}%;width:${zone.w}%;height:${zone.h}%;overflow:hidden;margin:0;max-width:none;box-sizing:border-box`
+      if (role === 'image' && filled) {
+        const src = manifest.assets?.[slide.image.assetId]?.data ?? ''
+        return '<img alt="' + escapeHtml(slide.image.alt || '') + '" src="' + escapeHtml(src) + '" style="' + pos + ';object-fit:' + (slide.image.fit === 'fill' ? 'fill' : slide.image.fit === 'cover' ? 'cover' : 'contain') + '"/>'
+      }
+      const slotStyle = { ...manifest.style?.textStyles?.[role], ...designLayout.textStyles?.[role], ...zone.textStyle }
+      const frame = zone.textFrame, physicalSize = pageSize(manifest)
+      const unit = emu => `${emu / physicalSize.width * 100}cqw`
+      const fontCss = (slotStyle.fontFamily ? `font-family:${JSON.stringify(slotStyle.fontFamily)}!important;` : '') +
+        (slotStyle.size !== undefined ? `font-size:${unit(slotStyle.size * 12700)}!important;` : '') +
+        (slotStyle.bold !== undefined ? `font-weight:${slotStyle.bold ? 700 : 400}!important;` : '') +
+        (slotStyle.italic !== undefined ? `font-style:${slotStyle.italic ? 'italic' : 'normal'}!important;` : '') +
+        (slotStyle.color ? `color:${slotStyle.color}!important;` : '')
+      const frameCss = frame ? `;display:flex;flex-direction:column;justify-content:${({ top: 'flex-start', center: 'center', bottom: 'flex-end' })[frame.anchor ?? 'top']};text-align:${frame.align ?? 'left'};padding:${unit(frame.margins?.top ?? 45720)} ${unit(frame.margins?.right ?? 91440)} ${unit(frame.margins?.bottom ?? 45720)} ${unit(frame.margins?.left ?? 91440)};line-height:${frame.lineSpacing?.kind === 'pct' ? frame.lineSpacing.value : frame.lineSpacing ? unit(frame.lineSpacing.value * 12700) : 'normal'};letter-spacing:normal` : ''
+      const tag = role === 'title' ? (slide.layout === 'cover' ? 'h1' : 'h2') : 'div'
+      return '<' + tag + ' class="tpl-slot ' + (role === 'body' ? 'media-caption' : role) + '" style="' + escapeHtml(pos + frameCss + ';' + fontCss) + '"><span style="display:block;width:100%">' + lines.map(escapeHtml).join('<br>') + '</span></' + tag + '>'
+    }).join('')
+  }
   const visualStyle = visualHtmlStyle(slide.visual)
   const bgAttr = hasBackground ? ' data-bgt="' + backgroundTypeOfLayout(slide.layout) + '"' : ''
   return '<section class="slide slide--' + escapeHtml(slide.layout || 'bullets') + '" data-index="' + number + '"' + (designLayout ? ' data-design="' + escapeHtml(designLayout.id) + '"' : '') + notesAttr + bgAttr + (visualStyle ? ' style="' + escapeHtml(visualStyle) + '"' : '') + '>' +
-    layerHtml + '<div class="slide-inner"' + (designLayout && zoneInnerStyle(designLayout) ? ' style="' + zoneInnerStyle(designLayout) + '"' : '') + '>' + inner + '</div>' +
+    layerHtml + '<div class="slide-inner"' + (slots && !['table', 'chart'].includes(slide.layout) ? ' style="position:absolute;inset:0;max-width:none;padding:0"' : designLayout && zoneInnerStyle(designLayout) ? ' style="' + zoneInnerStyle(designLayout) + '"' : '') + '>' + inner + '</div>' +
     (manifest.brand?.logoAssetId ? '<img class="brand-logo" src="' + escapeHtml(manifest.assets?.[manifest.brand.logoAssetId]?.data ?? '') + '" alt="' + escapeHtml(manifest.brand.name || 'Logo') + '"/>' : '') +
     (manifest.brand?.footer ? '<div class="brand-footer">' + escapeHtml(manifest.brand.footer) + '</div>' : '') + '</section>'
 }
@@ -1968,26 +1993,32 @@ function paragraphXml(text, options = {}) {
     font = 'Arial',
     spaceBefore = 0,
     spaceAfter = 0,
+    italic = false, colorSpec, frame,
   } = options
   const runFont = pptxFontName(font)
-  const spacing = (spaceBefore > 0 ? '<a:spcBef><a:spcPts val="' + spaceBefore + '"/></a:spcBef>' : '') +
-    (spaceAfter > 0 ? '<a:spcAft><a:spcPts val="' + spaceAfter + '"/></a:spcAft>' : '')
-  const pPr = '<a:pPr' + (bullet ? ' marL="285750" indent="-285750"' : align !== 'l' ? ' algn="' + align + '"' : '') + '>' + spacing +
+  const spacing = (spaceBefore > 0 ? '<a:spcBef><a:spcPts val="' + Math.round(spaceBefore) + '"/></a:spcBef>' : '') +
+    (spaceAfter > 0 ? '<a:spcAft><a:spcPts val="' + Math.round(spaceAfter) + '"/></a:spcAft>' : '')
+  const lineSpacing = frame?.lineSpacing ? '<a:lnSpc><a:' + (frame.lineSpacing.kind === 'pct' ? 'spcPct' : 'spcPts') + ' val="' + Math.round(frame.lineSpacing.value * (frame.lineSpacing.kind === 'pct' ? 100000 : 100)) + '"/></a:lnSpc>' : ''
+  const paragraphMargins = ['marL', 'marR', 'indent'].filter(k => frame?.[k] !== undefined).map(k => ' ' + k + '="' + Math.round(frame[k]) + '"').join('')
+  const pPr = '<a:pPr' + paragraphMargins + (bullet ? ' marL="285750" indent="-285750"' : align !== 'l' ? ' algn="' + align + '"' : '') + '>' + lineSpacing + spacing +
     (bullet ? '<a:buFont typeface="Arial" panose="020B0604020202020204"/><a:buChar char="•"/>' : '<a:buNone/>') + '</a:pPr>'
   return '<a:p>' + pPr +
-    '<a:r><a:rPr lang="' + lang + '" sz="' + size + '" b="' + (bold ? 1 : 0) + '" dirty="0">' +
-    '<a:solidFill><a:srgbClr val="' + hex(color) + '"/></a:solidFill>' +
+    '<a:r><a:rPr lang="' + lang + '" sz="' + size + '" b="' + (bold ? 1 : 0) + '" i="' + (italic ? 1 : 0) + '"' + (frame?.kerning !== undefined ? ' kern="' + frame.kerning + '"' : '') + ' dirty="0">' +
+    slotColorXml(colorSpec, color) +
     '<a:latin typeface="' + escapeXml(runFont) + '"/><a:ea typeface="' + escapeXml(pptxEastAsianFont(font)) + '"/></a:rPr>' +
     '<a:t>' + escapeXml(text) + '</a:t></a:r></a:p>'
 }
 
 function textShapeXml(id, name, box, paragraphs, options = {}) {
   const { x = 0, y = 0, w = EMU_W, h = EMU_H } = box
+  const f = options.textFrame
+  const bodyAttrs = f ? (f.anchor ? ' anchor="' + ({ top: 't', center: 'ctr', bottom: 'b' })[f.anchor] + '"' : '') + Object.entries({ left: 'lIns', top: 'tIns', right: 'rIns', bottom: 'bIns' }).filter(([side]) => f.margins?.[side] !== undefined).map(([side, key]) => ' ' + key + '="' + Math.round(f.margins[side]) + '"').join('') : ''
+  const autoFit = f ? ({ none: '<a:noAutofit/>', normal: '<a:normAutofit/>', shape: '<a:spAutoFit/>' })[f.autoFit ?? 'none'] : '<a:normAutofit/>'
   return '<p:sp>' +
     '<p:nvSpPr><p:cNvPr id="' + id + '" name="' + escapeXml(name) + '"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>' +
     '<p:spPr><a:xfrm><a:off x="' + x + '" y="' + y + '"/><a:ext cx="' + w + '" cy="' + h + '"/></a:xfrm>' +
     '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln/></p:spPr>' +
-    '<p:txBody><a:bodyPr wrap="square" rtlCol="0"><a:normAutofit/></a:bodyPr><a:lstStyle/>' +
+    '<p:txBody><a:bodyPr wrap="' + (f?.wrap ?? 'square') + '" rtlCol="0"' + bodyAttrs + '>' + autoFit + '</a:bodyPr><a:lstStyle/>' +
     paragraphs.join('') + '</p:txBody></p:sp>'
 }
 
@@ -2041,6 +2072,14 @@ function tableGraphicXml(id, name, box, rows, theme, langId) {
 
 function slideShapeList(slide, index, total, theme, langId) {
   const p = theme.palette
+  const slots = zoneContents(slide, slide.__layout)
+  if (slots && !['table', 'chart'].includes(slide.layout)) return slots.map(({ zone, role, lines, filled }, i) => {
+    if (role === 'image' && filled) return ''
+    const name = role === 'title' ? 'Title' : role === 'subtitle' ? 'Subtitle' : role === 'image' ? 'Caption' : 'Body'
+    const box = { x: Math.round(zone.x / 100 * EMU_W), y: Math.round(zone.y / 100 * EMU_H), w: Math.round(zone.w / 100 * EMU_W), h: Math.round(zone.h / 100 * EMU_H) }
+    const style = { ...slide.__textStyles?.[role], ...zone.textStyle }, frame = zone.textFrame
+    return textShapeXml(2 + i, name, box, lines.some(line => line !== '') ? lines.map(line => paragraphXml(line, { lang: langId, size: Math.round((style.size ?? (role === 'title' ? 28 : 18)) * 100), font: style.fontFamily ?? (role === 'title' ? theme.fonts.heading : theme.fonts.body), color: style.color ?? p.fg, bold: style.bold, italic: style.italic, align: ({ left: 'l', center: 'ctr', right: 'r', justify: 'just', distributed: 'dist' })[frame?.align] ?? 'l', spaceBefore: (frame?.spaceBefore ?? 0) * 100, spaceAfter: (frame?.spaceAfter ?? 0) * 100, colorSpec: zone.colorSpec, frame })) : ['<a:p/>'], { textFrame: frame })
+  }).join('')
   const font = pptxFontName(theme.fonts.heading)
   const bodyFont = pptxFontName(theme.fonts.body) // 保留：v0.1 后续用于统一正文字体
   const lang = langId || 'zh-CN'
@@ -2199,7 +2238,7 @@ function slideXml(slide, index, total, theme, langId, motion) {
   if (motion) {
     motionXml = '<p:transition spd="med"><p:fade/></p:transition>'
     const bullets = Array.isArray(slide.bullets) ? slide.bullets : []
-    if (slide.layout === 'bullets' && bullets.length >= 2) {
+    if (!slide.__layout?.familyId && slide.layout === 'bullets' && bullets.length >= 2) {
       motionXml += bulletTimingXml((index + 1) * 10 + 3, bullets.length)
     }
   }
@@ -2210,7 +2249,7 @@ function slideXml(slide, index, total, theme, langId, motion) {
     '<p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="' + hex(p.bg) + '"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>' +
     '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
     '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' +
-    remapTextShapes(applyTextStylesPptx(slideShapeList(slide, index, total, theme, langId), slide.__textStyles), slide.__layout) +
+    (slide.__layout?.familyId && !['table', 'chart'].includes(slide.layout) ? applyTextStylesPptx(slideShapeList(slide, index, total, theme, langId), slide.__textStyles, slide.__layout.textZones) : remapTextShapes(applyTextStylesPptx(slideShapeList(slide, index, total, theme, langId), slide.__textStyles), slide.__layout)) +
     '</p:spTree></p:cSld>' +
     '<p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr>' +
     motionXml +
@@ -2228,7 +2267,7 @@ function slideRelXml(hasNotes, slideIndex) {
     '</Relationships>'
 }
 
-function presentationXml(slideCount, hasNotesMaster) {
+function presentationXml(slideCount, hasNotesMaster, size) {
   const slideIds = Array.from({ length: slideCount }, (_, i) =>
     '<p:sldId id="' + (256 + i) + '" r:id="rId' + (i + 2) + '"/>').join('')
   const notesMasterId = hasNotesMaster
@@ -2241,7 +2280,7 @@ function presentationXml(slideCount, hasNotesMaster) {
     '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>' +
     '<p:sldIdLst>' + slideIds + '</p:sldIdLst>' +
     notesMasterId +
-    '<p:sldSz cx="' + EMU_W + '" cy="' + EMU_H + '" type="screen16x9"/>' +
+    '<p:sldSz cx="' + size.width + '" cy="' + size.height + '"/>' +
     '<p:notesSz cx="6858000" cy="9144000"/>' +
     '</p:presentation>'
 }
@@ -2355,7 +2394,7 @@ function slideLayoutRelXml() {
     '</Relationships>'
 }
 
-function themeXml(theme) {
+function themeXml(theme, sourceFonts) {
   const p = theme.palette
   const color = (name, value) => '<a:' + name + '><a:srgbClr val="' + hex(value) + '"/></a:' + name + '>'
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -2368,8 +2407,8 @@ function themeXml(theme) {
     color('hlink', p.accent) + color('folHlink', p.accent2) +
     '</a:clrScheme>' +
     '<a:fontScheme name="dsh-ppt">' +
-    '<a:majorFont><a:latin typeface="' + escapeXml(pptxFontName(theme.fonts.heading)) + '"/><a:ea typeface="' + escapeXml(pptxEastAsianFont(theme.fonts.heading)) + '"/><a:cs typeface=""/></a:majorFont>' +
-    '<a:minorFont><a:latin typeface="' + escapeXml(pptxFontName(theme.fonts.body)) + '"/><a:ea typeface="' + escapeXml(pptxEastAsianFont(theme.fonts.body)) + '"/><a:cs typeface=""/></a:minorFont>' +
+    '<a:majorFont><a:latin typeface="' + escapeXml(sourceFonts?.majorLatin ?? pptxFontName(theme.fonts.heading)) + '"/><a:ea typeface="' + escapeXml(sourceFonts?.majorEastAsian ?? pptxEastAsianFont(theme.fonts.heading)) + '"/><a:cs typeface="' + escapeXml(sourceFonts?.majorComplexScript ?? '') + '"/></a:majorFont>' +
+    '<a:minorFont><a:latin typeface="' + escapeXml(sourceFonts?.minorLatin ?? pptxFontName(theme.fonts.body)) + '"/><a:ea typeface="' + escapeXml(sourceFonts?.minorEastAsian ?? pptxEastAsianFont(theme.fonts.body)) + '"/><a:cs typeface="' + escapeXml(sourceFonts?.minorComplexScript ?? '') + '"/></a:minorFont>' +
     '</a:fontScheme>' +
     '<a:fmtScheme name="dsh-ppt">' +
     '<a:fillStyleLst>' +
@@ -2524,6 +2563,7 @@ function crc32(buffer) {
 export function buildPptx(manifest, themeInput, languageInput) {
   const theme = themeInput?.id ? themeInput : resolveTheme(themeInput)
   const language = languageInput?.id ? languageInput : resolveLanguage(languageInput)
+  const size = pageSize(manifest)
   const motion = manifest.motion !== false
   const slides = manifest.slides
   const noteIndexes = []
@@ -2536,13 +2576,13 @@ export function buildPptx(manifest, themeInput, languageInput) {
     { name: '_rels/.rels', data: rootRelXml() },
     { name: 'docProps/app.xml', data: appXml(slides.length, noteIndexes.length) },
     { name: 'docProps/core.xml', data: coreXml(manifest.title) },
-    { name: 'ppt/presentation.xml', data: presentationXml(slides.length, hasNotesMaster) },
+    { name: 'ppt/presentation.xml', data: presentationXml(slides.length, hasNotesMaster, size) },
     { name: 'ppt/_rels/presentation.xml.rels', data: presentationRelXml(slides.length, hasNotesMaster) },
     { name: 'ppt/slideMasters/slideMaster1.xml', data: slideMasterXml(theme) },
     { name: 'ppt/slideMasters/_rels/slideMaster1.xml.rels', data: slideMasterRelXml() },
     { name: 'ppt/slideLayouts/slideLayout1.xml', data: slideLayoutXml(theme) },
     { name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels', data: slideLayoutRelXml() },
-    { name: 'ppt/theme/theme1.xml', data: themeXml(theme) },
+    { name: 'ppt/theme/theme1.xml', data: themeXml(theme, manifest.style?.themeFonts) },
   ]
   if (hasNotesMaster) {
     entries.push({ name: 'ppt/notesMasters/notesMaster1.xml', data: notesMasterXml() })
@@ -2553,7 +2593,7 @@ export function buildPptx(manifest, themeInput, languageInput) {
     const layout = pickDesignLayout(manifest.style?.layouts, slide, backgroundTypeOfLayout(slide.layout))
     const textStyles = structuredClone(manifest.style?.textStyles ?? {})
     for (const [role, style] of Object.entries(layout?.textStyles ?? {})) textStyles[role] = { ...textStyles[role], ...style }
-    entries.push({ name: 'ppt/slides/slide' + (index + 1) + '.xml', data: slideXml({ ...slide, __layout: layout, __textStyles: textStyles }, index, slides.length, theme, language.attr, motion) })
+    entries.push({ name: 'ppt/slides/slide' + (index + 1) + '.xml', data: resizeSlideXml(slideXml({ ...slide, __layout: layout, __textStyles: textStyles }, index, slides.length, theme, language.attr, motion), size) })
     entries.push({ name: 'ppt/slides/_rels/slide' + (index + 1) + '.xml.rels', data: slideRelXml(hasNotes, index + 1) })
     if (hasNotes) {
       entries.push({ name: 'ppt/notesSlides/notesSlide' + (index + 1) + '.xml', data: notesSlideXml(slide.notes, language.attr) })

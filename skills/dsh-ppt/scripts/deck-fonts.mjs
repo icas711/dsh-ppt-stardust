@@ -43,6 +43,19 @@ export function normalizeTextStyles(input) {
   return out
 }
 
+export function normalizeThemeFonts(input) {
+  if (input === undefined) return undefined
+  if (!input || typeof input !== 'object' || Array.isArray(input)) fail('Invalid themeFonts')
+  const out = {}
+  for (const key of ['majorLatin', 'majorEastAsian', 'majorComplexScript', 'minorLatin', 'minorEastAsian', 'minorComplexScript']) {
+    if (input[key] !== undefined) {
+      if (input[key] === null || input[key] === '') out[key] = ''
+      else { fontFamily(input[key]); out[key] = input[key] }
+    }
+  }
+  return out
+}
+
 export function normalizeFontRefs(input, engine = false) {
   if (input === undefined) return undefined
   if (!Array.isArray(input) || input.length > 64) fail('At most 64 embedded font faces are allowed')
@@ -162,6 +175,50 @@ function relationships(files, part) {
   })).filter(r => !r.target.startsWith('../'))
 }
 
+// Decoration readers intentionally exclude placeholders. Read their bodyPr from
+// the actual part when resolving autofit inherited by a slide content area.
+function sourceTextNodes(lib, pres, shape) {
+  const nodes = [first(parse(lib.getShapeXmlString(shape)), 'sp')]
+  if (!lib.isShapePlaceholder(shape)) return nodes
+  const slide = lib.getShapeSlide(shape), layout = lib.getSlideLayout(slide)
+  if (!layout) return nodes
+  const idx = lib.getShapePlaceholderIdx(shape), type = lib.getShapePlaceholderType(shape)
+  for (const part of [lib.getSlideLayoutPartName(layout), lib.getSlideMasterPartName(slide)]) {
+    if (!part) continue
+    const xml = parse(Buffer.from(lib.readPackagePart(pres, part) ?? []).toString('utf8'))
+    const candidates = all(xml, 'sp').filter(s => first(s, 'ph'))
+    const inherited = (idx !== null ? candidates.find(s => Number(first(s, 'ph').attrs.idx ?? 0) === idx) : undefined) ?? candidates.find(s => (first(s, 'ph').attrs.type ?? 'body') === type)
+    if (inherited) nodes.push(inherited)
+  }
+  return nodes
+}
+
+export function inheritedPlaceholderAutoFit(lib, pres, shape) {
+  for (const inherited of sourceTextNodes(lib, pres, shape).slice(1)) {
+    const body = child(child(inherited, 'txBody'), 'bodyPr')
+    if (child(body, 'spAutoFit')) return 'shape'
+    if (child(body, 'normAutofit')) return 'normal'
+    if (child(body, 'noAutofit')) return 'none'
+  }
+  return undefined
+}
+
+export function sourceTypefaceHints(lib, pres, shape) {
+  for (const node of sourceTextNodes(lib, pres, shape)) {
+    const tx = child(node, 'txBody'), paragraph = child(tx, 'p')
+    const layers = [first(paragraph, 'rPr'), first(child(paragraph, 'pPr'), 'defRPr'), first(child(tx, 'lstStyle'), 'defRPr')]
+    for (const layer of layers) {
+      const face = child(layer, 'latin')?.attrs
+      if (!face) continue
+      const hints = {}
+      if (/^[\da-f]{20}$/i.test(face.panose ?? '')) hints.panose = face.panose
+      for (const key of ['pitchFamily', 'charset']) if (/^\d+$/.test(face[key] ?? '')) hints[key] = Number(face[key])
+      if (Object.keys(hints).length) return hints
+    }
+  }
+  return undefined
+}
+
 // Filters are checked against central-directory sizes before allocating inflated data.
 export function unzipTypography(bytes) {
   let total = 0
@@ -272,7 +329,9 @@ export function extractTypography(bytes, layouts, layoutIdByPart, assets, report
     const part = sourcePart.replace(/^\/+/, '')
     const layout = layouts.find(l => l.id === id)
     if (!layout) continue
-    const masterPart = relationships(files, part).find(r => r.type === 'slideMaster')?.target
+    const sourceSlide = /^ppt\/slides\//.test(part) ? part : undefined
+    const layoutPart = sourceSlide ? relationships(files, part).find(r => r.type === 'slideLayout')?.target : part
+    const masterPart = relationships(files, layoutPart).find(r => r.type === 'slideMaster')?.target
     const master = readXml(files, masterPart), theme = themeFor(masterPart ?? part, globalTheme), tf = themeFonts(theme)
     const styles = { title: { fontFamily: tf.heading ?? globalFonts.heading }, body: { fontFamily: tf.body ?? globalFonts.body } }
     for (const [role, key] of [['title', 'titleStyle'], ['body', 'bodyStyle'], ['footer', 'otherStyle']]) {
@@ -281,10 +340,10 @@ export function extractTypography(bytes, layouts, layoutIdByPart, assets, report
     }
     const placeholders = new Map()
     addShapes(styles, master, tf, theme, placeholders)
-    addShapes(styles, readXml(files, part), tf, theme, placeholders)
+    addShapes(styles, readXml(files, layoutPart), tf, theme, placeholders)
     // Slide-level formatting is the final override for this layout's role defaults.
     const slideParts = rels.filter(r => r.type === 'slide').map(r => r.target)
-    const source = slideParts.find(s => relationships(files, s).some(r => r.type === 'slideLayout' && r.target === part))
+    const source = sourceSlide ?? slideParts.find(s => relationships(files, s).some(r => r.type === 'slideLayout' && r.target === part))
     if (source) addShapes(styles, readXml(files, source), tf, theme, placeholders)
     for (const s of Object.values(styles)) if (s.fontFamily === undefined) delete s.fontFamily
     layout.textStyles = normalizeTextStyles(styles)
@@ -311,11 +370,17 @@ export function typographyCss(manifest) {
   return faces + '\n' + rules(manifest.style?.textStyles, '.slide') + '\n' + (manifest.style?.layouts ?? []).map(l => rules(l.textStyles, `.slide[data-design="${l.id}"]`)).join('\n')
 }
 
-export function applyTextStylesPptx(shapes, styles) {
+export function slotColorXml(spec, fallback) {
+  return `<a:solidFill><a:srgbClr val="${(spec?.base ?? fallback).replace('#', '')}">${(spec?.transforms ?? []).map(t => `<a:${t.name} val="${t.value}"/>`).join('')}</a:srgbClr></a:solidFill>`
+}
+
+export function applyTextStylesPptx(shapes, styles, zones) {
   if (!styles) return shapes
   return shapes.replace(/<p:(sp|graphicFrame)>[\s\S]*?<\/p:\1>/g, block => {
     const name = /<p:cNvPr\b[^>]*\bname="([^"]*)"/.exec(block)?.[1], role = shapeRoles[name]
-    const s = styles[role] ?? (role === 'quote' || role === 'table' || role === 'caption' ? styles.body : undefined)
+    const shapeId = Number(/<p:cNvPr\b[^>]*\bid="(\d+)"/.exec(block)?.[1])
+    const zone = zones?.[shapeId - 2]
+    const s = { ...(styles[role] ?? (role === 'quote' || role === 'table' || role === 'caption' ? styles.body : {})), ...zone?.textStyle }
     if (!s) return block
     return block.replace(/<a:(rPr|defRPr|endParaRPr)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/a:\1>)/g, (_, tag, attrs, content = '') => {
       for (const [key, value] of [['sz', s.size === undefined ? undefined : Math.round(s.size * 100)], ['b', s.bold === undefined ? undefined : Number(s.bold)], ['i', s.italic === undefined ? undefined : Number(s.italic)]]) {
@@ -324,11 +389,15 @@ export function applyTextStylesPptx(shapes, styles) {
       }
       if (s.fontFamily) {
         content = content.replace(/<a:(latin|ea|cs)\b[^>]*\/>/g, '')
-        content += ['latin', 'ea', 'cs'].map(tag => `<a:${tag} typeface="${xml(s.fontFamily)}"/>`).join('')
+        content += ['latin', 'ea', 'cs'].map(tag => {
+          const family = tag === 'ea' ? zone?.scriptFonts?.eastAsian : tag === 'cs' ? zone?.scriptFonts?.complexScript : undefined
+          const latin = zone?.sourceTypeface?.trim() === s.fontFamily.trim() ? zone.sourceTypeface : s.fontFamily
+          return `<a:${tag} typeface="${xml(family ?? latin)}"${tag === 'latin' && zone?.fontHints ? Object.entries(zone.fontHints).map(([key, value]) => ` ${key}="${value}"`).join('') : ''}/>`
+        }).join('')
       }
-      if (s.color) {
+      if (s.color || zone?.colorSpec) {
         content = content.replace(/<a:(solidFill|gradFill|pattFill)>[\s\S]*?<\/a:\1>|<a:noFill\s*\/>/g, '')
-        content = `<a:solidFill><a:srgbClr val="${s.color.slice(1)}"/></a:solidFill>` + content
+        content = slotColorXml(zone?.colorSpec, s.color) + content
       }
       return `<a:${tag}${attrs}>${content}</a:${tag}>`
     })
@@ -347,7 +416,7 @@ export function embedPptxFonts(bytes, manifest) {
     const styles = structuredClone(manifest.style?.textStyles ?? {})
     for (const [role, style] of Object.entries(layout?.textStyles ?? {})) styles[role] = { ...styles[role], ...style }
     const path = `ppt/slides/slide${i + 1}.xml`
-    files[path] = strToU8(applyTextStylesPptx(get(path), styles))
+    files[path] = strToU8(applyTextStylesPptx(get(path), styles, layout?.familyId ? layout.textZones : undefined))
   })
   if (!fonts.length) return Buffer.from(zipSync(files, { level: 6 }))
   let rels = get('ppt/_rels/presentation.xml.rels'), types = get('[Content_Types].xml'), index = 0

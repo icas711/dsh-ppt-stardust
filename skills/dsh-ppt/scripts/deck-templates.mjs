@@ -1,3 +1,5 @@
+import { normalizeSlotTypography } from './deck-text-slots.mjs'
+import { normalizePageSize } from './deck-page.mjs'
 // deck-templates.mjs —— dsh-ppt 模板库核心：模板清单、校验、bundle 读写。
 //
 // 模板 = 样式（theme + brand + 背景页） + 页面骨架（outline，含占位符）
@@ -15,7 +17,7 @@ import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
 import { resolveTheme, resolveLanguage } from './deck-core.mjs'
 import { extractPptxLayouts } from './deck-pptx-layouts.mjs'
 import { LAYOUT_TYPES, MAX_LAYOUTS, MAX_LAYOUT_IMAGES, sanitizeSvg } from './deck-layouts.mjs'
-import { FONT_EXT, MAX_FONT, MAX_FONTS, fontInfo, fontFamily, normalizeTextStyles, normalizeFontRefs, extractTypography } from './deck-fonts.mjs'
+import { FONT_EXT, MAX_FONT, MAX_FONTS, fontInfo, fontFamily, normalizeTextStyles, normalizeThemeFonts, normalizeFontRefs, extractTypography } from './deck-fonts.mjs'
 
 export const TEMPLATE_SCHEMA_VERSION = 1
 /** Шаблон с style.layouts (макеты с картинками) записывается как schemaVersion 2; версия 1 читается как раньше. */
@@ -83,6 +85,7 @@ function validateLayouts(list) {
     seen.add(raw.id)
     if (!LAYOUT_TYPES.includes(raw.layoutType)) fail(`${path}.layoutType 只支持 ${LAYOUT_TYPES.join(' / ')}`)
     const layout = { id: raw.id, ...(raw.name !== undefined ? { name: checkText(String(raw.name), `${path}.name`, 80) } : {}), layoutType: raw.layoutType }
+    if (raw.familyId !== undefined) { if (!/^[a-z0-9][a-z0-9-]{0,40}$/.test(raw.familyId)) fail(`${path}.familyId неверен`); layout.familyId = raw.familyId }
     if (raw.textStyles !== undefined) layout.textStyles = normalizeTextStyles(raw.textStyles)
     if (raw.background !== undefined && raw.background !== null) {
       const bg = raw.background
@@ -115,8 +118,8 @@ function validateLayouts(list) {
       if (!Array.isArray(raw.textZones) || raw.textZones.length > 6) fail(`${path}.textZones 最多 6 项`)
       layout.textZones = raw.textZones.map((zone, i) => {
         const zpath = `${path}.textZones[${i}]`
-        if (!zone || typeof zone !== 'object' || !['title', 'body'].includes(zone.kind)) fail(`${zpath}.kind 只支持 title / body`)
-        return { kind: zone.kind, x: checkNumber(zone.x, `${zpath}.x`, 0, 100), y: checkNumber(zone.y, `${zpath}.y`, 0, 100),
+        if (!zone || typeof zone !== 'object' || !['title', 'body', 'image'].includes(zone.kind)) fail(`${zpath}.kind 只支持 title / body / image`)
+        return { ...normalizeSlotTypography(zone), kind: zone.kind, x: checkNumber(zone.x, `${zpath}.x`, 0, 100), y: checkNumber(zone.y, `${zpath}.y`, 0, 100),
           w: checkNumber(zone.w, `${zpath}.w`, 1, 100), h: checkNumber(zone.h, `${zpath}.h`, 1, 100) }
       })
     }
@@ -143,6 +146,8 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
     try { resolveTheme(style.theme) } catch { fail(`style.theme 需是内置主题之一（${style.theme}）`) }
   }
   const normalizedStyle = {}
+  if (style.themeFonts !== undefined) normalizedStyle.themeFonts = normalizeThemeFonts(style.themeFonts)
+  if (style.pageSize !== undefined) normalizedStyle.pageSize = normalizePageSize(style.pageSize)
   if (style.textStyles !== undefined) normalizedStyle.textStyles = normalizeTextStyles(style.textStyles)
   if (style.fonts !== undefined) normalizedStyle.fonts = normalizeFontRefs(style.fonts)
   if (style.theme !== undefined) normalizedStyle.theme = style.theme
@@ -521,6 +526,8 @@ function applyVars(slide, vars) {
 /** style.backgrounds + style.layouts → 引擎 style 参数（src 为 data URI；SVG 以 data URI 放入图片的 svg 字段）。 */
 function engineStyle(manifest, assets) {
   const out = {}
+  if (manifest.style?.themeFonts) out.themeFonts = clone(manifest.style.themeFonts)
+  if (manifest.style?.pageSize) out.pageSize = clone(manifest.style.pageSize)
   if (manifest.style?.textStyles) out.textStyles = clone(manifest.style.textStyles)
   if (manifest.style?.fonts) out.fonts = manifest.style.fonts.map(face => ({ family: face.family, variant: face.variant, src: assets[face.file]?.data }))
   const backgrounds = manifest.style?.backgrounds ?? []
@@ -528,7 +535,7 @@ function engineStyle(manifest, assets) {
   const layouts = manifest.style?.layouts ?? []
   if (layouts.length) {
     out.layouts = layouts.map(layout => ({
-      id: layout.id, ...(layout.name ? { name: layout.name } : {}), layoutType: layout.layoutType,
+      id: layout.id, ...(layout.familyId ? { familyId: layout.familyId } : {}), ...(layout.name ? { name: layout.name } : {}), layoutType: layout.layoutType,
       ...(layout.background ? { background: { src: assets[layout.background.image]?.data, fit: layout.background.fit } } : {}),
       ...(layout.backgroundColor ? { backgroundColor: layout.backgroundColor } : {}),
       images: layout.images.map(image => ({
@@ -639,6 +646,8 @@ export function templateFromDeckManifest(deckManifest, options = {}) {
   const brand = deckManifest.brand ?? {}
   if (brand.logoAssetId && deckAssets[brand.logoAssetId]) assetsInput['logo.png'] = dataUriBytes(deckAssets[brand.logoAssetId].data, 'logo')
   const style = { theme: deckManifest.theme }
+  if (deckManifest.style?.themeFonts) style.themeFonts = clone(deckManifest.style.themeFonts)
+  if (deckManifest.style?.pageSize) style.pageSize = clone(deckManifest.style.pageSize)
   if (deckManifest.style?.textStyles) style.textStyles = clone(deckManifest.style.textStyles)
   if (deckManifest.style?.fonts?.length) style.fonts = deckManifest.style.fonts.map((face, i) => {
     const asset = deckAssets[face.assetId]
@@ -666,7 +675,7 @@ export function templateFromDeckManifest(deckManifest, options = {}) {
       return name
     }
     style.layouts = deckLayouts.map((layout, li) => {
-      const entry = { id: layout.id, ...(layout.name ? { name: layout.name } : {}), layoutType: layout.layoutType, images: [] }
+      const entry = { id: layout.id, ...(layout.familyId ? { familyId: layout.familyId } : {}), ...(layout.name ? { name: layout.name } : {}), layoutType: layout.layoutType, images: [] }
       const bg = layout.backgroundAssetId && nameOf(layout.backgroundAssetId, `layout-${li + 1}-bg`)
       if (bg) entry.background = { image: bg, fit: layout.fit ?? 'cover' }
       if (layout.backgroundColor) entry.backgroundColor = layout.backgroundColor
@@ -797,7 +806,7 @@ export async function templateFromPptx(source, options = {}) {
 
   // 1) 主题色 → dsh-ppt 品牌色
   const theme = lib.getPresentationTheme(pres)
-  const style = {}
+  const style = { themeFonts: normalizeThemeFonts(lib.getPresentationFonts(pres)) }
   if (theme) {
     const slots = [normalizeSlot(theme.dark1), normalizeSlot(theme.light1), normalizeSlot(theme.accent1), normalizeSlot(theme.accent2)]
     const [dark1, light1, accent1, accent2] = slots
@@ -827,12 +836,14 @@ export async function templateFromPptx(source, options = {}) {
 
   // 3a) Макеты с картинками и положением (новая модель). Если ничего не нашлось — старый путь (фон + логотип).
   const slideSize = lib.getSlideSize(pres) ?? { width: 9144000, height: 6858000 }
+  style.pageSize = normalizePageSize({ width: Number(slideSize.width), height: Number(slideSize.height) })
   const assets = {}
+  let layoutIdBySlide = new Map()
   let layoutIdByPart = new Map()
   try {
     const found = await extractPptxLayouts({ pres, lib, bytes, slideSize, theme, assets, report, lang })
     const useful = found.layouts.length > 0
-    if (useful) { style.layouts = found.layouts; layoutIdByPart = found.layoutIdByPart }
+    if (useful) { style.layouts = found.layouts; layoutIdByPart = found.layoutIdByPart; layoutIdBySlide = found.layoutIdBySlide }
     else for (const key of Object.keys(assets)) if (!FONT_EXT.test(key)) delete assets[key]
   } catch (error) {
     report.warnings.push(L(lang, `版式提取失败：${error.message}`, `Layout extraction failed: ${error.message}`, `Не удалось извлечь макеты: ${error.message}`))
@@ -843,7 +854,7 @@ export async function templateFromPptx(source, options = {}) {
   catch (error) { report.warnings.push(`Не удалось извлечь оформление текста и шрифты: ${error.message}`) }
 
   // 3) 母版 / 版式背景（旧路径，仅当没有可用版式）
-  const layouts = style.layouts ? [] : lib.getSlideLayouts(pres)
+  const layouts = style.layouts ? [] : [...new Map(lib.getSlides(pres).map(slide => lib.getSlideLayout(slide)).filter(Boolean).map(layout => [lib.getSlideLayoutPartName(layout), layout])).values()]
   const masterBytes = new Map(), layoutBytesList = []
   for (const layout of layouts) {
     const master = lib.getSlideMasterBackgroundImageBytes(pres, layout)
@@ -878,24 +889,17 @@ export async function templateFromPptx(source, options = {}) {
   }
 
   // 5) 页面骨架：占位符标题缺失时退回首行文本（许多生成器不用占位符）
-  const outlineEntries = lib.getSlideOutline(pres)
   const slides = lib.getSlides(pres)
-  const lineOf = text => String(text ?? '').split(/\r?\n/).map(l => l.trim()).filter(Boolean)[0] ?? ''
-  const outline = outlineEntries.slice(0, MAX_OUTLINE).map((entry, index, list) => {
-    const slideText = slides[index] ? lib.getSlideText(slides[index]) : ''
-    const firstLine = lineOf(slideText)
-    const title = (entry.title ?? '').trim() || firstLine.slice(0, 120)
-    const body = (entry.body ?? '').trim() || lineOf(slideText.split(/\r?\n/).slice(1).join('\n'))
-    const last = index === list.length - 1 && list.length > 1
-    const sourceLayoutId = slides[index] ? layoutIdByPart.get(lib.getSlideLayoutPartName(lib.getSlideLayout(slides[index]))) : undefined
+  const outline = slides.slice(0, MAX_OUTLINE).map((sourceSlide, index) => {
+    const sourceLayoutId = slides[index] ? layoutIdBySlide.get(lib.getSlidePartName(slides[index])) : undefined
     const sourceType = style.layouts?.find(item => item.id === sourceLayoutId)?.layoutType
-    const layout = index === 0 ? 'cover' : last ? 'closing' : sourceType === 'section' || title === '' ? 'section' : 'bullets'
+    const layout = sourceType === 'cover' ? 'cover' : sourceType === 'closing' ? 'closing' : sourceType === 'section' ? 'section' : 'bullets'
     // Обложка шаблона всегда получает заголовок новой презентации
-    const slide = { layout, ...(sourceLayoutId ? { layoutId: sourceLayoutId } : {}), title: index === 0 ? '{{deck.title}}' : (title || placeholder(lang, last ? 'финального слайда' : 'страницы')) }
+    const slide = { layout, ...(sourceLayoutId ? { layoutId: sourceLayoutId } : {}), title: index === 0 ? '{{deck.title}}' : placeholder(lang, 'заголовок страницы') }
     if (layout === 'cover') slide.subtitle = placeholder(lang, 'докладчик и дата')
-    else if (layout === 'bullets') slide.bullets = [placeholder(lang, 'конкретные факты, доказательства и следующий шаг')]
+    else if (layout === 'bullets') slide.bullets = Array.from({ length: Math.max(1, style.layouts?.find(item => item.id === sourceLayoutId)?.textZones?.filter(z => z.kind === 'body').length ?? 0) }, () => placeholder(lang, 'конкретные факты, доказательства и следующий шаг'))
     else if (layout === 'closing') slide.subtitle = placeholder(lang, 'следующий шаг и ответственный')
-    else if (layout === 'section' && body) slide.subtitle = body.slice(0, 200)
+    else if (layout === 'section') slide.subtitle = placeholder(lang, 'описание раздела')
     return slide
   })
   if (!outline.length) report.warnings.push(L(lang, 'PPTX 没有可读的页面，生成了最小骨架', 'PPTX has no readable slides; minimal outline generated', 'В PPTX нет читаемых страниц — собран минимальный каркас'))
