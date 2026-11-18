@@ -170,17 +170,17 @@ test('workbench operations thread the request owner into options and creation', 
     const wb = new PptWorkbench({ catalogPath: join(directory, 'projects.jsonl'),
       coachingModel: { routes: async (_signal, owner) => { seen.push(['coach', owner]); return [{ provider: owner === 'alice' ? 'personal' : 'shared', model: 'm', label: 'L' }] } },
       visualModel: { routes: async (_signal, owner) => { seen.push(['visual', owner]); return [] } } })
-    await wb.remember(created, {}, { agent: { session: { header: {} } } })
+    await wb.remember(created, {}, { agent: { session: { header: { owner: 'alice' } } } })
     const id = (await wb.action({ operation: 'list' })).projects[0].id
     const revision = readDeckProject({ deckPath: created.jsonPath }).manifest.revision
 
     const coaching = await wb.action({ operation: 'coach-options', id }, undefined, { login: 'alice', admin: false, local: false })
     assert.equal(coaching.routes[0].provider, 'personal')
-    const visual = await wb.action({ operation: 'visual-options', id }, undefined, { login: 'bob', admin: false, local: false })
+    const visual = await wb.action({ operation: 'visual-options', id }, undefined, { login: 'bob', admin: true, local: false })
     assert.deepEqual(visual.routes, [])
     const run = await wb.action({ operation: 'coach-create', id, expectedRevision: revision, confirmed: true, mode: 'review', provider: 'personal', model: 'm', difficulty: 'normal', limit: 1 }, undefined, { login: 'alice', admin: false, local: false })
     assert.equal(run.run.route.provider, 'personal')
-    await assert.rejects(wb.action({ operation: 'coach-create', id, expectedRevision: revision, confirmed: true, mode: 'review', provider: 'personal', model: 'm', difficulty: 'normal', limit: 1 }, undefined, { login: 'carol', admin: false, local: false }), /模型列表已变化/)
+    await assert.rejects(wb.action({ operation: 'coach-create', id, expectedRevision: revision, confirmed: true, mode: 'review', provider: 'personal', model: 'm', difficulty: 'normal', limit: 1 }, undefined, { login: 'carol', admin: true, local: false }), /模型列表已变化/)
     // Without an owner the same request keeps the shared plane.
     const anonymous = await wb.action({ operation: 'coach-options', id })
     assert.equal(anonymous.routes[0].provider, 'shared')
@@ -195,7 +195,7 @@ test('the registered workbench route resolves the owner from the request cookie'
     const seen = [], cookies = []
     const wb = new PptWorkbench({ catalogPath: join(directory, 'projects.jsonl'),
       coachingModel: { routes: async (_signal, owner) => { seen.push(owner); return [{ provider: owner === 'alice' ? 'personal' : 'shared', model: 'm', label: 'L' }] } } })
-    await wb.remember(created, {}, { agent: { session: { header: {} } } })
+    await wb.remember(created, {}, { agent: { session: { header: { owner: 'alice' } } } })
     const id = (await wb.action({ operation: 'list' })).projects[0].id
     let handler
     installPptWorkbench({
@@ -206,8 +206,9 @@ test('the registered workbench route resolves the owner from the request cookie'
     const signed = await handler(request({ cookie: 'other=v; sid=alice-session' }))
     assert.equal((await signed.json()).routes[0].provider, 'personal')
     const anonymous = await handler(request({}))
-    assert.equal((await anonymous.json()).routes[0].provider, 'shared')
-    assert.deepEqual(seen, ['alice', undefined])
+    assert.equal(anonymous.status, 400)
+    assert.equal((await anonymous.json()).ok, false)
+    assert.deepEqual(seen, ['alice'])
     assert.deepEqual(cookies, ['other=v; sid=alice-session', undefined])
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })

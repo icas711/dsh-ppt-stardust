@@ -50,13 +50,48 @@ test('invalid order cannot lose a page or partially write any artifact', () => f
   }
 }))
 test('read-only listing does not create storage; known tools register persistent projects', () => fixture(async ({ dir, created, wb }) => {
-  assert.deepEqual(await wb.action({ operation: 'list' }), { ok: true, projects: [] }); assert.equal(existsSync(wb.catalogPath), false)
+  assert.deepEqual(await wb.action({ operation: 'list' }), { ok: true, projects: [], admin: false }); assert.equal(existsSync(wb.catalogPath), false)
   await wb.remember(created, {})
   const again = new PptWorkbench({ catalogPath: wb.catalogPath }); const list = await again.action({ operation: 'list' }); assert.equal(list.projects.length, 1)
   const opened = await again.action({ operation: 'open', id: list.projects[0].id })
   assert.equal(opened.project.revision, 0); assert.equal(opened.project.title, '工程'); assert.equal(opened.project.slides.length, 3)
   writeFileSync(join(dir, 'other.json'), '{}')
   await assert.rejects(again.action({ operation: 'open', id: '0'.repeat(64), path: join(dir, 'other.json') }), /索引/)
+}))
+
+test('project access follows the recorded owner for lists, actions and downloads', () => fixture(async ({ dir, created, wb }) => {
+  const alice = { login: 'alice', admin: false, local: false }
+  const bob = { login: 'bob', admin: false, local: false }
+  const admin = { login: 'root', admin: true, local: false }
+  const anonymous = { admin: false, local: false }
+  await wb.remember(created, {}, { agent: { session: { header: { owner: 'alice' } } } })
+  const own = (await wb.action({ operation: 'list' }, undefined, alice)).projects
+  assert.equal(own.length, 1)
+  assert.equal(own[0].owner, 'alice')
+  const id = own[0].id
+  const legacy = await buildDeckAsync({ title: 'Legacy', slides, outputDir: dir, fileName: 'legacy' })
+  await wb.remember(legacy, {})
+  assert.equal((await wb.action({ operation: 'list' }, undefined, admin)).projects.length, 2)
+  for (const identity of [bob, anonymous]) {
+    assert.deepEqual((await wb.action({ operation: 'list' }, undefined, identity)).projects, [])
+    for (const operation of ['open', 'download', 'edit', 'undo', 'render', 'coach-list', 'visual-list', 'template-create-from-project', 'template-restyle']) {
+      // Attach a minimal store so template operations reach the project access check.
+      wb.attachTemplateStore({})
+      await assert.rejects(wb.action({ operation, id, kind: 'json', expectedRevision: 0 }, undefined, identity), /索引/)
+    }
+    const denied = await wb.fetchDownload(new Request('http://local/api/dsh-ppt/download?id=' + id + '&kind=json&revision=0'), identity)
+    assert.equal(denied.status, 400)
+  }
+  assert.equal((await wb.action({ operation: 'open', id }, undefined, admin)).project.owner, 'alice')
+  // An admin refresh must not take ownership of another user's project.
+  await wb.remember(created, {}, undefined, admin)
+  assert.equal((await wb.action({ operation: 'list' }, undefined, alice)).projects[0].owner, 'alice')
+  const copy = await wb.action({ operation: 'edit', id, expectedRevision: 0, saveAs: true }, undefined, alice)
+  assert.equal(copy.project.owner, 'alice')
+  assert.notEqual(copy.project.id, id)
+  const restarted = new PptWorkbench({ catalogPath: wb.catalogPath })
+  assert.equal((await restarted.action({ operation: 'list' }, undefined, alice)).projects.length, 2)
+  assert.deepEqual((await restarted.action({ operation: 'list' }, undefined, bob)).projects, [])
 }))
 test('authenticated carrier only; original Host used across HTTP bridge and origin checked', () => fixture(async ({ wb }) => {
   const registrations = []; installPptWorkbench({ inject(deps, fn) { assert.deepEqual(deps, ['connection']); fn({ connection: { fetch: { register(route) { registrations.push(route) } } } }); } }, wb)

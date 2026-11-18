@@ -178,7 +178,7 @@ test('workbench: template-create-from-project takes the project by catalog id, n
   const created = await advanced.buildDeckAsync({ title: 'Годовой отчёт', slides, outputDir: dir, lang: 'ru' })
   const wb = new PptWorkbench({ catalogPath: join(dir, 'catalog.jsonl') })
   wb.attachTemplateStore(makeStore(dir))
-  await wb.remember(created, {})
+  await wb.remember(created, {}, undefined, alice)
   const id = (await wb.action({ operation: 'list' })).projects[0].id
   const saved = await wb.action({ operation: 'template-create-from-project', id, newTemplateId: 'from-report', name: 'Из отчёта' }, undefined, alice)
   assert.equal(saved.key, 'user:from-report')

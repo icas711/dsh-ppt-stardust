@@ -34,8 +34,9 @@ export declare class PptWorkbench {
     private templatesModule;
     private needTemplates;
     private catalog;
+    private visibleProjects;
     /** Recording a completed tool never turns a successful generation into an error. */
-    remember(result: any, args: unknown, exec?: PptExecution): Promise<void>;
+    remember(result: any, args: unknown, exec?: PptExecution, identity?: WorkbenchIdentity): Promise<void>;
     private project;
     private view;
     private revision;

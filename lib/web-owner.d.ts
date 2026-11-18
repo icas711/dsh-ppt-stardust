@@ -2,7 +2,8 @@
  * The web login behind one workbench request, resolved the way the harness
  * authenticates privileged methods: the route handler sees the HTTP request's
  * Cookie header and asks the optional webAuth service. Returns undefined
- * outside a web bundle (tests, older hosts) — callers keep the shared plane.
+ * outside a web bundle (tests, older hosts) — callers keep local access.
+ * With webAuth present, unauthenticated requests never receive project access.
  *
  * The template library additionally reads the authoritative `admin` flag from
  * the same identity (host webAuth is the single source of truth); without it

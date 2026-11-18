@@ -11,7 +11,8 @@ import { PptCoaching } from './coaching.js'
 import type { CoachingModel, ModelRoute } from './coaching-model.js'
 import { PptVisual } from './visual.js'
 import type { VisualModel } from './visual-model.js'
-import { workbenchOwner, workbenchIdentity } from './web-owner.js'
+import { workbenchIdentity } from './web-owner.js'
+import { resolveToolIdentity } from './identity.js'
 import { loadTemplatesModule } from './execution.js'
 import type { PptTemplateStore } from './templates.js'
 import type { WorkbenchIdentity } from './web-owner.js'
@@ -32,7 +33,7 @@ function shareHtml(bytes: Buffer): Uint8Array {
   if (end < 0 || end - start > 4096 || html.indexOf(marker, end + 4) >= 0) throw new Error('HTML 工程下载入口异常，请保存副本后重试')
   return strToU8(html.slice(0, start) + html.slice(end + 4))
 }
-type Project = { id: string; path: string; title: string; updatedAt: string; modelRoute?: ModelRoute }
+type Project = { id: string; path: string; title: string; updatedAt: string; owner?: string; modelRoute?: ModelRoute }
 type Render = { revision: number; pngPaths: string[]; pngHashes: string[]; missingFonts?: string[]; sourceSha256: string }
 type WorkbenchEngine = DeckEngine & { readDeckProject(options: Record<string, unknown>): { manifest: any; path: string } }
 type Options = { catalogPath?: string; loadEngine?: () => Promise<WorkbenchEngine>; coachingModel?: CoachingModel; visualModel?: VisualModel }
@@ -103,10 +104,13 @@ export class PptWorkbench {
         if (typeof row.path === 'string' && row.path.endsWith('.json') && row.id === digest(row.path) && typeof row.title === 'string' && typeof row.updatedAt === 'string') { rows.delete(row.id); rows.set(row.id, row) }
       } catch { /* A crash may leave an incomplete last append; keep older rows. */ }
     }
-    return [...rows.values()].reverse().slice(0, 100)
+    return [...rows.values()].reverse()
+  }
+  private visibleProjects(identity: WorkbenchIdentity): Project[] {
+    return this.catalog().filter(row => identity.admin || identity.local || (!!identity.login && row.owner === identity.login))
   }
   /** Recording a completed tool never turns a successful generation into an error. */
-  async remember(result: any, args: unknown, exec?: PptExecution): Promise<void> {
+  async remember(result: any, args: unknown, exec?: PptExecution, identity: WorkbenchIdentity = resolveToolIdentity(exec)): Promise<void> {
     const file = result?.jsonPath ?? result?.deckPath
     if (typeof file !== 'string') return
     exec?.signal?.throwIfAborted()
@@ -118,15 +122,18 @@ export class PptWorkbench {
     if (manifest.schemaVersion !== 1 || typeof manifest.deckId !== 'string' || manifest.slides.some((s: any) => typeof s.id !== 'string')) return
     let route = exec?.agent?.session.requestContext?.()
     if (!route?.provider || !route?.model) route = exec?.agent?.session.requestHeader?.()?.config
-    const modelRoute = typeof route?.provider === 'string' && typeof route?.model === 'string' ? { provider: route.provider, model: route.model } : this.catalog().find(p => p.path === path)?.modelRoute
-    const row = { id: digest(path), path, title: manifest.title, updatedAt: new Date().toISOString(), ...(modelRoute ? { modelRoute } : {}) }
+    const previous = this.catalog().find(p => p.path === path)
+    const modelRoute = typeof route?.provider === 'string' && typeof route?.model === 'string' ? { provider: route.provider, model: route.model } : previous?.modelRoute
+    // Refreshes never transfer ownership, including legacy entries without an owner.
+    const owner = previous ? previous.owner : identity.login
+    const row = { id: digest(path), path, title: manifest.title, updatedAt: new Date().toISOString(), ...(owner ? { owner } : {}), ...(modelRoute ? { modelRoute } : {}) }
     mkdirSync(dirname(this.catalogPath), { recursive: true })
     if (existsSync(this.catalogPath) && lstatSync(this.catalogPath).size >= 8 * 1024 * 1024) throw new Error('项目索引已满，请备份后整理 projects.jsonl')
     appendFileSync(this.catalogPath, JSON.stringify(row) + '\n')
   }
-  private async project(id: unknown) {
+  private async project(id: unknown, identity: WorkbenchIdentity) {
     if (typeof id !== 'string' || !/^[0-9a-f]{64}$/.test(id)) throw new Error('请选择已有项目')
-    const entry = this.catalog().find(row => row.id === id)
+    const entry = this.visibleProjects(identity).find(row => row.id === id)
     if (!entry) throw new Error('项目不在本机索引中，请先在对话中创建或检查演示文稿')
     if (realpathSync(entry.path) !== entry.path) throw new Error('项目位置已改变，请在对话中重新检查')
     ordinaryFile(entry.path)
@@ -134,8 +141,8 @@ export class PptWorkbench {
     const { manifest } = engine.readDeckProject({ deckPath: entry.path })
     return { entry, engine, manifest, files: pathsFor(entry.path) }
   }
-  private async view(id: unknown) {
-    const { entry, engine, manifest, files } = await this.project(id)
+  private async view(id: unknown, identity: WorkbenchIdentity) {
+    const { entry, engine, manifest, files } = await this.project(id, identity)
     const check = bilingualQuality(engine.checkDeck({ deckPath: entry.path }))
     let html = ''
     try { html = ordinaryFile(files.html).toString('utf8') } catch { /* A check can register an older JSON-only project. */ }
@@ -169,7 +176,7 @@ export class PptWorkbench {
   }
   async action(body: Record<string, unknown>, signal?: AbortSignal, identity: WorkbenchIdentity = { admin: false, local: true }): Promise<unknown> {
     signal?.throwIfAborted()
-    if (body.operation === 'list') return { ok: true, projects: this.catalog() }
+    if (body.operation === 'list') return { ok: true, projects: this.visibleProjects(identity), admin: identity.admin }
     // ---- Template library (identity from the auth cookie; admin flag authoritative) ----
     if (String(body.operation).startsWith('template-')) {
       const store = this.needTemplates()
@@ -211,7 +218,7 @@ export class PptWorkbench {
         }
         case 'template-create-from-project': {
           // The project comes from the catalog by id; the browser never supplies a file path.
-          const { manifest } = await this.project(body.id)
+          const { manifest } = await this.project(body.id, identity)
           const mod = await this.templatesModule()
           const extracted = mod.templateFromDeckManifest(manifest, {
             templateId: String(body.newTemplateId ?? '').trim(),
@@ -247,7 +254,7 @@ export class PptWorkbench {
           return { ok: true, key: saved.key, template: saved.manifest }
         }
         case 'template-restyle': {
-          const { entry, manifest, engine } = await this.project(body.id ?? body.deckPath)
+          const { entry, manifest, engine } = await this.project(body.id ?? body.deckPath, identity)
           const options = await store.restyleOptions(requireTemplateKey(key), identity)
           const result = await engine.editDeck({
             deckPath: entry.path, cwd: dirname(entry.path), signal,
@@ -258,8 +265,8 @@ export class PptWorkbench {
             style: options.restyle.style,
             templateLineage: options.lineage,
           })
-          await this.remember(result, {}, undefined)
-          return { ...await this.view(entry.id), restyle: { template: options.lineage, changed: result.changed, revision: result.revision, title: manifest.title } }
+          await this.remember(result, {}, undefined, identity)
+          return { ...await this.view(entry.id, identity), restyle: { template: options.lineage, changed: result.changed, revision: result.revision, title: manifest.title } }
         }
         case 'template-apply': {
           const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : ''
@@ -271,15 +278,15 @@ export class PptWorkbench {
             ...options.create, title, outputDir, lang: body.lang, overwrite: false, signal,
             templateLineage: options.lineage,
           })
-          await this.remember(created, {}, undefined)
-          return { ...await this.view(digest(created.jsonPath)), createdFrom: options.lineage }
+          await this.remember(created, {}, undefined, identity)
+          return { ...await this.view(digest(created.jsonPath), identity), createdFrom: options.lineage }
         }
         default:
           throw new Error('Неизвестная операция шаблонов')
       }
     }
-    if (body.operation === 'open') return this.view(body.id)
-    const { entry, engine, manifest, files } = await this.project(body.id)
+    if (body.operation === 'open') return this.view(body.id, identity)
+    const { entry, engine, manifest, files } = await this.project(body.id, identity)
     signal?.throwIfAborted()
     const context = { id: entry.id, manifest, ...(manifest.dataModel?{dataNotes:Object.fromEntries(manifest.slides.map((s:any)=>[s.id,engine.dataNotes(manifest,s)]))}:{}) }
     const visualContext = { id: entry.id, path: entry.path, manifest, engine }
@@ -314,10 +321,10 @@ export class PptWorkbench {
     if (body.operation === 'visual-adopt') {
       if (body.confirmed !== true) throw new Error('请确认采用修复副本 / Confirm adopting the repaired copy')
       const { path, render } = this.visual.adoption(visualContext, body.runId)
-      await this.remember({ jsonPath: path }, {}, undefined)
-      const copy = await this.project(digest(path))
+      await this.remember({ jsonPath: path }, {}, undefined, identity)
+      const copy = await this.project(digest(path), identity)
       this.renders.set(copy.entry.id, { revision: copy.manifest.revision, sourceSha256: render.sourceSha256!, pngPaths: render.pngPaths!, pngHashes: render.pngPaths!.map(p => digest(ordinaryFile(p))), missingFonts: render.missingFonts })
-      return { ...await this.view(digest(path)), originalId: entry.id }
+      return { ...await this.view(digest(path), identity), originalId: entry.id }
     }
     if(body.operation === 'data-preview' || body.operation === 'data-apply') {
       // Always force file reads off, including nested source updates and scenario packets.
@@ -325,13 +332,13 @@ export class PptWorkbench {
         scenario:body.scenario, previewToken:body.previewToken, confirmed:body.confirmed, saveAs:body.saveAs!==false, allowFiles:false, signal }
       if(body.operation === 'data-preview') return engine.previewDeckData(args)
       const result=await engine.updateDeckData(args)
-      await this.remember(result,args)
-      return { ...await this.view(digest(result.jsonPath)), originalId:entry.id }
+      await this.remember(result, args, undefined, identity)
+      return { ...await this.view(digest(result.jsonPath), identity), originalId:entry.id }
     }
     if (body.operation === 'coach-create') return { ok: true, run: await this.coaching.create(context, body, signal, identity.login) }
     if (body.operation === 'coach-step') {
       await this.coaching.step(context, body.runId, body, signal, identity.login)
-      const current = await this.project(entry.id)
+      const current = await this.project(entry.id, identity)
       return { ok: true, run: this.coaching.get({ id: entry.id, manifest: current.manifest }, body.runId) }
     }
     if (body.operation === 'coach-apply') {
@@ -340,13 +347,13 @@ export class PptWorkbench {
       const args = { deckPath: entry.path, expectedRevision: manifest.revision, signal, saveAs: true, preserveUndo: true,
         ...(edits.length ? { edits } : {}), ...(append.length ? { append } : {}) }
       const result = await engine.editDeck(args)
-      await this.remember(result, args)
-      return { ...await this.view(digest(result.jsonPath)), originalId: entry.id }
+      await this.remember(result, args, undefined, identity)
+      return { ...await this.view(digest(result.jsonPath), identity), originalId: entry.id }
     }
     if (body.operation === 'render') {
       const result = await engine.renderDeck({ pptxPath: files.pptx, format: 'png', signal })
       if (result.ok) this.renders.set(entry.id, { revision: manifest.revision, pngPaths: result.pngPaths ?? [], pngHashes: (result.pngPaths ?? []).map(path => digest(ordinaryFile(path))), missingFonts: result.missingFonts, sourceSha256: result.sourceSha256! })
-      const view = await this.view(entry.id)
+      const view = await this.view(entry.id, identity)
       if (result.ok && !view.project.render) throw new Error('项目已被修改，请重新渲染')
       return { ...result, ...(result.ok ? {} : {
         messageEn: englishWorkbenchMessage(result.message || 'PPTX rendering failed.'),
@@ -360,22 +367,22 @@ export class PptWorkbench {
         ...(body.slide === undefined ? {} : { edits: [{ slide: body.slide, patch: this.patch(body.patch) }] }),
         ...(body.order === undefined ? {} : { order: body.order }) }
       const result = await engine.editDeck(args)
-      await this.remember(result, args)
-      return { ...await this.view(digest(result.jsonPath)), changed: (result as any).changed }
+      await this.remember(result, args, undefined, identity)
+      return { ...await this.view(digest(result.jsonPath), identity), changed: (result as any).changed }
     }
     if (body.operation === 'duplicate' || body.operation === 'remove') {
       if (typeof body.slide !== 'string' || !manifest.slides.some((s: any) => s.id === body.slide)) throw new Error('页面不存在')
       const args = { deckPath: entry.path, expectedRevision: body.expectedRevision, signal, [body.operation]: [body.slide] }
       const result = await engine.editDeck(args)
-      await this.remember(result, args)
-      const view = await this.view(entry.id)
+      await this.remember(result, args, undefined, identity)
+      const view = await this.view(entry.id, identity)
       const originalIndex = manifest.slides.findIndex((s: any) => s.id === body.slide)
       const selected = view.project.slides[Math.min(originalIndex + (body.operation === 'duplicate' ? 1 : 0), view.project.slides.length - 1)].id
       return { ...view, selected }
     }
     if (body.operation === 'undo') {
       await engine.undoDeck({ deckPath: entry.path, expectedRevision: body.expectedRevision, signal })
-      return this.view(entry.id)
+      return this.view(entry.id, identity)
     }
     throw new Error('不支持此操作')
   }
@@ -396,7 +403,7 @@ export class PptWorkbench {
         } })
       }
       if (!['html', 'pptx', 'json', 'bundle', 'share', 'notes', 'coaching', 'data', 'visual'].includes(String(kind))) return fail(400, '不支持此文件类型')
-      const { entry, manifest, files, engine } = await this.project(params.get('id'))
+      const { entry, manifest, files, engine } = await this.project(params.get('id'), identity)
       if (String(manifest.revision) !== params.get('revision')) return fail(409, '项目已被修改，请重新打开后下载')
       request.signal.throwIfAborted()
       let name: string, bytes: Uint8Array
@@ -438,7 +445,7 @@ export class PptWorkbench {
         bytes = ordinaryFile(path); name = basename(path)
       }
       request.signal.throwIfAborted()
-      if ((await this.project(entry.id)).manifest.revision !== manifest.revision) return fail(409, '项目已被修改，请重新打开后下载')
+      if ((await this.project(entry.id, identity)).manifest.revision !== manifest.revision) return fail(409, '项目已被修改，请重新打开后下载')
       const archive = kind === 'bundle' || kind === 'share'
       const type = ['notes','coaching','data','visual'].includes(String(kind)) ? 'text/markdown; charset=utf-8' : archive ? 'application/zip' : kind === 'pptx' ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' : kind === 'html' ? 'text/html; charset=utf-8' : 'application/json; charset=utf-8'
       return new Response(new Uint8Array(bytes), { headers: {

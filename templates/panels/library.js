@@ -1,6 +1,6 @@
 // Per-view preferences stay in this plugin instance; user files are never changed.
 const projectLibraryPreferences = new Map();
-function ProjectLibrary({ items, scope = 'projects', language = 'zh', searchText, updatedAt, renderItem, t, searchHint }) {
+function ProjectLibrary({ items, scope = 'projects', language = 'zh', searchText, updatedAt, renderItem, t, searchHint, groupByOwner = false }) {
   const saved = projectLibraryPreferences.get(scope);
   const [query, setQuery] = React.useState(saved?.query || '');
   const [order, setOrder] = React.useState(saved?.order || 'updated');
@@ -17,6 +17,16 @@ function ProjectLibrary({ items, scope = 'projects', language = 'zh', searchText
     projectLibraryPreferences.set(scope, { query: nextQuery, order: nextOrder });
     setQuery(nextQuery); setOrder(nextOrder);
   }
+  const groups = new Map();
+  if (groupByOwner) for (const row of visible) {
+    const owner = row.owner || '';
+    if (!groups.has(owner)) groups.set(owner, []);
+    groups.get(owner).push(row);
+  }
+  const content = groupByOwner ? [...groups].sort(([a], [b]) => collator.compare(a, b)).map(([owner, rows]) =>
+    h('details', { key: owner, className: 'project-library-owner' },
+      h('summary', null, owner || tplTr('Без владельца', 'No owner'), h('span', { className: 'w-muted' }, ' (' + rows.length + ')')),
+      h('div', { className: 'project-library-owner-items' }, rows.map(renderItem)))) : visible.map(renderItem);
   return h('section', { className: 'project-library', 'aria-label': t('工程查找', 'Find projects') },
     h('style', null, PROJECT_LIBRARY_CSS),
     h('div', { className: 'project-library-controls' },
@@ -31,7 +41,7 @@ function ProjectLibrary({ items, scope = 'projects', language = 'zh', searchText
       query ? h(W.Button, { variant: 'ghost', onClick: () => change('', order) }, t('清空搜索', 'Clear search')) : null),
     h('p', { className: 'w-muted project-library-count', role: 'status', 'aria-live': 'polite' },
       t('显示 ', 'Showing ') + visible.length + ' / ' + items.length + t(' 个工程', ' projects')),
-    visible.length ? visible.map(renderItem) : h(W.Empty, { title: t('没有匹配的工程', 'No matching projects'), icon: 'folder' },
+    visible.length ? content : h(W.Empty, { title: t('没有匹配的工程', 'No matching projects'), icon: 'folder' },
       t('换个关键词，或清空搜索查看全部工程。', 'Try another keyword or clear the search to show all projects.')));
 }
-const PROJECT_LIBRARY_CSS = `.project-library{min-width:0}.project-library-controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:12px 0}.project-library-controls>label{display:grid;gap:6px;margin:0!important;min-width:0;color:var(--w-muted);font-size:13px}.project-library-controls>label:first-child{flex:1 1 240px}.project-library-controls>label:nth-child(2){flex:0 1 180px}.project-library-controls input,.project-library-controls select{width:100%;min-width:0;min-height:38px;font:inherit;color:var(--w-text);background:var(--w-bg);border:1px solid var(--w-border);border-radius:8px;padding:8px 10px}.project-library-count{margin:4px 0 12px;font-size:12px}.project-library-controls :focus-visible{outline:2px solid var(--w-accent);outline-offset:3px}@media(max-width:520px){.project-library-controls>label:first-child{flex-basis:100%}.project-library-controls>label:nth-child(2){flex:1 1 160px}}`;
+const PROJECT_LIBRARY_CSS = `.project-library{min-width:0}.project-library-owner{border:1px solid var(--w-border);border-radius:8px;margin:8px 0}.project-library-owner>summary{cursor:pointer;padding:12px;font-weight:600;overflow-wrap:anywhere}.project-library-owner>summary:focus-visible{outline:2px solid var(--w-accent);outline-offset:2px}.project-library-owner-items{padding:0 12px 12px 24px}.project-library-controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:12px 0}.project-library-controls>label{display:grid;gap:6px;margin:0!important;min-width:0;color:var(--w-muted);font-size:13px}.project-library-controls>label:first-child{flex:1 1 240px}.project-library-controls>label:nth-child(2){flex:0 1 180px}.project-library-controls input,.project-library-controls select{width:100%;min-width:0;min-height:38px;font:inherit;color:var(--w-text);background:var(--w-bg);border:1px solid var(--w-border);border-radius:8px;padding:8px 10px}.project-library-count{margin:4px 0 12px;font-size:12px}.project-library-controls :focus-visible{outline:2px solid var(--w-accent);outline-offset:3px}@media(max-width:520px){.project-library-controls>label:first-child{flex-basis:100%}.project-library-controls>label:nth-child(2){flex:1 1 160px}}`;
