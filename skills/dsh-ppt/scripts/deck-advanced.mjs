@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, statSync, openSync, closeSync, rmSync } from 'node:fs'
-import { resolve, dirname, extname, basename } from 'node:path'
+import { mkdirSync, readFileSync, statSync, openSync, closeSync, rmSync, existsSync, unlinkSync } from 'node:fs'
+import { resolve, dirname, extname, basename, join, isAbsolute } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { inflateSync } from 'node:zlib'
 import { buildPptx, renderHtml, normalizeBuildOptions, normalizeSlides, resolveTheme, resolveLanguage, resolveDeckFileName, commitDeckArtifacts, DECK_VERSION, pptxEastAsianFont, backgroundTypeOfLayout, TEMPLATE_BACKGROUND_TYPES } from './deck-core.mjs'
@@ -8,6 +8,7 @@ import { normalizeDataModel, prepareDataSlides, validateDataSnapshot, previewDat
 import { normalizeVisual, applyVisualActions } from './deck-visual.mjs'
 import { normalizeDesignLayouts, pickDesignLayout, layoutAssetIds } from './deck-layouts.mjs'
 import { fontFamily, normalizeTextStyles, embedFontAssets, embedPptxFonts, MAX_FONTS } from './deck-fonts.mjs'
+import { projectPaths, storedProjectPaths, pluginStorageDir } from './deck-storage.mjs'
 export { readRenderReceipt } from './deck-render.mjs'
 export { dataNotes, dataReport } from './deck-data.mjs'
 export { buildDeck, buildThemePreview, listThemes, resolveTheme, resolveLanguage } from './deck-core.mjs'
@@ -518,12 +519,48 @@ function result(manifest, paths) {
     slideCount: manifest.slides.length, deckId: manifest.deckId, revision: manifest.revision,
     slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.title, layout: s.layout })),
     undoAvailable: manifest.history.length, deliveryStatus: manifest.quality?.issues.some(i => i.code === 'template-unfilled') ? 'draft' : 'ready-for-review',
-    quality: manifest.quality, verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' }, outputDir: dirname(paths.json),
-    files: paths, htmlPath: paths.html, pptxPath: paths.pptx, jsonPath: paths.json }
+    quality: manifest.quality, verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' }, outputDir: dirname(paths.html),
+    internalProject: !!manifest.delivery,
+    ...(manifest.delivery?.pdfWarning ? { pdfWarning: manifest.delivery.pdfWarning } : {}),
+    files: { ...paths, ...(manifest.delivery && existsSync(paths.pptx.slice(0, -5) + '.pdf') ? { pdf: paths.pptx.slice(0, -5) + '.pdf' } : {}) },
+    ...(manifest.delivery && existsSync(paths.pptx.slice(0, -5) + '.pdf') ? { pdfPath: paths.pptx.slice(0, -5) + '.pdf' } : {}),
+    htmlPath: paths.html, pptxPath: paths.pptx, jsonPath: paths.json }
 }
 function pathsFor(jsonPath) {
-  const base = jsonPath.slice(0, -5)
-  return { html: base + '.html', pptx: base + '.pptx', json: jsonPath }
+  return existsSync(jsonPath) ? storedProjectPaths(jsonPath) : projectPaths(jsonPath)
+}
+
+async function finishDelivery(manifest, paths, signal, render = renderDeck) {
+  const value = result(manifest, paths)
+  if (!manifest.delivery) return value
+  delete value.pdfWarning
+  try {
+    const rendered = await render({ pptxPath: paths.pptx, format: 'pdf', signal })
+    abort(signal)
+    if (!rendered.ok || !rendered.pdfPath) throw new Error([rendered.message, rendered.installationHint].filter(Boolean).join('\n') || 'PDF renderer unavailable')
+    withLock(paths.json, () => {
+      const current = JSON.parse(readFileSync(paths.json, 'utf8'))
+      if (current.revision !== manifest.revision || hash(readFileSync(paths.pptx)) !== rendered.sourceSha256) fail('Проект изменён во время экспорта PDF; повторите экспорт')
+      const pdf = paths.pptx.slice(0, -5) + '.pdf'
+      commitDeckArtifacts([{ path: pdf, data: readFileSync(rendered.pdfPath) }])
+      value.pdfPath = pdf
+      value.files.pdf = pdf
+    })
+  } catch (error) {
+    abort(signal)
+    value.pdfWarning = 'PDF не создан: ' + error.message
+  }
+  // Keep the export explanation available in the workbench after the tool call.
+  try {
+    withLock(paths.json, () => {
+      const current = JSON.parse(readFileSync(paths.json, 'utf8'))
+      if (current.revision !== manifest.revision || current.deckId !== manifest.deckId) return
+      if (value.pdfWarning) current.delivery.pdfWarning = value.pdfWarning
+      else delete current.delivery.pdfWarning
+      commitDeckArtifacts([{ path: paths.json, data: documentBytes(current), encoding: 'utf8' }])
+    })
+  } catch { /* A concurrent edit must not be overwritten by export metadata. */ }
+  return value
 }
 function withLock(path, commit) {
   const lock = path + '.dsh-ppt-lock'
@@ -545,9 +582,12 @@ async function generate(manifest, signal) {
   return { json, pptx, manifest, theme, language }
 }
 function commit(paths, data) {
-  const html = renderHtml(data.manifest, data.theme, data.language, paths)
+  const html = renderHtml(data.manifest, data.theme, data.language, data.manifest.delivery ? { html: paths.html, pptx: paths.pptx } : paths)
   data.manifest.artifacts = { html: hash(html), pptx: hash(data.pptx) }
   commitDeckArtifacts([{ path: paths.json, data: documentBytes(data.manifest), encoding: 'utf8' }, { path: paths.html, data: html, encoding: 'utf8' }, { path: paths.pptx, data: data.pptx }])
+  // A PDF from the previous revision must never be offered after a failed export.
+  const pdf = paths.pptx.slice(0, -5) + '.pdf'
+  if (data.manifest.delivery && existsSync(pdf)) unlinkSync(pdf)
 }
 
 function validateSnapshot(value, assets) {
@@ -610,9 +650,15 @@ export async function buildDeckAsync(options = {}) {
   mkdirSync(normalized.outputDir, { recursive: true })
   // Resolve collisions after asynchronous rendering; an earlier call may have committed meanwhile.
   const file = resolveDeckFileName(normalized.outputDir, normalized.fileName, normalized.overwrite)
-  const paths = pathsFor(resolve(normalized.outputDir, file + '.json'))
+  let paths = pathsFor(resolve(normalized.outputDir, file + '.json'))
+  if (options.internalProject === true) {
+    const directory = join(pluginStorageDir(), 'projects', manifest.deckId)
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
+    manifest.delivery = { base: resolve(normalized.outputDir, file) }
+    paths = projectPaths(join(directory, file + '.json'), manifest)
+  }
   withLock(paths.json, () => { abort(options.signal); commit(paths, data) })
-  return result(manifest, paths)
+  return finishDelivery(manifest, paths, options.signal, options.renderPdf)
 }
 
 /**
@@ -645,6 +691,7 @@ function readDocument(pathInput, cwd = '.') {
   let document
   try { document = JSON.parse(bytes) } catch { fail('JSON 工程无法解析：' + path) }
   if (!document || typeof document.title !== 'string' || !Array.isArray(document.slides) || !document.slides.length) fail('这不是有效的 dsh-ppt JSON 工程')
+  if (document.delivery !== undefined && (!document.delivery || typeof document.delivery.base !== 'string' || !isAbsolute(document.delivery.base))) fail('Некорректные пути выдачи проекта')
   if (document.schemaVersion !== undefined && document.schemaVersion !== 1) fail('未知工程 schemaVersion，请升级插件后再修改')
   if (document.slides.length > 120) fail('工程页数超过 120')
   resolveTheme(document.theme); resolveLanguage(document.language)
@@ -685,14 +732,20 @@ async function saveRevision(state, next, signal, saveAs = false, preserveUndo = 
     abort(signal)
     if (hash(readFileSync(state.path)) !== state.fingerprint) fail('工程已被其他操作修改，请重新读取后重试')
     if (saveAs) {
-      const file = resolveDeckFileName(dirname(state.path), basename(state.path, '.json') + '-dsh', false)
-      paths = pathsFor(resolve(dirname(state.path), file + '.json'))
+      const directory = next.delivery ? dirname(paths.html) : dirname(state.path)
+      const file = resolveDeckFileName(directory, basename(paths.html, '.html') + '-dsh', false)
+      if (next.delivery) {
+        next.delivery = { base: resolve(directory, file) }
+        const projectDir = dirname(state.path)
+        mkdirSync(projectDir, { recursive: true, mode: 0o700 })
+        paths = projectPaths(join(projectDir, file + '.json'), next)
+      } else paths = pathsFor(resolve(dirname(state.path), file + '.json'))
     } else {
       const problem = artifactProblem(state.manifest, paths); if (problem) fail(problem)
     }
     commit(paths, data)
   })
-  return result(next, paths)
+  return finishDelivery(next, paths, signal)
 }
 
 export async function editDeck(options = {}) {

@@ -107,10 +107,13 @@ export interface PptCreateResult {
   language: string
   slideCount: number
   outputDir: string
-  files: { html: string; pptx: string; json: string }
+  files: { html: string; pptx: string; json: string; pdf?: string }
   htmlPath: string
   pptxPath: string
   jsonPath: string
+  pdfPath?: string
+  pdfWarning?: string
+  internalProject?: boolean
   deckId?: string
   revision?: number
   undoAvailable?: number

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
-import { resolve, join } from 'node:path'
+import { resolve, join, relative } from 'node:path'
 import { inflateRawSync } from 'node:zlib'
 import { buildDeckAsync, editDeck, undoDeck, checkDeck, checkDeckAsync, checkManifest, listTemplates } from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 import { main } from '../skills/dsh-ppt/scripts/build-deck.mjs'
@@ -148,9 +148,9 @@ test('cancel before export commit leaves no output, tools resolve images and pro
   writeFileSync(join(dir, 'source.png'), png)
   const execute = createPptExecutors(resolvePptConfig({})), context = { agent: { session: { header: { cwd: dir } } } }
   const created = await execute.create({ title: '会话', slides: [{ layout: 'image', title: '截图', image: 'source.png' }] }, context)
-  const changed = await execute.edit({ deckPath: '会话.json', edits: [{ slide: 1, patch: { title: '修改截图' } }] }, context)
+  const changed = await execute.edit({ deckPath: relative(dir, created.jsonPath), edits: [{ slide: 1, patch: { title: '修改截图' } }] }, context)
   assert.equal(changed.revision, 1)
-  const report = await execute.check({ deckPath: '会话.json' }, context); assert.equal(report.revision, 1)
+  const report = await execute.check({ deckPath: relative(dir, created.jsonPath) }, context); assert.equal(report.revision, 1)
   assert.ok(created.pptxPath.startsWith(dir))
 }))
 

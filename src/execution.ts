@@ -123,6 +123,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         outputDir: resolve(cwd, outputDir || '.'),
         fileName: typeof args.fileName === 'string' && args.fileName.trim() !== '' ? args.fileName.trim() : undefined,
         overwrite: args.overwrite === true,
+        internalProject: true,
         maxSlides: config.maxSlides,
         template: args.template,
         brand: templateApply.brand ?? args.brand,
@@ -275,7 +276,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       exec?.signal?.throwIfAborted()
       const engine = await loadEngine()
       exec?.signal?.throwIfAborted()
-      return engine.renderDeck({ ...asRecord(rawArgs), cwd: exec?.agent?.session.header.cwd ?? process.cwd(), signal: exec?.signal })
+      return engine.renderDeck({ ...asRecord(rawArgs), outputDir: undefined, cwd: exec?.agent?.session.header.cwd ?? process.cwd(), signal: exec?.signal })
     },
     async data(rawArgs: unknown, exec?: PptExecution) {
       exec?.signal?.throwIfAborted()

@@ -230,10 +230,14 @@ export interface PptCreateResult {
         html: string;
         pptx: string;
         json: string;
+        pdf?: string;
     };
     htmlPath: string;
     pptxPath: string;
     jsonPath: string;
+    pdfPath?: string;
+    pdfWarning?: string;
+    internalProject?: boolean;
     deckId?: string;
     revision?: number;
     undoAvailable?: number;

@@ -1,6 +1,9 @@
 # 更新记录
 
-## Unreleased
+## 0.20.6-ru.13 (2026-11-18)
+
+- Новые презентации в DSH: выдача HTML/PDF/PPTX, постоянный JSON проекта внутри плагина. PDF создаётся из финального PPTX; при ошибке доступны HTML/PPTX и причина ошибки. ZIP новых проектов не содержит JSON и технических файлов. Старые проекты сохраняют прежнее расположение.
+- Рендеры перенесены во временное хранилище плагина; очистка при запуске и новом рендеринге удаляет результаты после 90 дней без использования, не затрагивая постоянные проекты и выданные файлы.
 
 - Локализация: правило скилла теперь требует всегда задавать `lang` явно по языку общения пользователя (`ru` подсвечена как полноценно поддержанная — плеер, окно докладчика, PPTX-надзаголовки, формат чисел ru-RU); раньше описание параметра упоминало только zh/en/bilingual, и модель могла не передать `ru`, оставляя плееру китайский дефолт.
 - Localization: the skill now mandates setting `lang` explicitly to match the user's conversation language (`ru` is called out as fully supported — player UI, presenter window, PPTX kickers, ru-RU number format); previously the parameter description mentioned only zh/en/bilingual, so the model could omit `ru` and leave the player on the Chinese default.

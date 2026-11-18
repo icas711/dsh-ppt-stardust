@@ -572,7 +572,7 @@ export function sanitizeFileName(input) {
   return cleaned.slice(0, 120) || 'deck'
 }
 
-const DECK_ARTIFACT_EXTENSIONS = ['.html', '.pptx', '.json']
+const DECK_ARTIFACT_EXTENSIONS = ['.html', '.pptx', '.json', '.pdf']
 
 /**
  * 为三件套选择同一个可用文件名前缀。默认不覆盖：任一产物已存在时，

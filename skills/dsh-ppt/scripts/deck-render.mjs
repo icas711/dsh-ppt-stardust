@@ -4,6 +4,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } 
 import { inflateRawSync } from 'node:zlib'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
+import { reserveRenderCache, touchRenderCache } from './deck-storage.mjs'
 
 export const RENDERER_PACKAGE = '@deepseek-ai/libreoffice-kit'
 /** Preferred renderer version: install guidance and the receipt default. */
@@ -162,7 +163,7 @@ export async function renderDeck(options = {}, loadKit = loadRenderer) {
   if (!['png', 'pdf', 'both'].includes(format)) fail('format 需为 png / pdf / both')
   const width = integer(options.width, 1440, 320, 3840, 'width')
   const timeoutMs = integer(options.timeoutMs, 120000, 1000, 300000, 'timeoutMs')
-  const base = options.outputDir === undefined ? join(dirname(pptxPath), `${basename(pptxPath, extname(pptxPath))}-render`) : absolute(options.outputDir, 'outputDir')
+  const requestedOutput = options.outputDir === undefined ? undefined : absolute(options.outputDir, 'outputDir')
   let kit
   try { kit = await loadKit() } catch (error) { abort(options.signal); if (missingDependency(error)) return unavailable(error); throw error }
   abort(options.signal)
@@ -178,7 +179,7 @@ export async function renderDeck(options = {}, loadKit = loadRenderer) {
   const operationSignal = options.signal ? AbortSignal.any([options.signal, deadline.signal]) : deadline.signal
   try {
     abort(operationSignal)
-    root = reserveDirectory(base)
+    root = reserveDirectory(requestedOutput ?? reserveRenderCache())
     staging = join(root, `.partial-${randomUUID()}`)
     mkdirSync(staging)
     const snapshot = join(staging, 'source.pptx')
@@ -238,6 +239,7 @@ export async function renderDeck(options = {}, loadKit = loadRenderer) {
 }
 
 function resultFromReceipt(receipt, receiptPath) {
+  touchRenderCache(receiptPath)
   const root = dirname(receiptPath)
   return { ok: true, status: 'rendered', backend: receipt.renderer.backend, rendererVersion: receipt.renderer.version,
     slideCount: receipt.slideCount, sourceSha256: receipt.source.sha256, missingFonts: receipt.missingFonts,

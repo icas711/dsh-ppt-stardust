@@ -25,7 +25,7 @@ async function fixture(t,inspect=async data=>({slides:data.slides.map(s=>data.ro
   const directory=mkdtempSync(join(root,'visual-'));t.after(()=>{assert.equal(dirname(directory),root);rmSync(directory,{recursive:true,force:true})})
   let calls=0,renders=0,listings=0,seen
   const model={routes:async()=>{listings++;return [route]},inspect:async(_r,system,input,images,signal)=>{calls++;seen={system,input,images};return JSON.stringify(await inspect(JSON.parse(input),signal,images,system))}}
-  const created=await engine.buildDeckAsync({title:'完整季度计划',outputDir:directory,fileName:'plan',slides:[{layout:'bullets',title:'季度收入与交付',bullets:['收入 {{revenue}} 万元','完成四个项目','保留客户回访记录','下一季度继续交付'],notes:'原始讲稿不能丢。'}],dataModel:{sources:[{id:'csv',format:'csv',content:'项目,金额\n收入,1200'}],metrics:[{id:'revenue',kind:'source',source:{sourceId:'csv',cell:'B2'}}]}})
+  const created=await engine.buildDeckAsync({title:'完整季度计划',outputDir:directory,fileName:'plan',...(options.internalProject?{internalProject:true}:{}),slides:[{layout:'bullets',title:'季度收入与交付',bullets:['收入 {{revenue}} 万元','完成四个项目','保留客户回访记录','下一季度继续交付'],notes:'原始讲稿不能丢。'}],dataModel:{sources:[{id:'csv',format:'csv',content:'项目,金额\n收入,1200'}],metrics:[{id:'revenue',kind:'source',source:{sourceId:'csv',cell:'B2'}}]}})
   const loadEngine=async()=>({...engine,renderDeck:async args=>{renders++;return renderDeck(args,fakeKit)},...options.engine})
   const wb=new PptWorkbench({catalogPath:join(directory,'projects.jsonl'),loadEngine,visualModel:model});t.after(()=>wb.visual.dispose())
   await wb.remember(created,{})
@@ -57,6 +57,19 @@ test('actual render receipts drive bounded inspection, repair, re-render and ado
   await f.wb.action({operation:'undo',id:adopted.project.id,expectedRevision:0})
   assert.equal(engine.readDeckProject({deckPath:adopted.project.path}).manifest.slides.length,1)
   Object.values(f.created.files).forEach((p,i)=>assert.deepEqual(readFileSync(p),originals[i]))
+})
+
+
+test('managed projects retain repair and adoption with permanent JSON and cached render receipts',async t=>{
+  const f=await fixture(t,undefined,{internalProject:true}),{run}=await f.create(),done=await f.finish(run)
+  assert.equal(done.status,'complete');assert.equal(done.canAdopt,true)
+  const adopted=await f.act('adopt',{runId:run.id,confirmed:true})
+  assert.equal(adopted.project.managedDelivery,true)
+  assert.equal(adopted.project.render.pageCount,2)
+  assert.equal(dirname(adopted.project.path),dirname(f.created.jsonPath))
+  assert.ok(engine.readDeckProject({deckPath:adopted.project.path}).manifest.delivery)
+  const stored=JSON.parse(readFileSync(join(f.directory,'visual-reviews',run.id+'.json'),'utf8'))
+  assert.ok(stored.rounds.every(round=>round.receipt.includes('tmp')))
 })
 
 test('inspection-only mode reports issues without making presentation copies',async t=>{

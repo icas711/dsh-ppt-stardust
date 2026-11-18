@@ -129,6 +129,7 @@ export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine
             html: string;
             pptx: string;
             json: string;
+            pdf?: string;
         };
         templates?: undefined;
         scenarios?: undefined;

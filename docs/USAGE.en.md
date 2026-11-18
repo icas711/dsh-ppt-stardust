@@ -1,3 +1,5 @@
+> DSH delivery policy: new presentations deliver HTML, PDF and PPTX. Project JSON is stored permanently under `DSH_HOME/plugins/dsh-ppt/projects` and is omitted from default delivery and ZIPs. If PDF export is unavailable or fails, HTML/PPTX remain available with an explanation. Rendering cache files live under `DSH_HOME/plugins/dsh-ppt/tmp`; complete render directories expire after 90 days without use. Viewing a rendered page or validating its receipt refreshes last use. Cleanup runs at plugin startup and before new cached renders. Legacy project locations are unchanged. Standalone CLI builds keep the portable HTML/PPTX/JSON layout; explicit CLI render output directories remain caller-managed.
+
 # dsh-ppt usage guide
 
 [Overview](../README.en.md) · [Changelog](../CHANGELOG.md) · [Validation](VALIDATION.md)

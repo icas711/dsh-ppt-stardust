@@ -28,6 +28,8 @@ import { join, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { nativeCoachingModel } from './coaching-model.js'
 import { nativeVisualModel } from './visual-model.js'
+// @ts-ignore Bundled ESM storage implementation shared with the CLI renderer.
+import { cleanupRenderCache } from '../skills/dsh-ppt/scripts/deck-storage.mjs'
 export type { ToolDefinition } from './tools.js'
 export type { PptExecution } from './execution.js'
 
@@ -49,6 +51,7 @@ export function apply(ctx: PptPluginContext, config: Config = {}): void {
 
   const resolved = resolvePptConfig(config)
   const warn = (message: string): void => { ctx.logger?.warn?.(message) }
+  try { cleanupRenderCache() } catch (error) { warn('[dsh-ppt] Очистка временных рендеров: ' + String(error)) }
   const disposers: Array<() => void> = []
   const catalogDir = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'plugins', 'dsh-ppt')
   const workbench = typeof ctx.inject === 'function' ? new PptWorkbench() : undefined
