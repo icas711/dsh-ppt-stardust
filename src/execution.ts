@@ -269,7 +269,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
           return { ok: true, template: lineage, changed: result.changed, revision: result.revision, files: result.files }
         }
         default:
-          throw new Error('dsh-ppt：неизвестная операция ppt_template; доступно: list/get/create-from-pptx/create-from-project/save/delete/export/import/publish/apply-to-project')
+          throw new Error('dsh-ppt：неизвестная операция ppt_template; доступно: list/get/validate-plan/create-from-pptx/create-from-project/save/delete/export/import/publish/apply-to-project')
       }
     },
     async edit(rawArgs: unknown, exec?: PptExecution) {

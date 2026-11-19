@@ -8,11 +8,15 @@ offer them, never pass `theme` to `ppt_create` when a `templateId` is used.
 
 | Prefix | Source | Notes |
 | --- | --- | --- |
-| `builtin:<id>` | Ships in the package (`corporate-report`, `dark-pitch`) | Always available; read-only unless an admin saves an override |
+| `builtin:<id>` | Bundled templates returned by `list` | Availability depends on the installation; read-only unless an admin saves an override |
 | `public:<id>` | Library, visible to everyone | Publish/delete is admin-only |
 | `user:<id>` | The session owner's private library | Created via `ppt_template` or the panel |
 
-## What a template carries
+## Scene templates (schema 3)
+
+`get` returns variant descriptions and addressable slot IDs, roles, types, required flags, supported structures, hard capacity and heuristic estimates. Preserve page size, fonts, brand and fixed artwork. Compose `deckPlan`, call `validate-plan`, fix errors and review warnings, then pass the same plan to `ppt_create`. Use actual typed chart/table/image data and explicit version 2 semantics for visual structures. `generationPolicy.minSlides` only enables rhythm checks from that many content slides; one-slide decks need no override. Warnings about plan rhythm and layout quality are separate.
+
+## Legacy templates (schema 1/2)
 
 - **Style**: theme reference, brand palette (`primaryColor` / `backgroundColor` /
   `textColor`), font, logo, footer, per-page-type backgrounds
@@ -47,9 +51,7 @@ offer them, never pass `theme` to `ppt_create` when a `templateId` is used.
 ## Workflow
 
 1. `ppt_template { operation: "list" }` — enumerate installed templates.
-   Ask the user via the ask-user tool which one to use (corporate options
-   first); fall back to `builtin:corporate-report` only when there is no
-   ask-user tool or no answer, and say so.
+   Skip the choice if the user already selected a template. Otherwise ask which one to use; when the choice is delegated or the question tool is unavailable, choose from the actual returned list and state the choice. Never assume a particular builtin key exists. With an empty library, import a reference/bundle first.
 2. `ppt_create { title, templateId, content | slides }` — build with real
    content in the template style. A `templateId` without content/slides
    produces an **unfilled draft** (quality issue `template-unfilled`) — never
