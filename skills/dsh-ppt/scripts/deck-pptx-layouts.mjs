@@ -1,3 +1,4 @@
+import { IDENTITY_TRANSFORM, composeTransforms, groupTransform, transformedBounds } from './deck-geometry.mjs'
 import { extractSlotTypography } from './deck-text-slots.mjs'
 // deck-pptx-layouts.mjs —— извлечение макетов (фон + картинки с положением) из PPTX.
 // Используется templateFromPptx. Положение хранится в долях слайда (%), поэтому не зависит от формата
@@ -197,13 +198,6 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
     if (w < 1 || h < 1) { skip(lib.getShapeKind(shape), shape, ctx, 'Область контента вне страницы или слишком мала'); return }
     ctx.zones.push({ kind, x, y, w: round3(w), h: round3(h), ...(kind !== 'image' ? extractSlotTypography(lib, pres, shape) : {}) })
   }
-  const project = (bounds, transform) => {
-    if (!transform) return bounds
-    const { outer, inner } = transform
-    const sx = num(outer.w) / (num(inner.w) || 1), sy = num(outer.h) / (num(inner.h) || 1)
-    return { x: num(outer.x) + (num(bounds.x) - num(inner.x)) * sx, y: num(outer.y) + (num(bounds.y) - num(inner.y)) * sy, w: num(bounds.w) * sx, h: num(bounds.h) * sy }
-  }
-
   const collect = async (shapes, push, ctx) => {
     for (const shape of shapes) {
       const kind = lib.getShapeKind(shape)
@@ -219,12 +213,12 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
         const transform = lib.getGroupTransform(shape)
         const children = lib.getGroupChildren(shape)
         for (const child of children) ctx.nested.add(nestedKey(lib, child))
-        await collect(children, push, { ...ctx, transform: composeTransform(ctx.transform, transform) })
+        await collect(children, push, { ...ctx, transform: composeTransforms(ctx.transform ?? IDENTITY_TRANSFORM, legacyGroupTransform(transform)) })
         continue
       }
       const raw = lib.getShapeBoundsResolved(ctx.pres, shape)
       if (!raw) { skip(kind, shape, ctx, 'Не удалось определить положение объекта'); continue }
-      const bounds = ctx.transform ? project(raw, ctx.transform) : raw
+      const bounds = ctx.transform ? transformedBounds(numericFrame(raw), ctx.transform) : raw
       const text = String(lib.getShapeText(shape) ?? '').trim()
       if (kind === 'shape' && (text || lib.isShapePlaceholder(shape))) {
         if (ctx.level === 'slide' || lib.isShapePlaceholder(shape)) {
@@ -333,11 +327,15 @@ function roleOf(box) {
   return box.y < 25 && box.w >= 60 ? 'header' : 'decor'
 }
 function nestedKey(lib, shape) { return `${lib.getShapeKind(shape)}|${lib.getShapeId(shape)}` }
-function composeTransform(parent, child) {
-  if (!parent) return child
-  // Вложенные группы: внутренние координаты ребёнка проецируются родителем
-  const p = (x, y, w, h) => ({ x: parent.outer.x + (x - parent.inner.x) * (num(parent.outer.w) / (num(parent.inner.w) || 1)), y: parent.outer.y + (y - parent.inner.y) * (num(parent.outer.h) / (num(parent.inner.h) || 1)), w: w * (num(parent.outer.w) / (num(parent.inner.w) || 1)), h: h * (num(parent.outer.h) / (num(parent.inner.h) || 1)) })
-  return { outer: p(num(child.outer.x), num(child.outer.y), num(child.outer.w), num(child.outer.h)), inner: child.inner }
+function numericFrame(value) {
+  return Object.fromEntries(['x', 'y', 'w', 'h'].map(key => [key, num(value[key])]))
+}
+function legacyGroupTransform(value) {
+  const outer = numericFrame(value.outer), inner = numericFrame(value.inner)
+  // Preserve the legacy fallback for empty group viewports. Scene import will
+  // validate degenerate transforms explicitly rather than inherit this policy.
+  inner.w ||= 1; inner.h ||= 1
+  return groupTransform({ outer, inner })
 }
 
 /**
