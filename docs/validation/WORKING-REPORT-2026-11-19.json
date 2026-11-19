@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-19",
+  "commit": "f45ff46",
+  "scope": "Deterministic product path with public fictional pilot data; no live model invocation.",
+  "template": {
+    "key": "builtin:working-report",
+    "schemaVersion": 3,
+    "variants": 3,
+    "slots": [
+      "heading",
+      "body",
+      "source"
+    ],
+    "pageEmu": {
+      "width": 12192000,
+      "height": 6858000
+    }
+  },
+  "checks": {
+    "fullSuite": {
+      "passed": 475,
+      "failed": 0,
+      "skipped": 0
+    },
+    "finalTargetedSuite": {
+      "passed": 23,
+      "failed": 0
+    },
+    "projectQuality": {
+      "errors": 0,
+      "warnings": 0
+    },
+    "nativeReview": {
+      "renderer": "Microsoft PowerPoint 16.0",
+      "slides": 6,
+      "openedReadOnly": true,
+      "obviousClippingOrOverlap": false
+    },
+    "sceneGolden": {
+      "existingCases": 23,
+      "existingPassed": true,
+      "addedCases": [
+        {
+          "id": "semantic-kpi-typography",
+          "ssim": 1.0,
+          "regions": [
+            {
+              "id": "item-1-value",
+              "ssim": 1.0
+            },
+            {
+              "id": "item-1",
+              "ssim": 1.0
+            }
+          ],
+          "passed": true
+        },
+        {
+          "id": "semantic-comparison-typography",
+          "ssim": 1.0,
+          "regions": [
+            {
+              "id": "item-1",
+              "ssim": 1.0
+            },
+            {
+              "id": "item-2",
+              "ssim": 1.0
+            },
+            {
+              "id": "criterion-0",
+              "ssim": 1.0
+            },
+            {
+              "id": "item-1-criterion-0",
+              "ssim": 1.0
+            },
+            {
+              "id": "item-2-criterion-0",
+              "ssim": 1.0
+            }
+          ],
+          "passed": true
+        }
+      ],
+      "threshold": 0.999,
+      "passed": true
+    }
+  },
+  "outputs": {
+    "working-report.pptx": "5b041e4973b298bfeda8fa45320a3c862528d3d3fe5e59ec0f2711fb984f76c9",
+    "working-report-template.zip": "92ae09b7f9f81d77dbd28479a1821d674d6e9776cdca6462d9ec8f816e6b155d"
+  },
+  "remaining": [
+    "Interactive DSH editor acceptance and screenshot review.",
+    "Live model selection with clean independent memory/workspace and pinned versions.",
+    "Remote Linux/Windows CI.",
+    "Larger and longer material still requires explicit fit review; no automatic font shrinking."
+  ]
+}

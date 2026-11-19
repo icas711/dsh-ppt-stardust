@@ -97,3 +97,8 @@ Fix validation errors before create. Review capacity and rhythm warnings without
 `ppt_edit convertToScene:true` explicitly migrates a legacy project and all history snapshots. It aborts without writing when bindings or unsupported content cannot be preserved. Mixed legacy content fields and `elements` on one slide are errors, including empty legacy fields. Do not remove fields merely to bypass that error.
 
 Treat import warnings as object-specific limitations, not success: report slide, object ID/name, preservation mode and reason. OLE attachments are never executed or copied into assets; only validated raster previews may be retained. HTML chart previews preserve data but do not guarantee Office chart typography/layout parity. Render the PPTX before claiming visual fidelity.
+
+
+### Templates with headings and semantic typography
+
+For schema 3, fill independent heading/title slots as well as the content region. A semantic visual replaces only its addressed text slot; do not put the slide heading into that diagram or overwrite source/fixed artwork. `builtin:working-report` supplies heading/body/source slots and three variants. Its explicit textStyles control KPI values, comparison headings, labels and criteria; do not override fonts or scale sizes yourself. Select a sufficiently large region and split long material explicitly when necessary. Rendering and review remain required.
