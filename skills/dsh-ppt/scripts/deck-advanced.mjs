@@ -1,5 +1,6 @@
 import { normalizePageSize, pageSize } from './deck-page.mjs'
 import { assertLegacySlideInput } from './deck-model.mjs'
+import { PROJECT_SCHEMA_VERSION, MAX_PROJECT_HISTORY as MAX_HISTORY, normalizeLegacyProjectEnvelope, nextProjectRevision } from './deck-migrations.mjs'
 import { mkdirSync, readFileSync, statSync, openSync, closeSync, rmSync, existsSync, unlinkSync } from 'node:fs'
 import { resolve, dirname, extname, basename, join, isAbsolute } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
@@ -16,7 +17,6 @@ export { dataNotes, dataReport } from './deck-data.mjs'
 export { buildDeck, buildThemePreview, listThemes, resolveTheme, resolveLanguage } from './deck-core.mjs'
 
 const MAX_IMAGE = 5 * 1024 * 1024, MAX_ASSETS = 32 * 1024 * 1024, MAX_DOCUMENT = 64 * 1024 * 1024
-const MAX_HISTORY = 20
 const layouts = new Set(['cover', 'section', 'bullets', 'statement', 'closing', 'quote', 'table', ...MEDIA_LAYOUTS])
 const hash = data => createHash('sha256').update(data).digest('hex')
 const clone = value => structuredClone(value)
@@ -653,7 +653,7 @@ export async function buildDeckAsync(options = {}) {
   const lineage = options.templateLineage
   if (lineage !== undefined && (lineage === null || typeof lineage !== 'object' || Array.isArray(lineage)
     || typeof lineage.id !== 'string' || !Number.isInteger(lineage.revision))) fail('templateLineage 需为 { id, revision }')
-  const manifest = { version: DECK_VERSION, schemaVersion: 1, deckId: randomUUID(), revision: 0,
+  const manifest = { version: DECK_VERSION, schemaVersion: PROJECT_SCHEMA_VERSION, deckId: randomUUID(), revision: 0,
     title: normalized.title, theme: normalized.theme.id, language: normalized.language.id, motion: normalized.motion,
     ...(scenario ? { template: scenario.id } : {}), ...(lineage ? { template: { id: lineage.id, revision: lineage.revision } } : {}),
     ...(brand ? { brand } : {}), ...(style ? { style } : {}), ...(dataModel ? {dataModel} : {}), assets, history: [],
@@ -684,7 +684,7 @@ export function previewDeckHtml(options = {}) {
   const cwd = resolve('.'), assets = {}
   const brand = normalizeBrand(options.brand, assets, cwd)
   const style = normalizeStyle(options.style, assets, cwd)
-  const manifest = { version: DECK_VERSION, schemaVersion: 1, deckId: 'preview', revision: 0,
+  const manifest = { version: DECK_VERSION, schemaVersion: PROJECT_SCHEMA_VERSION, deckId: 'preview', revision: 0,
     title: normalized.title, theme: normalized.theme.id, language: normalized.language.id, motion: false,
     ...(brand ? { brand } : {}), ...(style ? { style } : {}), assets, history: [],
     slides: embedSlides(normalized.deck.slides, assets, cwd).map((slide, index) => ({ ...slide, id: 'preview-' + (index + 1) })) }
@@ -702,28 +702,18 @@ function readDocument(pathInput, cwd = '.') {
   const bytes = readFileSync(path)
   let document
   try { document = JSON.parse(bytes) } catch { fail('JSON 工程无法解析：' + path) }
-  if (!document || typeof document.title !== 'string' || !Array.isArray(document.slides) || !document.slides.length) fail('这不是有效的 dsh-ppt JSON 工程')
+  const fingerprint = hash(bytes)
+  document = normalizeLegacyProjectEnvelope(document, {fingerprint})
   if (document.delivery !== undefined && (!document.delivery || typeof document.delivery.base !== 'string' || !isAbsolute(document.delivery.base))) fail('Некорректные пути выдачи проекта')
-  if (document.schemaVersion !== undefined && document.schemaVersion !== 1) fail('未知工程 schemaVersion，请升级插件后再修改')
-  if (document.slides.length > 120) fail('工程页数超过 120')
   resolveTheme(document.theme); resolveLanguage(document.language)
-  document.deckId ||= randomUUID(); document.revision ??= 0
-  if (!Number.isInteger(document.revision) || document.revision < 0) fail('工程 revision 无效')
-  document.assets ??= {}; document.history ??= []
-  if (typeof document.assets !== 'object' || Array.isArray(document.assets)) fail('工程图片资产无效')
-  if (!Array.isArray(document.history) || document.history.length > MAX_HISTORY || document.history.some(h => !h || !Array.isArray(h.slides))) fail('工程历史无效')
   validateSnapshot(document, document.assets)
   for (const prior of document.history) validateSnapshot(prior, document.assets)
   if (document.artifacts !== undefined && (!document.artifacts || typeof document.artifacts !== 'object'
     || ['html', 'pptx'].some(kind => !/^[a-f0-9]{64}$/.test(document.artifacts[kind])))) fail('工程成品校验记录无效')
-  const ids = new Set()
   for (const slide of document.slides) {
     if (!slide || !layouts.has(slide.layout)) fail('工程含有未知页面布局')
-    slide.id ||= randomUUID()
-    if (ids.has(slide.id)) fail('工程含有重复页面 ID')
-    ids.add(slide.id)
   }
-  return { manifest: document, path, fingerprint: hash(bytes) }
+  return { manifest: document, path, fingerprint }
 }
 /** Validated project snapshot for the operator workbench; no file is modified. */
 export function readDeckProject(options = {}) {
@@ -736,7 +726,7 @@ function expected(manifest, revision) {
 }
 async function saveRevision(state, next, signal, saveAs = false, preserveUndo = false) {
   if (!saveAs) { const problem = artifactProblem(state.manifest, pathsFor(state.path)); if (problem) fail(problem) }
-  next.version = DECK_VERSION; next.schemaVersion = 1; next.revision = state.manifest.revision + 1
+  next.version = DECK_VERSION; next.schemaVersion = PROJECT_SCHEMA_VERSION; next.revision = saveAs ? 0 : nextProjectRevision(state.manifest.revision)
   if (saveAs) { next.deckId = randomUUID(); next.revision = 0; next.history = preserveUndo ? [snapshot(state.manifest)] : [] }
   const data = await generate(next, signal)
   let paths = pathsFor(state.path)
