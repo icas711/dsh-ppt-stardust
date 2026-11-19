@@ -33,6 +33,13 @@ function visibleText(slides){return slides.flatMap(s=>s.elements.flatMap(e=>{
 function semanticContent(diagram){
  const {version:_,...value}=structuredClone(diagram)
  if(value.kind==='cycle'&&value.ordered===true)delete value.ordered // Redundant, not a new semantic relationship.
+ if(value.kind==='cycle'&&Array.isArray(value.links)&&Array.isArray(value.items)){
+  // The renderer derives the ordered cycle edges, including last -> first.
+  // Only exactly redundant edges may disappear from the comparison.
+  const ids=value.items.map((item,i)=>item.id??'item-'+(i+1))
+  if(value.links.every(link=>Object.keys(link).every(key=>key==='from'||key==='to')
+    &&ids.some((id,i)=>link.from===id&&link.to===ids[(i+1)%ids.length])))delete value.links
+ }
  if(value.items)value.items=value.items.map(({id:_,...item})=>item)
  return value
 }

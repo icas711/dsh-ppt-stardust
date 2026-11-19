@@ -74,3 +74,15 @@ test('production create tool exposes the same planning instructions as the evalu
  assert.ok(create.description.includes(generationPlanningInstructions()))
  assert.equal(evaluationRequests().instructions,generationPlanningInstructions())
 })
+
+
+test('explicit redundant cycle closure is equivalent; reversed or unknown links are not',()=>{
+ const input=answers(),diagram=input.responses.find(r=>r.caseId==='cycle').deckPlan[0].visual.diagram
+ diagram.items.forEach((item,i)=>item.id='stage-'+i)
+ diagram.links=[{from:'stage-2',to:'stage-0'}]
+ assert.equal(evaluateGenerationResponses(input).passed,true)
+ diagram.links=[{from:'stage-0',to:'stage-2'}]
+ assert.equal(evaluateGenerationResponses(input).results.find(r=>r.caseId==='cycle').passed,false)
+ diagram.links=[{from:'stage-2',to:'unknown'}]
+ assert.equal(evaluateGenerationResponses(input).results.find(r=>r.caseId==='cycle').passed,false)
+})

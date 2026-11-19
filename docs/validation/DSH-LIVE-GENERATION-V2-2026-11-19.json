@@ -1,0 +1,309 @@
+{
+  "date": "2026-11-19",
+  "scope": "User-returned v2 decks; native PowerPoint opened read-only. Plan review replays current generator, not original execution.",
+  "planResults": [
+    {
+      "caseId": "unordered",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "cards"
+      ]
+    },
+    {
+      "caseId": "process",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "process"
+      ]
+    },
+    {
+      "caseId": "timeline",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "timeline"
+      ]
+    },
+    {
+      "caseId": "cycle",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "cycle"
+      ]
+    },
+    {
+      "caseId": "comparison",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "comparison"
+      ]
+    },
+    {
+      "caseId": "kpi",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "kpi"
+      ]
+    },
+    {
+      "caseId": "categories",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "chart"
+      ]
+    },
+    {
+      "caseId": "quote",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "quote"
+      ]
+    },
+    {
+      "caseId": "identifiers",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "cards"
+      ]
+    },
+    {
+      "caseId": "mixed-deck",
+      "passed": true,
+      "issues": [],
+      "structures": [
+        "cards",
+        "process",
+        "timeline",
+        "cycle",
+        "comparison",
+        "kpi",
+        "chart",
+        "quote",
+        "list"
+      ]
+    }
+  ],
+  "planPassed": true,
+  "visualReview": {
+    "renderer": "Microsoft PowerPoint 16.0",
+    "decks": 10,
+    "slides": 18,
+    "visibleLowContrastIssue": false,
+    "obviousClippingOrOverlap": false,
+    "nativeCharts": 2
+  },
+  "artifacts": [
+    {
+      "file": "comparison-1.pptx",
+      "sha256": "a45e7c120e5ef9c66f31ff5ed843734f215e895231c4b6a4ef21ee819d6aaca4",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 0,
+      "embeddedXlsx": 0,
+      "textObjects": 4,
+      "pictureObjects": 0,
+      "connectors": 0,
+      "chartDetails": []
+    },
+    {
+      "file": "mixed-deck-1.pptx",
+      "sha256": "6bbb2d639f55e2fd0bb09b6fce66e6f601f8c14681c6986fb0362bddaaf6b9ec",
+      "slides": 9,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 1,
+      "embeddedXlsx": 1,
+      "textObjects": 33,
+      "pictureObjects": 0,
+      "connectors": 6,
+      "chartDetails": [
+        {
+          "type": "barChart",
+          "labels": [
+            "Заявки",
+            "Подразделение А",
+            "Подразделение Б",
+            "17",
+            "9"
+          ],
+          "showValue": [
+            {
+              "val": "1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "process-stages.pptx",
+      "sha256": "cbe3563b36b28c8a30561d0346481baa2fe4f45c96d78ad3dabe532e78834f02",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 0,
+      "embeddedXlsx": 0,
+      "textObjects": 6,
+      "pictureObjects": 0,
+      "connectors": 2,
+      "chartDetails": []
+    },
+    {
+      "file": "unordered-1.pptx",
+      "sha256": "4ecfdce61a3d639742c0e2edfe056a93cdf80999a69ae6df92b92edd6a251248",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 0,
+      "embeddedXlsx": 0,
+      "textObjects": 6,
+      "pictureObjects": 0,
+      "connectors": 0,
+      "chartDetails": []
+    },
+    {
+      "file": "Доступность-и-обращения.pptx",
+      "sha256": "54cab45a7b5a37ef44db8140d52ed257571ba23739e63bb5835825a2331c5d5f",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 0,
+      "embeddedXlsx": 0,
+      "textObjects": 4,
+      "pictureObjects": 0,
+      "connectors": 0,
+      "chartDetails": []
+    },
+    {
+      "file": "Заявки-по-подразделениям.pptx",
+      "sha256": "9cab864b10bffa3308e90f14110b1437356d647f8b86aa5d2fcca03624eeb091",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 1,
+      "embeddedXlsx": 1,
+      "textObjects": 0,
+      "pictureObjects": 0,
+      "connectors": 0,
+      "chartDetails": [
+        {
+          "type": "barChart",
+          "labels": [
+            "Заявки",
+            "Подразделение А",
+            "Подразделение Б",
+            "17",
+            "9"
+          ],
+          "showValue": [
+            {
+              "val": "1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Измеряйте-результат,-а-не-занятость.pptx",
+      "sha256": "03f892c7a57bbba0f22662a193588ef11498beb1ac3b1fa15897446bd5b18ceb",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 0,
+      "embeddedXlsx": 0,
+      "textObjects": 2,
+      "pictureObjects": 0,
+      "connectors": 0,
+      "chartDetails": []
+    },
+    {
+      "file": "Календарные-вехи-пилота.pptx",
+      "sha256": "8b838539dffe45205c4848f1634e602234169ef964e27f718aceac29b03d3f0a",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 0,
+      "embeddedXlsx": 0,
+      "textObjects": 4,
+      "pictureObjects": 0,
+      "connectors": 1,
+      "chartDetails": []
+    },
+    {
+      "file": "Коды-проектов.pptx",
+      "sha256": "d1586955c416500dbe35e1273ed340493f2741fc261f3cf2e7a9c6a50f607303",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 0,
+      "embeddedXlsx": 0,
+      "textObjects": 6,
+      "pictureObjects": 0,
+      "connectors": 0,
+      "chartDetails": []
+    },
+    {
+      "file": "Цикл-Наблюдать-—-Проверять-—-Корректировать.pptx",
+      "sha256": "1cb878027a3f1e1a9c2eed82dbb93afc869e011168a7ce8ef06d1061137f1c28",
+      "slides": 1,
+      "pageEmu": {
+        "cx": "9906000",
+        "cy": "6858000"
+      },
+      "charts": 0,
+      "embeddedXlsx": 0,
+      "textObjects": 6,
+      "pictureObjects": 0,
+      "connectors": 3,
+      "chartDetails": []
+    }
+  ],
+  "limitations": [
+    "Runtime version described by user as latest; exact build/model not supplied.",
+    "Model journals are not raw tool traces.",
+    "Shared workspace and memory/reference reads contaminate independent model-choice evaluation.",
+    "Visual test uses sparse synthetic template; does not establish production design quality or foreign-PPTX fidelity.",
+    "DSH read_image adapter unavailable per submitted journals; native review here does not prove that host path works."
+  ],
+  "evaluatorCorrection": {
+    "before": "8/10; cycle and mixed-deck fail changed-semantics",
+    "after": "10/10; exact redundant forward cycle links ignored; reversed/unknown links still fail; responses unchanged"
+  },
+  "checks": {
+    "sessionIsolationFullSuite": {
+      "passed": 471,
+      "failed": 0,
+      "skipped": 0
+    },
+    "evaluatorSuite": {
+      "passed": 8,
+      "failed": 0
+    }
+  }
+}
