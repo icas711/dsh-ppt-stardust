@@ -367,6 +367,11 @@ export class PptTemplateStore {
 /** Names of the image assets a manifest refers to (logo, backgrounds, slide images). */
 function referencedAssets(manifest: Record<string, any>): Set<string> {
   const names = new Set<string>()
+  // Scene templates address raster bytes through assetMap, including backgrounds
+  // and unsupported-object previews, rather than the legacy layout image fields.
+  if (manifest?.schemaVersion === 3) {
+    for (const asset of Object.values(manifest.assetMap ?? {}) as any[]) if (typeof asset?.file === 'string') names.add(asset.file)
+  }
   for (const face of Array.isArray(manifest?.style?.fonts) ? manifest.style.fonts : []) if (typeof face?.file === 'string') names.add(face.file)
   const logo = manifest?.style?.brand?.logo
   if (typeof logo === 'string') names.add(logo)
