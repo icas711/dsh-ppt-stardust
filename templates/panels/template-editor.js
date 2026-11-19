@@ -24,7 +24,7 @@ function TplFontUploads({ draft, disabled, onPick }) {
     const families = tplFontFamilies(draft);
     return h('div', null,
         h('h3', null, tplTr('Файлы шрифтов', 'Font files')),
-        h('p', { className: 'tpe-hint' }, tplTr('Загрузите TTF или OTF для нужного семейства и начертания (до 12 MiB на файл, до 32 MiB в библиотеке). Загрузка сразу сохраняет файл в личную библиотеку и обновляет ваши личные и созданные вами общие шаблоны. Презентации, созданные ранее, сохраняют свои шрифты.', 'Upload a TTF or OTF for the family and face (12 MiB per file, 32 MiB per library). Uploading immediately saves it to your library and updates your private templates and public templates authored by you. Previously created presentations retain their fonts.')),
+        h('p', { className: 'tpe-hint' }, tplTr('TTF или OTF: до 12 MiB на файл, до 32 MiB в библиотеке. Загрузка обновляет ваши личные и созданные вами общие шаблоны. Готовые презентации не меняются.', 'TTF or OTF: up to 12 MiB per file, 32 MiB per library. Uploading updates your private templates and public templates you authored. Existing presentations stay unchanged.')),
         families.length ? families.map(family => h('div', { className: 'tpe-bg', key: family },
             h('h4', null, family),
             TPL_FONT_VARIANTS.map(variant => {
@@ -32,7 +32,7 @@ function TplFontUploads({ draft, disabled, onPick }) {
                 const label = family + ' — ' + tplFontVariantLabel(variant);
                 return h('label', { key: variant }, tplFontVariantLabel(variant) + ' · ' + (face ? tplTr('Файл добавлен', 'File included') : tplTr('Файл не добавлен', 'No file included')),
                     h('input', { type: 'file', accept: '.ttf,.otf,font/ttf,font/otf', disabled, 'aria-label': label, onChange: e => { const file = e.target.files?.[0]; e.target.value = ''; onPick(file, family, variant); } }));
-            }))) : h('p', { className: 'tpe-hint' }, tplTr('Укажите название общего шрифта выше, чтобы загрузить его файл.', 'Enter the default font family above to upload its file.')));
+            }))) : h('p', { className: 'tpe-hint' }, tplTr('Укажите шрифт в настройках текста, чтобы добавить его файл.', 'Specify a font in the text settings to add its file.')));
 }
 // Индикатор занятости: оверлей поверх контейнера с классом tpe-busywrap блокирует клики и показывает спиннер.
 const TPL_BUSY_CSS = `.tpe-busywrap{position:relative}
@@ -220,16 +220,16 @@ function TplColorField({ label, value, fallback, disabled, onChange }) {
 }
 
 function TplSemanticTypography({draft,disabled,set}) {
-    const labels={title:tplTr('Числа KPI','KPI values'),subtitle:tplTr('Заголовки вариантов сравнения','Comparison headings'),body:tplTr('Показатели и значения','Labels and values'),caption:tplTr('Критерии и примечания','Criteria and notes')};
+    const labels={title:tplTr('Заголовок','Title'),subtitle:tplTr('Подзаголовок','Subtitle'),body:tplTr('Основной текст','Body text'),caption:tplTr('Подписи и примечания','Captions and notes')};
     const update=(role,key,value)=>{const textStyles=tplClone(draft.textStyles??{}),style={...textStyles[role]};if(value===undefined)delete style[key];else style[key]=value;if(Object.keys(style).length)textStyles[role]=style;else delete textStyles[role];set({textStyles});};
-    return h('fieldset',null,h('legend',null,tplTr('Оформление KPI и сравнений','KPI and comparison typography')),
-      h('p',null,tplTr('Стили применяются к новым представлениям. Оформление заголовков слайдов меняется отдельно в «Макетах». Проверяйте результат на созданной презентации.','Styles apply to newly generated representations. Edit slide headings separately under Layouts. Review the generated presentation.')),
+    return h('fieldset',null,h('legend',null,tplTr('Стили текста','Text styles')),
+      h('p',null,tplTr('Общие настройки для нового текста. Индивидуальное оформление объектов можно изменить в «Макетах».','Defaults for new text. Edit individual object formatting under Layouts.')),
       ...Object.entries(labels).map(([role,label])=>{const style=draft.textStyles?.[role]??{};return h('fieldset',{key:role},h('legend',null,label),
         h('label',null,tplTr('Шрифт','Font'),h('input',{value:style.fontFamily??'',disabled,placeholder:tplTr('Из области шаблона','From template region'),onChange:e=>update(role,'fontFamily',e.target.value||undefined)})),
         h('label',null,tplTr('Размер, пт','Size, pt'),h('input',{type:'number',min:1,max:400,disabled,value:style.size??'',onChange:e=>update(role,'size',e.target.value===''?undefined:Number(e.target.value))})),
         h(TplColorField,{label:tplTr('Цвет','Colour'),value:style.color??'',disabled,onChange:v=>update(role,'color',v||undefined)}),
         h('label',null,tplTr('Начертание','Weight'),h('select',{value:style.bold===undefined?'inherit':String(style.bold),disabled,onChange:e=>update(role,'bold',e.target.value==='inherit'?undefined:e.target.value==='true')},h('option',{value:'inherit'},tplTr('Из области шаблона','From template region')),h('option',{value:'true'},tplTr('Жирный','Bold')),h('option',{value:'false'},tplTr('Обычный','Regular')))),
-        h(W.Button,{disabled,onClick:()=>{const textStyles={...draft.textStyles};delete textStyles[role];set({textStyles});}},tplTr('Сбросить роль','Reset role')));})
+        h(W.Button,{disabled,onClick:()=>{const textStyles={...draft.textStyles};delete textStyles[role];set({textStyles});}},tplTr('Сбросить стиль','Reset style')));})
     );
 }
 
