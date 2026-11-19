@@ -1,0 +1,8 @@
+{
+  "dense": { "sourceTextShapes": 13, "zones": 6, "images": 0, "losses": ["content-area"], "knownLimitations": ["Only six content slots survive; seven source text blocks have no slot."] },
+  "groups": { "sourceTextShapes": 4, "zones": 4, "images": 0, "losses": [], "bodyBoundsEMU": [[1500000, 1700000, 2000000, 600000], [3700000, 2600000, 1400000, 480000], [500000, 5300000, 3000000, 600000]], "knownLimitations": [] },
+  "typography": { "sourceTextShapes": 1, "zones": 1, "images": 0, "losses": [], "knownLimitations": ["Only the first text run's formatting is imported; forced breaks and paragraph styles are not preserved on refill."] },
+  "artwork": { "sourceTextShapes": 1, "zones": 1, "images": 12, "losses": ["connector", "picture"], "knownLimitations": ["Thirteenth logo and connector are dropped with diagnostics."] },
+  "layers": { "sourceTextShapes": 1, "zones": 1, "images": 2, "losses": [], "knownLimitations": [] },
+  "objects": { "sourceTextShapes": 1, "zones": 1, "images": 0, "losses": ["graphicFrame", "graphicFrame", "graphicFrame"], "knownLimitations": ["Chart, merged table and OLE frame are unsupported by template import."] }
+}

@@ -14,10 +14,44 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      # Native rendering has separate Windows acceptance; these are contract/unit checks.
+      # Synthetic import contracts run here; portable rendering is mandatory below.
       - run: pnpm install --frozen-lockfile --ignore-scripts --no-optional
       # lib/ 是入库的发布产物：构建结果必须与提交内容一致，否则说明有人改了 lib 没改 src。
       - run: pnpm run build
       - run: git diff --exit-code -- lib
       - run: pnpm test
       - run: node --check lib/client.js
+
+  pptx-render:
+    name: Synthetic PPTX rendering (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Baselines were recorded with this version; update deliberately.
+          node-version: 22.19.0
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pnpm install --frozen-lockfile --ignore-scripts --no-optional
+      # Independent lockfile pins SDK, WASM payload and transitive dependencies.
+      # Explicit WASM dependency survives --omit=optional; native engines are unused.
+      - run: npm ci --ignore-scripts --omit=optional --no-audit --no-fund
+        working-directory: test/fixtures/pptx/render-runtime
+      - run: python -m pip install -r test/fixtures/pptx/requirements-render.txt
+      - run: node --test test/pptx-synthetic-import.test.mjs
+      - run: pnpm run test:pptx-render
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pptx-synthetic-${{ matrix.os }}
+          path: .test-output/pptx-synthetic-render/
+          if-no-files-found: error

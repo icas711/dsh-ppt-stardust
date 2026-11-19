@@ -36,8 +36,12 @@ test('native PowerPoint golden: template round trip with original content', { sk
     // Walk nested groups in slide coordinates, as the importer does. Never copy
     // original OOXML or rasterize content into a background to improve the score.
     const project = (b, t) => !b || !t ? b : ({ x: t.x + Number(b.x) * t.sx, y: t.y + Number(b.y) * t.sy, w: Number(b.w) * t.sx, h: Number(b.h) * t.sy })
+    const visited = new Set()
     const walk = function* (shapes, transform) {
       for (const shape of shapes) {
+        const id = lib.getShapeId(shape)
+        if (visited.has(id)) continue // The library also exposes flat copies of group descendants.
+        visited.add(id)
         if (lib.getShapeKind(shape) === 'group') {
           inventory.group = (inventory.group ?? 0) + 1
           const t = lib.getGroupTransform(shape)
@@ -84,7 +88,7 @@ test('native PowerPoint golden: template round trip with original content', { sk
         else if (value) unmapped.push({ kind: 'text', reason: 'Slide model supports one title', text: value })
       } else if (zone.kind === 'body') body.push(value)
     }
-    if (create.slides[index].layout === 'cover') create.slides[index].subtitle = body.join('\n')
+    if (create.slides[index].layout === 'cover' && body.length === 1) create.slides[index].subtitle = body[0]
     else if (body.length) create.slides[index].bullets = body
     slides.push({ regions, inventory, unmapped, textSlots: matched.size })
   }

@@ -35,6 +35,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test \"test/*.test.mjs\"",
     "test:core": "node --test \"test/*.test.mjs\"",
+    "test:pptx-render": "node scripts/golden-pptx-synthetic.mjs",
     "smoke:cli": "node skills/dsh-ppt/scripts/build-deck.mjs --title \"DSH PPT Smoke\" --content @smoke/sample-deck.md --theme data --lang zh --out .smoke-deck"
   },
   "dsh": {

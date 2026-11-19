@@ -212,6 +212,9 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
         if (ctx.level === 'slide') skip(kind, shape, ctx, 'Автоматическое поле номера, даты или колонтитула не переносится')
         continue
       }
+      // getSlideShapes includes flattened descendants, including nested groups.
+      // Skip their root-level copies before recursing into a group again.
+      if (ctx.nested.has(nestedKey(lib, shape)) && !ctx.transform) continue
       if (kind === 'group') {
         const transform = lib.getGroupTransform(shape)
         const children = lib.getGroupChildren(shape)
@@ -219,7 +222,6 @@ export async function extractPptxLayouts({ pres, lib, bytes, slideSize, theme, a
         await collect(children, push, { ...ctx, transform: composeTransform(ctx.transform, transform) })
         continue
       }
-      if (ctx.nested.has(nestedKey(lib, shape)) && !ctx.transform) continue   // плоская копия вложенной картинки
       const raw = lib.getShapeBoundsResolved(ctx.pres, shape)
       if (!raw) { skip(kind, shape, ctx, 'Не удалось определить положение объекта'); continue }
       const bounds = ctx.transform ? project(raw, ctx.transform) : raw
@@ -330,7 +332,7 @@ function roleOf(box) {
   if (box.w <= 30 && box.h <= 20) return 'logo'
   return box.y < 25 && box.w >= 60 ? 'header' : 'decor'
 }
-function nestedKey(lib, shape) { return `${lib.getShapeKind(shape)}|${lib.getShapeName(shape)}|${lib.hasShapeImage(shape) ? lib.getShapeImagePartName(shape) : ''}` }
+function nestedKey(lib, shape) { return `${lib.getShapeKind(shape)}|${lib.getShapeId(shape)}` }
 function composeTransform(parent, child) {
   if (!parent) return child
   // Вложенные группы: внутренние координаты ребёнка проецируются родителем

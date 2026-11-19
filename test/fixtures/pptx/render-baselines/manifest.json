@@ -1,0 +1,54 @@
+{
+  "identity": {
+    "renderer": {
+      "package": "@deepseek-ai/libreoffice-kit",
+      "version": "0.2.3",
+      "backend": "wasm",
+      "dpi": 96
+    },
+    "fonts": {
+      "LiberationSans-Regular.ttf": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f",
+      "LiberationSans-Bold.ttf": "361c61b82d575c5c35fd9157fda8b0194bcfcd0d88ea8521a4fb5dd53d33dddc",
+      "LiberationSans-Italic.ttf": "832b4406dbef23628800d3aaad21048534ac84d7e3ad955be83b8172ed8ef512",
+      "LiberationSans-BoldItalic.ttf": "a224075ac17495ad0a3af3bc0a419ac0704a8b3fd1095456201fb9b095fc281d"
+    },
+    "pageSize": {
+      "width": 9906000,
+      "height": 6858000
+    },
+    "sources": {
+      "dense": "3fa42099befa8d4eb2dcc8246bb1f72dd29aa578cc90f89203b4e95b748c9017",
+      "groups": "e481ff53272d9114c1a535986dd5f96e31303acd1107ed25b914f2cdf2a7b282",
+      "typography": "7649562f0f611cb94e3e7014b4ee18ca3abfa43d1a74bbef1eb4089ceed03571",
+      "artwork": "54dec15493f99cbcb4af8b0078fa4644b5497a06482abda7fabfe4146f2ba9d4",
+      "layers": "2aadb6a70593edbf4defe3233cfff28c7744cae74631aab7e43af5aa17298997",
+      "objects": "4040f752b2f9f124169d78ef1bcfec6f005e9dfa4c6c5fc0337856fa5efe1f81"
+    }
+  },
+  "recordedSourceVsActual": {
+    "dense": {
+      "ssim": 0.9578207605269347,
+      "changedPixelsPct": 1.5102037009650116
+    },
+    "groups": {
+      "ssim": 1.0,
+      "changedPixelsPct": 0.0
+    },
+    "typography": {
+      "ssim": 0.9839294300167394,
+      "changedPixelsPct": 0.6531114726184813
+    },
+    "artwork": {
+      "ssim": 0.985894902636459,
+      "changedPixelsPct": 1.0699996402690788
+    },
+    "layers": {
+      "ssim": 0.9999890532229045,
+      "changedPixelsPct": 0.0
+    },
+    "objects": {
+      "ssim": 0.921656284097817,
+      "changedPixelsPct": 13.387319618258875
+    }
+  }
+}
