@@ -1,3 +1,4 @@
+import {scenePptxPlacement} from './deck-scene-pptx.mjs'
 import { normalizePageSize, pageSize } from './deck-page.mjs'
 import { assertLegacySlideInput, validateSlideRepresentation, normalizeSceneSlides, normalizeSceneSlide } from './deck-model.mjs'
 import { PROJECT_SCHEMA_VERSION, MAX_PROJECT_HISTORY as MAX_HISTORY, normalizeProjectEnvelope, nextProjectRevision } from './deck-migrations.mjs'
@@ -409,8 +410,27 @@ export function checkManifest(manifest) {
 
 async function exportPptx(manifest, theme, language, signal) {
   const size = pageSize(manifest), SLIDE_W_IN = size.width / 914400, SLIDE_H_IN = size.height / 914400
-  const base = buildPptx({ ...manifest, slides: manifest.slides.map(s => ({ ...s, notes: dataNotes(manifest,s) })) }, theme, language)
-  if (manifest.slides.every(s => s.layout === 'scene')) return embedPptxFonts(base, manifest)
+  const base = buildPptx({ ...manifest, _deferSceneCharts:true, slides: manifest.slides.map(s => ({ ...s, notes: dataNotes(manifest,s) })) }, theme, language)
+  if (manifest.slides.every(s => s.layout === 'scene')) {
+    if (!manifest.slides.some(s => s.elements.some(e => e.type === 'chart'))) return embedPptxFonts(base, manifest)
+    const lib = await import('@office-kit/pptx')
+    const presentation = await lib.loadPresentation(base)
+    for (const [index,source] of manifest.slides.entries()) {
+      const slide = lib.getSlides(presentation)[index]
+      for (const e of source.elements.filter(e => e.type === 'chart')) {
+        abort(signal)
+        const marker = lib.findShapeByName(slide,'__scene_chart__'+e.id)
+        if (!marker) fail('Missing native chart placeholder '+e.id)
+        const at = lib.getShapeZIndex(marker), placement = scenePptxPlacement(e)
+        lib.removeShape(marker)
+        const chart = lib.addSlideChart(slide,{name:e.name ?? e.id,x:placement.x,y:placement.y,w:placement.w,h:placement.h,spec:e.chart})
+        lib.setShapeRotation(chart,placement.rotation/60000)
+        if (placement.flipV) lib.setShapeFlip(chart,{vertical:true})
+        lib.setShapeZIndex(chart,at)
+      }
+    }
+    return embedPptxFonts(Buffer.from(await lib.savePresentation(presentation)),manifest)
+  }
   const hasBackgrounds = (Array.isArray(manifest.style?.backgrounds) && manifest.style.backgrounds.some(bg => manifest.assets?.[bg.assetId]?.data)) || Boolean(manifest.style?.layouts?.length)
   if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !hasBackgrounds && !manifest.slides.some(s => s.image || s.chart)) return embedPptxFonts(base, manifest)
   abort(signal)

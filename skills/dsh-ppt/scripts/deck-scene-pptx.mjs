@@ -71,7 +71,20 @@ export function sceneImageGeometry(element, asset) {
   }
   return {frame,crop}
 }
-export function renderScenePptx(slide, {assets = {}, font = 'Liberation Sans', textColor = '#000000', lang = 'en-US', mediaRegistry = new Map()} = {}) {
+function tableXml(e,id,defaults,lang) {
+  const t=e.table
+  const rows=t.rows.map((height,row)=>`<a:tr h="${height}">${t.columns.map((_,col)=>{
+    const cell=t.cells.find(c=>row>=c.row&&row<c.row+c.rowSpan&&col>=c.col&&col<c.col+c.colSpan)
+    const origin=cell.row===row&&cell.col===col
+    const attrs=origin ? `${cell.colSpan>1 ? ` gridSpan="${cell.colSpan}"` : ''}${cell.rowSpan>1 ? ` rowSpan="${cell.rowSpan}"` : ''}` : `${col>cell.col ? ' hMerge="1"' : ''}${row>cell.row ? ' vMerge="1"' : ''}`
+    if(!origin)return `<a:tc${attrs}><a:txBody><a:bodyPr/><a:lstStyle/><a:p/></a:txBody><a:tcPr/></a:tc>`
+    const borders=Object.entries(cell.borders??{}).map(([side,b])=>`<a:ln${({left:'L',right:'R',top:'T',bottom:'B'})[side]} w="${Math.round(b.width*12700)}">${color(b.color)}<a:prstDash val="solid"/></a:ln${({left:'L',right:'R',top:'T',bottom:'B'})[side]}>`).join('')
+    return `<a:tc${attrs}>${textBody(cell,defaults,lang).replaceAll('p:txBody','a:txBody')}<a:tcPr>${borders}${cell.fill?color(cell.fill):'<a:noFill/>'}</a:tcPr></a:tc>`
+  }).join('')}</a:tr>`).join('')
+  const placement=xfrm(e).replaceAll('a:xfrm','p:xfrm')
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${xml(e.name??e.id)}" descr="${xml(e.id)}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${placement}<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr/><a:tblGrid>${t.columns.map(w=>`<a:gridCol w="${w}"/>`).join('')}</a:tblGrid>${rows}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
+}
+export function renderScenePptx(slide, {assets = {}, font = 'Liberation Sans', textColor = '#000000', lang = 'en-US', mediaRegistry = new Map(), deferCharts = false} = {}) {
   slide = normalizeSceneSlide(slide,{assets})
   const media = [], relationships = [], shapes = [], imageRelationships = new Map()
   let id = 2
@@ -79,6 +92,11 @@ export function renderScenePptx(slide, {assets = {}, font = 'Liberation Sans', t
     if (source.type === 'group') continue // Children already carry their final page transforms.
     let element = source
     const shapeId = id++
+    if (element.type === 'chart') {
+      if (!deferCharts) error('async-chart-export',element.id,'Native scene charts require buildDeckAsync')
+      element = {...element,type:'text',name:'__scene_chart__'+element.id,paragraphs:[{runs:[{text:''}]}]}
+    }
+    if (element.type === 'table') { shapes.push(tableXml(element,shapeId,{fontFamily:font,size:18,color:textColor},lang)); continue }
     if (element.type === 'unsupported' && !element.previewAssetId) element = {...element,type:'text',textStyle:{size:12,color:'#B00020'},paragraphs:[{runs:[{text:`Unsupported object: ${element.sourceKind}\n${element.reason}`}]}]}
     if (element.type === 'image' || element.previewAssetId) {
       const assetId = element.assetId ?? element.previewAssetId, asset = assets[assetId]

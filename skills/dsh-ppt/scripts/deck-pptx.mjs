@@ -637,7 +637,7 @@ export function buildPptx(manifest, themeInput, languageInput) {
   })
   const hasNotesMaster = noteIndexes.length > 0
   const mediaRegistry = new Map()
-  const scenes = slides.map(slide => slide.layout === 'scene' ? renderScenePptx(slide, {assets:manifest.assets, font:pptxFontName(theme.fonts.body), textColor:theme.palette.fg, lang:language.attr, mediaRegistry}) : undefined)
+  const scenes = slides.map(slide => slide.layout === 'scene' ? renderScenePptx(slide, {assets:manifest.assets, font:pptxFontName(theme.fonts.body), textColor:theme.palette.fg, lang:language.attr, mediaRegistry, deferCharts:manifest._deferSceneCharts === true}) : undefined)
   const entries = [
     ...scenes.flatMap(scene => scene?.media ?? []),
     { name: '[Content_Types].xml', data: contentTypesXml(slides.length, noteIndexes, mediaRegistry.size > 0) },

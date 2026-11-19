@@ -1,3 +1,4 @@
+import {renderSceneChartSvg} from './deck-scene-chart-html.mjs'
 import { normalizeSceneSlide, mergeSceneTextStyles } from './deck-model.mjs'
 import { escapeHtml as html } from './deck-text.mjs'
 import { pageSize } from './deck-page.mjs'
@@ -36,6 +37,15 @@ export function renderSceneHtml(slide, manifest, theme, prefix = 'scene') {
     const placement = scenePptxPlacement(e)
     e = {...e,frame:{x:placement.x,y:placement.y,w:placement.w,h:placement.h}}
     if (e.type === 'text') markup = textMarkup(e,theme)
+    else if (e.type === 'chart') markup = `<svg x="${px(e.frame.x)}" y="${px(e.frame.y)}" width="${px(e.frame.w)}" height="${px(e.frame.h)}">${renderSceneChartSvg(e.chart,theme)}</svg>`
+    else if (e.type === 'table') {
+      markup = e.table.cells.map(cell=>{
+        const frame={x:e.frame.x+e.table.columns.slice(0,cell.col).reduce((a,b)=>a+b,0),y:e.frame.y+e.table.rows.slice(0,cell.row).reduce((a,b)=>a+b,0),w:e.table.columns.slice(cell.col,cell.col+cell.colSpan).reduce((a,b)=>a+b,0),h:e.table.rows.slice(cell.row,cell.row+cell.rowSpan).reduce((a,b)=>a+b,0)}
+        const rect=`<rect x="${px(frame.x)}" y="${px(frame.y)}" width="${px(frame.w)}" height="${px(frame.h)}" fill="${cell.fill??'none'}"/>`
+        const edges={left:[frame.x,frame.y,frame.x,frame.y+frame.h],right:[frame.x+frame.w,frame.y,frame.x+frame.w,frame.y+frame.h],top:[frame.x,frame.y,frame.x+frame.w,frame.y],bottom:[frame.x,frame.y+frame.h,frame.x+frame.w,frame.y+frame.h]}
+        return rect+textMarkup({...cell,frame},theme)+Object.entries(cell.borders??{}).map(([side,b])=>{const [x1,y1,x2,y2]=edges[side].map(px);return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${b.color}" stroke-width="${b.width*4/3}"/>`}).join('')
+      }).join('')
+    }
     else if (e.type === 'image' || e.previewAssetId) {
       const asset = manifest.assets[e.assetId ?? e.previewAssetId]
       const {frame,crop} = e

@@ -1,3 +1,4 @@
+import {normalizeSceneChart, normalizeSceneTable} from './deck-structured.mjs'
 // Shared browser/server model primitives. No Node, DOM or external imports.
 import { transformedBounds } from './deck-geometry.mjs'
 // Existing schema 1/2 semantics remain until scene migration is implemented.
@@ -116,7 +117,7 @@ export function normalizeTextZones(input, path = 'textZones') {
 }
 // Scene contract primitives. These do not enable a new on-disk project version.
 export const LEGACY_CONTENT_FIELDS = Object.freeze(['title', 'subtitle', 'text', 'bullets', 'image', 'table', 'chart', 'rows', 'kicker'])
-export const SCENE_ELEMENT_TYPES = Object.freeze(['text', 'image', 'shape', 'line', 'group', 'unsupported'])
+export const SCENE_ELEMENT_TYPES = Object.freeze(['text', 'image', 'shape', 'line', 'group', 'table', 'chart', 'unsupported'])
 export const SCENE_LIMITS = Object.freeze({ elements: 256, images: 128, depth: 16, projectElements: 8192, slides: 120, emu: 51206400, paragraphs: 1024, runs: 4096, text: 262144 })
 export function mergeSceneTextStyles(...styles) {
   const out = {}
@@ -254,7 +255,7 @@ function sceneAsset(value, path, assets) {
 }
 function sceneElement(value, path, assets, budget) {
   const common = ['id', 'type', 'role', 'frame', 'name', 'slotId', 'transform', 'source', 'support']
-  const fields = {text:['paragraphs', 'textFrame', 'textStyle'], image:['assetId', 'alt', 'fit', 'crop'], shape:['preset', 'fill', 'stroke'], line:['stroke'], group:['children'], unsupported:['sourceKind', 'reason', 'previewAssetId']}
+  const fields = {text:['paragraphs', 'textFrame', 'textStyle'], image:['assetId', 'alt', 'fit', 'crop'], shape:['preset', 'fill', 'stroke'], line:['stroke'], group:['children'], table:['table'], chart:['chart'], unsupported:['sourceKind', 'reason', 'previewAssetId']}
   if (!value || !SCENE_ELEMENT_TYPES.includes(value.type)) sceneError('unsupported-element-type', `${path}.type`, 'This contract revision supports ' + SCENE_ELEMENT_TYPES.join(', '))
   record(value, path, [...common, ...fields[value.type]])
   const out = {id:identifier(value.id, `${path}.id`),type:value.type,role:choice(value.role ?? 'content', `${path}.role`, ['content','decor']),frame:sceneFrame(value.frame, `${path}.frame`, value.type === 'line')}
@@ -303,6 +304,14 @@ function sceneElement(value, path, assets, budget) {
     }
   }
   if (value.type === 'line' || value.type === 'shape' && value.stroke !== undefined) out.stroke = sceneStroke(value.stroke, `${path}.stroke`)
+  if (value.type === 'chart') out.chart = normalizeSceneChart(value.chart, `${path}.chart`)
+  if (value.type === 'table') {
+    out.table = normalizeSceneTable(value.table, `${path}.table`, (cell, at) => {
+      const text = sceneElement({id:'cell',type:'text',frame:value.frame,paragraphs:cell.paragraphs,...(cell.textStyle ? {textStyle:cell.textStyle} : {}),...(cell.textFrame ? {textFrame:cell.textFrame} : {})}, at, assets, budget)
+      return Object.fromEntries(['paragraphs','textStyle','textFrame'].filter(k => text[k] !== undefined).map(k => [k,text[k]]))
+    })
+    if (out.table.columns.reduce((a,b)=>a+b,0) !== out.frame.w || out.table.rows.reduce((a,b)=>a+b,0) !== out.frame.h) sceneError('table-size', path, 'Column and row sizes must sum to the object frame')
+  }
   if (value.type === 'group') {
     if (!Array.isArray(value.children) || !value.children.length || value.children.length > SCENE_LIMITS.elements) sceneError('invalid-group', `${path}.children`, 'Expected 1–256 child identifiers')
     out.children = value.children.map((id, index) => identifier(id, `${path}.children[${index}]`))

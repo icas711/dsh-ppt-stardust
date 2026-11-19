@@ -60,7 +60,7 @@ test('mixed content, missing elements and unknown fields report matching browser
   rejects(scene([{...text(),textFrame:{align:'right',margins:{left:0,hidden:1}}}]), 'unknown-field')
   rejects(scene([{...text(),paragraphs:[{runs:[{text:'a'}],style:{lineSpacing:{kind:'pct',value:1,hidden:true}}}]}]), 'unknown-field')
   rejects(scene([{id:'ole',type:'unsupported',frame:frame(),sourceKind:'OLE',reason:'Preview',binary:'arbitrary attachment'}]), 'unknown-field')
-  rejects(scene([{id:'chart',type:'chart',frame:frame()}]), 'unsupported-element-type')
+  rejects(scene([{id:'chart',type:'chart',frame:frame()}]), 'invalid-object')
 })
 
 test('scene geometry, styles, crop and asset references are strict and never clamped', () => {
