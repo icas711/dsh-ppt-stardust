@@ -118,6 +118,15 @@ export function normalizeTextZones(input, path = 'textZones') {
 export const LEGACY_CONTENT_FIELDS = Object.freeze(['title', 'subtitle', 'text', 'bullets', 'image', 'table', 'chart', 'rows', 'kicker'])
 export const SCENE_ELEMENT_TYPES = Object.freeze(['text', 'image', 'shape', 'line', 'group', 'unsupported'])
 export const SCENE_LIMITS = Object.freeze({ elements: 256, images: 128, depth: 16, projectElements: 8192, slides: 120, emu: 51206400, paragraphs: 1024, runs: 4096, text: 262144 })
+export function mergeSceneTextStyles(...styles) {
+  const out = {}
+  for (const style of styles) if (style) {
+    const fonts = {...out.scriptFonts,...style.scriptFonts}
+    Object.assign(out,style)
+    if (Object.keys(fonts).length) out.scriptFonts = fonts
+  }
+  return out
+}
 const own = (value, key) => Object.hasOwn(value, key)
 function sceneError(code, path, message) {
   const error = new Error(`dsh-ppt: ${code} at ${path}: ${message}`)
@@ -177,8 +186,17 @@ function sceneTransform(value, frame, path) {
   return matrix
 }
 function sceneTextStyle(value, path) {
-  record(value, path, ['fontFamily', 'size', 'bold', 'italic', 'color'])
-  try { return normalizeTextStyles({body:value}).body } catch (error) { sceneError('invalid-text-style', path, error.message) }
+  record(value, path, ['fontFamily', 'size', 'bold', 'italic', 'color', 'scriptFonts'])
+  let style
+  try { style = normalizeTextStyles({body:value}).body } catch (error) { sceneError('invalid-text-style', path, error.message) }
+  if (value.scriptFonts !== undefined) {
+    record(value.scriptFonts, `${path}.scriptFonts`, ['eastAsian','complexScript'])
+    style.scriptFonts = {}
+    for (const key of ['eastAsian','complexScript']) if (value.scriptFonts[key] !== undefined) {
+      try { style.scriptFonts[key] = value.scriptFonts[key] === '' ? '' : fontFamily(value.scriptFonts[key]) } catch (error) { sceneError('invalid-text-style',`${path}.scriptFonts.${key}`,error.message) }
+    }
+  }
+  return style
 }
 function sceneParagraphs(value, path, budget) {
   if (!Array.isArray(value) || !value.length || value.length > SCENE_LIMITS.paragraphs) sceneError('paragraph-limit', path, 'Expected 1–1024 paragraphs')
@@ -201,9 +219,21 @@ function sceneParagraphs(value, path, budget) {
       return {text, ...(run.style !== undefined ? {style:sceneTextStyle(run.style, `${p}.style`)} : {})}
     })}
     if (paragraph.style !== undefined) {
-      record(paragraph.style, `${at}.style`, ['align', 'spaceBefore', 'spaceAfter', 'marL', 'marR', 'indent', 'lineSpacing'])
+      record(paragraph.style, `${at}.style`, ['align', 'spaceBefore', 'spaceAfter', 'marL', 'marR', 'indent', 'lineSpacing', 'bullet'])
       if (paragraph.style.lineSpacing !== undefined) record(paragraph.style.lineSpacing, `${at}.style.lineSpacing`, ['kind','value'])
       try { out.style = normalizeSlotTypography({textFrame:paragraph.style}).textFrame } catch (error) { sceneError('invalid-paragraph-style', `${at}.style`, error.message) }
+      if (paragraph.style.bullet !== undefined) {
+        const bullet = paragraph.style.bullet, p = `${at}.style.bullet`
+        record(bullet,p,['kind','character','fontFamily'])
+        out.style.bullet = {kind:choice(bullet.kind,`${p}.kind`,['none','bullet'])}
+        if (bullet.kind === 'none' && (own(bullet,'character') || own(bullet,'fontFamily'))) sceneError('invalid-bullet',p,'Bullet none cannot carry a character or font')
+        if (bullet.kind === 'bullet') {
+          out.style.bullet.character = sceneString(bullet.character ?? '•',`${p}.character`,8)
+          if (bullet.fontFamily !== undefined) {
+            try { out.style.bullet.fontFamily = fontFamily(bullet.fontFamily) } catch (error) { sceneError('invalid-bullet',p,error.message) }
+          }
+        }
+      }
     }
     return out
   })

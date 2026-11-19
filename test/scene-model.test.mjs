@@ -13,7 +13,7 @@ const fragment = built.match(/\/\/ BEGIN DSH_DECK_MODEL\n([\s\S]*?)\/\/ END DSH_
 assert.ok(fragment)
 const browser = runInNewContext(fragment + '\nDshDeckModel')
 const frame = () => ({x:-100,y:200,w:300000,h:100000})
-const text = (id = 'text') => ({id,type:'text',frame:frame(),paragraphs:[{runs:[{text:'Красный ',style:{bold:true,color:'#cf1f2f'}},{break:true},{text:'Next',style:{italic:true}}],style:{align:'right',lineSpacing:{kind:'pct',value:1.2}}}],textFrame:{anchor:'top',margins:{left:0,right:0}},textStyle:{fontFamily:'Liberation Sans',size:24}})
+const text = (id = 'text') => ({id,type:'text',frame:frame(),paragraphs:[{runs:[{text:'Красный ',style:{bold:true,color:'#cf1f2f'}},{break:true},{text:'Next',style:{italic:true}}],style:{align:'right',lineSpacing:{kind:'pct',value:1.2},bullet:{kind:'bullet',character:'•',fontFamily:'Liberation Sans'}}}],textFrame:{anchor:'top',margins:{left:0,right:0}},textStyle:{fontFamily:'Liberation Sans',size:24,scriptFonts:{eastAsian:'Liberation Sans',complexScript:''}}})
 const scene = elements => ({id:'slide-1',layout:'scene',label:'Complex page',purpose:'content',notes:'Keep\nnotes',elements:elements ?? [text()]})
 const assets = {image:{mime:'image/png'}}
 const outcome = (api, input, options) => {
@@ -54,6 +54,9 @@ test('mixed content, missing elements and unknown fields report matching browser
   rejects({...scene(),extra:true}, 'unknown-field')
   rejects(scene([{...text(),extra:true}]), 'unknown-field')
   rejects(scene([{...text(),textStyle:{size:18,hidden:true}}]), 'unknown-field')
+  rejects(scene([{...text(),textStyle:{scriptFonts:{hidden:'Font'}}}]), 'unknown-field')
+  rejects(scene([{...text(),paragraphs:[{runs:[{text:'a'}],style:{bullet:{kind:'none',character:'•'}}}]}]), 'invalid-bullet')
+  rejects(scene([{...text(),paragraphs:[{runs:[{text:'a'}],style:{bullet:{kind:'bullet',binary:'data'}}}]}]), 'unknown-field')
   rejects(scene([{...text(),textFrame:{align:'right',margins:{left:0,hidden:1}}}]), 'unknown-field')
   rejects(scene([{...text(),paragraphs:[{runs:[{text:'a'}],style:{lineSpacing:{kind:'pct',value:1,hidden:true}}}]}]), 'unknown-field')
   rejects(scene([{id:'ole',type:'unsupported',frame:frame(),sourceKind:'OLE',reason:'Preview',binary:'arbitrary attachment'}]), 'unknown-field')

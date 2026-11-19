@@ -374,3 +374,8 @@ export function normalizeSlides(rawSlides, maxSlides = 60, lang = 'zh') {
   if (slides.length === 0) throw new Error('dsh-ppt：slides 规范化后为空')
   return slides
 }
+
+// Keep optional native reading dependencies off the ordinary Markdown path.
+export async function legacySlidesToScenes(manifest, options = {}) {
+  return (await import('./deck-legacy-scene.mjs')).legacySlidesToScenes(manifest,options)
+}

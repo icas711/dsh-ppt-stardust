@@ -21,3 +21,11 @@ export function sceneFixtures() {
   ]
   return cases.map(c=>({id:c.id,source:sources.get(c.id),manifest:{title:'Scene fixture',motion:false,language:'en',assets:c.assets ?? {},style:{pageSize:page,themeFonts:{majorLatin:'Liberation Sans',minorLatin:'Liberation Sans',majorEastAsian:'',minorEastAsian:'',majorComplexScript:'',minorComplexScript:''}},slides:[{id:c.id,layout:'scene',purpose:'content',label:c.id,elements:c.elements}]}}))
 }
+
+export function legacyFixtureStates() {
+  return ['cover','section','bullets','statement','quote','closing'].map(layout=>({
+    id:'legacy-'+layout,
+    manifest:{title:'Legacy compatibility',theme:'data',language:'en',motion:false,assets:{},style:{pageSize:page,themeFonts:{majorLatin:'Liberation Sans',minorLatin:'Liberation Sans',majorEastAsian:'',minorEastAsian:'',majorComplexScript:'',minorComplexScript:''}},
+      slides:[{id:'legacy-'+layout,layout,title:layout === 'quote' ? 'A short quotation' : 'Legacy '+layout,kicker:'Kicker',subtitle:layout === 'quote' ? 'Attribution' : 'Subtitle',bullets:layout === 'bullets' ? ['First point','Second point','Third point'] : [],text:'Body',notes:'Keep\nnotes'}]},
+  }))
+}

@@ -72,3 +72,14 @@ test('scene notes and per-slide arrow IDs survive serialization; unsupported con
   assert.match(html,/data-notes="Notes &amp; &lt;keep&gt;"/)
   assert.ok(!Object.keys(parts).some(n=>n.endsWith('.bin')))
 })
+
+test('overriding one script font in a run retains the other inherited script font', async ()=>{
+  const fixture = sceneFixtures()[0], scene = structuredClone(fixture.manifest.slides[0])
+  scene.elements = [scene.elements[0]]
+  scene.elements[0].textStyle.scriptFonts = {eastAsian:'Microsoft YaHei',complexScript:'Arial'}
+  scene.elements[0].paragraphs[0].runs[0].style = {scriptFonts:{complexScript:'Georgia'}}
+  const pres = await lib.loadPresentation(buildPptx({...fixture.manifest,slides:[scene]},sceneFixtureTheme(),resolveLanguage('en')))
+  const style = lib.getShapeRunFormatEffective(pres,lib.getSlideShapes(lib.getSlides(pres)[0])[0],0,0)
+  assert.equal(style.fontEastAsian,'Microsoft YaHei')
+  assert.equal(style.fontComplexScript,'Georgia')
+})

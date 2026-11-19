@@ -1,6 +1,7 @@
-import { normalizeSceneSlide } from './deck-model.mjs'
+import { normalizeSceneSlide, mergeSceneTextStyles } from './deck-model.mjs'
 import { IDENTITY_TRANSFORM, transformPoint } from './deck-geometry.mjs'
 import { escapeXml as xml } from './deck-text.mjs'
+import { imageInfo } from './deck-image.mjs'
 
 const hex = value => value.replace('#','')
 const color = (value, opacity) => `<a:solidFill><a:srgbClr val="${hex(value)}">${opacity !== undefined ? `<a:alpha val="${Math.round(opacity*100000)}"/>` : ''}</a:srgbClr></a:solidFill>`
@@ -25,21 +26,22 @@ function stroke(value) {
   return `<a:ln w="${Math.round(value.width*12700)}">${color(value.color,value.opacity)}<a:prstDash val="${({solid:'solid',dash:'dash',dot:'sysDot'})[value.dash ?? 'solid']}"/>${['head','tail'].map(key=>value[key] ? `<a:${key}End type="${value[key]}"/>` : '').join('')}</a:ln>`
 }
 function runProperties(style, frame, lang) {
-  return `<a:rPr lang="${xml(lang)}" sz="${Math.round(style.size*100)}" b="${style.bold ? 1 : 0}" i="${style.italic ? 1 : 0}"${frame.kerning !== undefined ? ` kern="${frame.kerning}"` : ''}>${color(style.color)}<a:latin typeface="${xml(style.fontFamily)}"/><a:ea typeface="${xml(style.fontFamily)}"/><a:cs typeface="${xml(style.fontFamily)}"/></a:rPr>`
+  return `<a:rPr lang="${xml(lang)}" sz="${Math.round(style.size*100)}" b="${style.bold ? 1 : 0}" i="${style.italic ? 1 : 0}"${frame.kerning !== undefined ? ` kern="${frame.kerning}"` : ''}>${color(style.color)}<a:latin typeface="${xml(style.fontFamily)}"/><a:ea typeface="${xml(style.scriptFonts?.eastAsian ?? style.fontFamily)}"/><a:cs typeface="${xml(style.scriptFonts?.complexScript ?? style.fontFamily)}"/></a:rPr>`
 }
 function paragraphProperties(style) {
   const attributes = ['marL','marR','indent'].filter(key=>style[key] !== undefined).map(key=>` ${key}="${Math.round(style[key])}"`).join('')
   const align = ({left:'l',right:'r',center:'ctr',justify:'just',distributed:'dist'})[style.align ?? 'left']
   const spacing = ['spaceBefore','spaceAfter'].filter(key=>style[key] !== undefined).map(key=>`<a:${key === 'spaceBefore' ? 'spcBef' : 'spcAft'}><a:spcPts val="${Math.round(style[key]*100)}"/></a:${key === 'spaceBefore' ? 'spcBef' : 'spcAft'}>`).join('')
   const line = style.lineSpacing ? `<a:lnSpc><a:${style.lineSpacing.kind === 'pct' ? 'spcPct' : 'spcPts'} val="${Math.round(style.lineSpacing.value*(style.lineSpacing.kind === 'pct' ? 100000 : 100))}"/></a:lnSpc>` : ''
-  return `<a:pPr algn="${align}"${attributes}>${line}${spacing}<a:buNone/></a:pPr>`
+  const bullet = style.bullet?.kind === 'bullet' ? (style.bullet.fontFamily ? `<a:buFont typeface="${xml(style.bullet.fontFamily)}"/>` : '') + `<a:buChar char="${xml(style.bullet.character)}"/>` : '<a:buNone/>'
+  return `<a:pPr algn="${align}"${attributes}>${line}${spacing}${bullet}</a:pPr>`
 }
 function textBody(element, defaults, lang) {
-  const frame = element.textFrame ?? {}, style = {...defaults,...element.textStyle}
-  const margins = {left:91440,right:91440,top:45720,bottom:45720,...frame.margins}
-  const attributes = Object.entries({left:'lIns',right:'rIns',top:'tIns',bottom:'bIns'}).map(([side,key])=>` ${key}="${Math.round(margins[side])}"`).join('')
+  const frame = element.textFrame ?? {}, style = mergeSceneTextStyles(defaults,element.textStyle)
+  const margins = frame.margins ?? {}
+  const attributes = Object.entries({left:'lIns',right:'rIns',top:'tIns',bottom:'bIns'}).filter(([side])=>margins[side] !== undefined).map(([side,key])=>` ${key}="${Math.round(margins[side])}"`).join('')
   const fit = ({none:'noAutofit',normal:'normAutofit',shape:'spAutoFit'})[frame.autoFit ?? 'none']
-  return `<p:txBody><a:bodyPr wrap="${frame.wrap ?? 'square'}" anchor="${({top:'t',center:'ctr',bottom:'b'})[frame.anchor ?? 'top']}"${attributes}><a:${fit}/></a:bodyPr><a:lstStyle/>${element.paragraphs.map(p=>`<a:p>${paragraphProperties({...frame,...p.style})}${p.runs.map(run=>run.break ? `<a:br>${runProperties(style,frame,lang)}</a:br>` : `<a:r>${runProperties({...style,...run.style},frame,lang)}<a:t xml:space="preserve">${xml(run.text)}</a:t></a:r>`).join('')}</a:p>`).join('')}</p:txBody>`
+  return `<p:txBody><a:bodyPr wrap="${frame.wrap ?? 'square'}" anchor="${({top:'t',center:'ctr',bottom:'b'})[frame.anchor ?? 'top']}"${attributes}><a:${fit}/></a:bodyPr><a:lstStyle/>${element.paragraphs.map(p=>`<a:p>${paragraphProperties({...frame,...p.style})}${p.runs.map(run=>run.break ? `<a:br>${runProperties(style,frame,lang)}</a:br>` : `<a:r>${runProperties(mergeSceneTextStyles(style,run.style),frame,lang)}<a:t xml:space="preserve">${xml(run.text)}</a:t></a:r>`).join('')}</a:p>`).join('')}</p:txBody>`
 }
 function identity(element, id, text = false) {
   return `<p:nvSpPr><p:cNvPr id="${id}" name="${xml(element.name ?? element.id)}" descr="${xml(element.id)}"/><p:cNvSpPr${text ? ' txBox="1"' : ''}/><p:nvPr/></p:nvSpPr>`
@@ -50,8 +52,9 @@ export function sceneImageBytes(asset, id) {
   if (!match || match[2].length > 5*1024*1024*1.4) error('invalid-image-asset',id,'Expected an embedded PNG/JPEG up to 5 MiB')
   const bytes = Buffer.from(match[2],'base64')
   if (bytes.length > 5*1024*1024 || bytes.toString('base64') !== match[2] || asset.mime !== 'image/'+match[1]) error('invalid-image-asset',id,'Invalid embedded image encoding')
-  const valid = match[1] === 'png' ? bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
-  if (!valid || !Number.isSafeInteger(asset.width) || !Number.isSafeInteger(asset.height) || asset.width < 1 || asset.height < 1) error('invalid-image-asset',id,'Invalid raster image or dimensions')
+  let info
+  try { info = imageInfo(bytes,id) } catch { error('invalid-image-asset',id,'Invalid raster image or dimensions') }
+  if (info.width !== asset.width || info.height !== asset.height || info.mime !== asset.mime) error('invalid-image-asset',id,'Image metadata does not match its bytes')
   return bytes
 }
 export function sceneImageGeometry(element, asset) {
