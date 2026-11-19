@@ -10,14 +10,29 @@ import {buildTemplateBundle,templateCreateOptions} from '../skills/dsh-ppt/scrip
 
 const canonical=value=>typeof value==='string'?value.normalize('NFC').replace(/\s+/g,' ').trim():value
 const numbers=text=>[...text.matchAll(/\d+(?:[.,]\d+)?/g)].map(m=>m[0].replace(',','.'))
+export function chartLabelText(chart){
+ const result=[chart.title??''],pie=['pie','doughnut'].includes(chart.kind),legend=chart.legend&&chart.legend.position!=='none'
+ if((!pie&&!chart.categoryAxisHidden)||(pie&&legend))result.push(...chart.categories)
+ if(legend&&!pie)result.push(...chart.series.map(s=>s.name))
+ for(const series of chart.series)for(const [i,value]of series.values.entries()){
+  const labels=series.pointDataLabels?.[i]??series.dataLabels??chart.dataLabels??{}
+  if(labels.text!==undefined){result.push(labels.text);continue}
+  if(labels.showValue)result.push(String(value))
+  if(labels.showCategory)result.push(chart.categories[i])
+  if(labels.showSeriesName)result.push(series.name)
+ }
+ return result.join('\n')
+}
 function visibleText(slides){return slides.flatMap(s=>s.elements.flatMap(e=>{
+ if(e.hidden)return []
  if(e.type==='text')return (e.paragraphs??[]).map(p=>p.runs.map(r=>r.break?'\n':r.text??'').join('')).join('\n')
- if(e.type==='chart')return [e.chart.title??'',...e.chart.categories,...e.chart.series.flatMap(v=>[v.name,...v.values.map(String)])].join('\n')
- if(e.type==='table')return JSON.stringify(e.table.cells)
+ if(e.type==='chart')return chartLabelText(e.chart)
+ if(e.type==='table')return e.table.cells.flatMap(c=>c.paragraphs.map(p=>p.runs.map(r=>r.text??'').join(''))).join('\n')
  return []
 })).join('\n')}
 function semanticContent(diagram){
  const {version:_,...value}=structuredClone(diagram)
+ if(value.kind==='cycle'&&value.ordered===true)delete value.ordered // Redundant, not a new semantic relationship.
  if(value.items)value.items=value.items.map(({id:_,...item})=>item)
  return value
 }
@@ -50,13 +65,13 @@ export function evaluateGenerationResponses(input){
    if(rubric.chart){
     const chart=diagram?.chart??Object.values(row.values).find(v=>v&&typeof v==='object'&&v.categories)?.chart??Object.values(row.values).find(v=>v&&typeof v==='object'&&v.categories)
     if(!chart||!rubric.chartKinds.includes(chart.kind)||chart.grouping!==undefined)add('chart-representation','Use a native column/bar comparison; no whole or time ordering is supplied')
-    if(chart&&(!isDeepStrictEqual(chart.categories,rubric.chart.categories)||!isDeepStrictEqual(chart.series,rubric.chart.series)))add('changed-chart-data','Keep category-to-value associations and series names')
+    if(chart&&(!isDeepStrictEqual(chart.categories,rubric.chart.categories)||!isDeepStrictEqual(chart.series.map(({name,values})=>({name,values})),rubric.chart.series.map(({name,values})=>({name,values})))))add('changed-chart-data','Keep category-to-value associations and series names')
    }
   }
   if(c.rubric.requireRhythm&&generated.generationReport.diagnostics.some(d=>d.code.startsWith('rhythm-')))add('deck-rhythm','The mixed source and three compatible variants should not require rhythm warnings')
   return {caseId:c.id,passed:issues.length===0,issues,diagnostics:generated.generationReport.diagnostics,structures:response.deckPlan.map(r=>r.structure),notes:typeof response.notes==='string'?response.notes:''}
  })
- return {version:1,scope:'Offline contract and source-preservation checks; visual quality and unsupported factual claims require human review',passed:global.length===0&&results.every(r=>r.passed),global,results}
+ return {version:1,scope:'Plans replayed with current template/generator. Checks declared visible labels, not pixels of returned PPTX. Actual artifacts, fit, contrast and unsupported factual claims require human review.',passed:global.length===0&&results.every(r=>r.passed),global,results}
 }
 
 export function prepareGenerationEvaluation(directory){

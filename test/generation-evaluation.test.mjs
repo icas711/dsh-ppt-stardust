@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {spawnSync} from 'node:child_process'
 import {generationEvaluationCases} from './fixtures/generation-evaluation.mjs'
-import {evaluationRequests,evaluateGenerationResponses,prepareGenerationEvaluation} from '../scripts/generation-evaluation.mjs'
+import {evaluationRequests,evaluateGenerationResponses,prepareGenerationEvaluation,chartLabelText} from '../scripts/generation-evaluation.mjs'
 import {readTemplateBundle} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {buildPptTools} from '../lib/tools.js'
 import {resolvePptConfig} from '../lib/config.js'
@@ -44,6 +44,18 @@ test('mixed deck checks section order and actual variety rather than accepting c
  plan[0]=structuredClone(plan[1]);plan[0].id='replaced-first-slide'
  const reordered=evaluateGenerationResponses(input).results.find(r=>r.caseId==='mixed-deck')
  assert.ok(reordered.issues.some(i=>i.code==='source-reference'));assert.ok(reordered.issues.some(i=>i.code==='missing-fact'))
+})
+test('equivalent cycle and cosmetic chart settings pass while hidden data labels cannot count as visible values',()=>{
+ const input=answers(),cycle=input.responses.find(r=>r.caseId==='cycle').deckPlan[0],chart=input.responses.find(r=>r.caseId==='categories').deckPlan[0].visual.diagram.chart
+ cycle.visual.diagram.ordered=true;chart.series[0].color='#7C3AED'
+ assert.equal(evaluateGenerationResponses(input).passed,true)
+ const original={kind:'column',categories:['A','B'],series:[{name:'Requests',values:[17,9]}]}
+ assert.equal(chartLabelText(original),'\nA\nB')
+ chart.dataLabels={showValue:false}
+ const report=evaluateGenerationResponses(input),result=report.results.find(r=>r.caseId==='categories')
+ assert.equal(result.passed,false);assert.ok(result.issues.some(i=>i.code==='missing-fact'&&i.message.endsWith('17')))
+ chart.series[0].values=[9,17]
+ assert.ok(evaluateGenerationResponses(input).results.find(r=>r.caseId==='categories').issues.some(i=>i.code==='changed-chart-data'))
 })
 test('kit roundtrips a real ZIP and keeps rubrics/reference answers out of model requests',t=>{
  const dir=mkdtempSync(join(tmpdir(),'generation-evaluation-'));t.after(()=>rmSync(dir,{force:true,recursive:true}))
