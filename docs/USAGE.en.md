@@ -88,7 +88,7 @@ Existing artifacts are not overwritten by default: if any member of the trio alr
 
 Open Settings → Presentations and choose a project registered by `ppt_create`, `ppt_edit` or `ppt_check`. Select a page to edit text, bullets and speaker notes; clicking text in the HTML preview focuses its field. Upload PNG/JPEG images, reorder, duplicate or delete slides and undo changes. Copies preserve images, charts and notes. The last slide cannot be deleted; the limit is 120 slides. Save or cancel pending edits before changing slide structure. Saving regenerates HTML, PPTX and JSON together.
 
-Save or cancel pending changes before switching pages, reordering, downloading or rendering. A stale revision cannot overwrite another writer's changes. Use “Load latest, keep my input”, review overlapping fields, then explicitly save. The HTML preview and actual PPTX rendering are separate; edits invalidate previous renders. Review every rendered page and font diagnostics before downloading the latest files. The editor works with this plugin's own JSON projects; it does not import arbitrary external PPTX files, and ordinary generation/editing does not need the optional renderer.
+Save or cancel pending changes before switching pages, reordering, downloading or rendering. A stale revision cannot overwrite another writer's changes. Use “Load latest, keep my input”, review overlapping fields, then explicitly save. The HTML preview and actual PPTX rendering are separate; edits invalidate previous renders. Deliver successful outputs with known warnings; extended visual review is optional unless requested. The editor works with this plugin's own JSON projects; it does not import arbitrary external PPTX files, and ordinary generation/editing does not need the optional renderer.
 
 The additional tools are `ppt_templates`, `ppt_edit`, `ppt_undo`, `ppt_check`, and `ppt_render`. New layouts are `image`, `image-left`, `image-right` and `chart`, alongside the seven existing layouts.
 
@@ -98,11 +98,11 @@ A chart accepts `chart: {kind:"column"|"bar"|"line"|"pie", categories, series:[{
 
 `brand` supports `name`, `primaryColor`, `backgroundColor`, `textColor`, `fontFamily`, `logo` and `footer`. Colors are `#RRGGBB`; select a font available on the recipient computer. `template` is `weekly|defense|project|pitch` and does not overwrite a supplied narrative.
 
-Edit example: `{deckPath:"report.json",expectedRevision:0,edits:[{slide:3,patch:{title:"A clearer conclusion",bullets:["Evidence","Next action"]}}]}`. Use `ppt_check` to obtain stable IDs and the revision; `ppt_undo` restores the latest edit including assets/brand. Keeps up to 20 edits and rejects stale revisions. The artifact trio is regenerated atomically with rollback on commit failure.
+Edit example: `{deckPath:"report.json",expectedRevision:0,edits:[{slide:3,patch:{title:"A clearer conclusion",bullets:["Evidence","Next action"]}}]}`. Use the IDs and revision returned by the last successful operation; read `ppt_check` only for missing/stale state; `ppt_undo` restores the latest edit including assets/brand. Keeps up to 20 edits and rejects stale revisions. The artifact trio is regenerated atomically with rollback on commit failure.
 
 Structure example: `{deckPath:"report.json",expectedRevision:0,duplicate:[2],remove:[3]}`. References use the original 1-based slide numbers or stable IDs. Copies follow the source slide with new IDs; existing slides keep theirs. A slide cannot be copied and removed in the same request. Keep 1–120 slides. Text edits, reordering and structural changes can share one undo step.
 
-`deliveryStatus: draft` means unfilled slots; `ready-for-review` means review can start. Static estimates, rendering and visual inspection are recorded separately. Generation/rendering never automatically certifies visual quality. Inspect HTML and every page image before delivery.
+`deliveryStatus: draft` means unfilled slots; `ready-for-review` means review can start. Static estimates, rendering and visual inspection are recorded separately. Generation/rendering never automatically certifies visual quality. Deliver available files with warnings; do not automatically start a check/render/metric/repair loop. Further review is opt-in.
 
 ## Optional PNG/PDF renderer
 
@@ -204,7 +204,7 @@ Plugin: MIT. Office Kit: MIT. Optional official LibreOffice Kit and its engine r
 
 ## Safe scene editing and recovery
 
-Read `ppt_check {deckPath, slide:5}` for the current revision and complete `selectedSlide`. Prefer `ppt_edit {deckPath, expectedRevision, edits:[{slide:5, patch:{elementUpdates:[{id:"existing-id", changes:{paragraphs:[{runs:[{text:"Updated",style:{color:"#FFFFFF"}}]}]}}]}}]}`. This updates existing objects by ID, preserving other objects and frames. Object fields are replaced when supplied, except `textStyle`, which merges; preserve unchanged paragraphs/runs when editing text. IDs and types cannot change in this mode.
+Use the latest returned revision and known objects; read `ppt_check {deckPath, slide:5}` only when state or target data is missing/stale. Prefer `ppt_edit {deckPath, expectedRevision, edits:[{slide:5, patch:{elementUpdates:[{id:"existing-id", changes:{paragraphs:[{runs:[{text:"Updated",style:{color:"#FFFFFF"}}]}]}}]}}]}`. This updates existing objects by ID, preserving other objects and frames. Object fields are replaced when supplied, except `textStyle`, which merges; preserve unchanged paragraphs/runs when editing text. IDs and types cannot change in this mode.
 
 `patch.elements` fully replaces the entire array, including decor; every element must be complete. Omitted objects are deleted. `designLayout` does not reinsert decor during editing. Do not combine `elements` with `elementUpdates`.
 
@@ -212,7 +212,7 @@ After an output/transport error, inspect the known project path and current revi
 
 Coordinates, sizes and text-frame margins use integer EMU. Stroke and table-border thickness use points, 0–100, default 1; 9525 EMU = 0.75 pt. Font size and paragraph spacing use points; lineSpacing pct value 1 means 100%. Explicit `color` overrides inherited `colorSpec`; when both are explicitly supplied, `colorSpec` wins.
 
-Check embedded template/library fonts and actual render `missingFonts` before reporting substitution. Missing system installation alone is not evidence of missing embedded fonts. Re-render the current PPTX after changes; static estimates do not constitute visual acceptance.
+Check embedded template/library fonts and actual render `missingFonts` before reporting substitution. Missing system installation alone is not evidence of missing embedded fonts. Re-render only when used to assess a requested fix/review; warnings alone do not authorize content, font or geometry changes. Static estimates do not constitute visual acceptance.
 
 
 If image viewing is unavailable or `read_image` fails with a provider/adapter error, immediately disclose that visual inspection was not completed and ask the user to inspect every unchecked page in the delivered PPTX/PDF/HTML. Rendering and structural checks do not substitute for viewing. Do not automatically delegate to subagents, select another model or trigger review-role configuration. Separate AI review requires an explicit user request; delivery of existing artifacts must not wait for model setup.

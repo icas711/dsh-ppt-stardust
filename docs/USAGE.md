@@ -23,22 +23,24 @@ Use `templateId` with freely composed `layout:"scene"` slides for template-based
 
 DSH delivers HTML, editable PPTX and PDF when export succeeds. Project JSON stays inside the plugin; retain the returned `jsonPath` for editing, but do not attach it or render-cache files by default. Standalone CLI builds retain the portable HTML/PPTX/JSON bundle.
 
-## Check and deliver
+## Deliver by default; review on request
 
-1. Run `ppt_check {deckPath}` for revision, slide IDs and all warnings. Add `slide:5` to read a complete `selectedSlide` before editing.
-2. When available, run `ppt_render {pptxPath, format:"both"}` for actual PPTX pages/PDF and font diagnostics. Pass its `receiptPath` as `renderReceipt` to `ppt_check` to verify the current files. Edits invalidate old receipts.
-3. Inspect rendered pages where image viewing is available. If viewing is unavailable or fails with a provider/adapter error, immediately disclose that visual inspection was not completed and ask the user to inspect the delivered pages. Do not automatically delegate to a subagent or configure another review model. Deliver available files with the limitation stated.
+On successful creation/editing, deliver the returned HTML/PPTX/PDF and relevant warnings. Input, save and revision validation already run inside the plugin. Use the exact returned revision and project path; no separate `ppt_check`, render, pixel/metric script or repair cycle is required. Automatic PDF export is not a request for visual review.
 
-Generation, structural checks, rendering and visual inspection are separate results. Static warnings do not prove clipping or explain its cause. A check without a receipt does not mean no render exists. Check embedded template/library fonts and actual `missingFonts`; never guarantee a font exists on an unknown recipient's machine or silently replace the requested template font.
+Warnings alone do not authorize shortening text, replacing fonts or changing geometry. Fix a concrete blocking error or the defect the user asked to fix. Use `ppt_check {deckPath, slide:5}` only for missing/stale state, unknown target objects or a targeted diagnosis; never guess a revision or discover it through an intentional failure.
+
+Extended review is opt-in. Render only when requested or needed to assess a specific requested fix; validate a render receipt only within that scope. If image viewing is unavailable or fails with a provider/adapter error, immediately disclose that visual inspection was not completed and ask the user to inspect the delivered pages. Do not automatically delegate to subagents or configure another review model; delivery must not wait for that setup.
+
+Structural estimates, rendering and visual inspection are separate results. Static warnings do not prove clipping or its cause, and a check without a receipt does not mean no render exists. Report available font evidence without guaranteeing fonts on an unknown recipient's machine. Never claim visual sign-off without an actual inspection.
 
 Quality reports follow the deck language; some legacy diagnostics remain in Chinese.
 
 ## Edit safely
 
-Read the current revision and target slide, then update existing scene objects by ID:
+Use the latest returned revision and known target objects. Read the target slide only if that data is missing or stale, then update existing objects by ID:
 
 ```js
-ppt_check({deckPath, slide:5})
+ppt_check({deckPath, slide:5}) // Only if current target data is missing/stale
 ppt_edit({
   deckPath,
   expectedRevision: revision,

@@ -54,7 +54,7 @@ Slots and variant descriptions remain compatibility metadata. Use `deckPlan` →
 
 1. List installed templates, then call `ask_user_question` with the complete returned template choice and clarify content. Wait for answers, including when a template was already specified. If none are installed, ask about style instead.
 2. Inspect the selected template with `get`; compose substantive content in its style. For schema 3 pass `templateId` + scene `slides`; do not generate placeholders or append sample pages.
-3. Check and render the result; inspect actual pages and correct layout issues. Report unresolved rendering limitations.
+3. Deliver the successful result with known warnings. Further rendering/visual review is opt-in; diagnose and fix only a concrete task-related defect. Do not start a check-and-repair loop from warnings alone.
 4. Existing fixed-slot filling and `apply-to-project` remain available for compatible editing workflows.
 
 ## Cross-harness (no library)

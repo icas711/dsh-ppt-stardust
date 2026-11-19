@@ -55,6 +55,12 @@ test('actual scene tool outputs round-trip; ID updates retain decor, objects and
   lossless(noop);assert.equal(noop.changed,false)
   const undone=await executors.undo({deckPath:made.jsonPath,expectedRevision:1});lossless(undone)
   assert.equal(undone.revision,2);assert.deepEqual((await executors.check({deckPath:made.jsonPath,slide:'slide-5'})).selectedSlide.elements,before)
+  const tools=buildPptTools(resolvePptConfig({}))
+  for(const [name,value] of [['ppt_create',made],['ppt_edit',edited],['ppt_edit',noop],['ppt_undo',undone]]){
+    const rendered=tools.find(tool=>tool.name===name).output.render({},value)[0].text
+    const state=JSON.parse(rendered.split('Project state (internal; do not attach JSON):\n')[1].split('\n')[0])
+    assert.deepEqual(state,{deckPath:value.jsonPath,deckId:value.deckId,revision:value.revision,undoAvailable:value.undoAvailable})
+  }
 })
 
 test('invalid scene updates are atomic; legacy full replacement still deletes explicitly omitted objects',async t=>{
@@ -135,6 +141,9 @@ test('overwrite creates a new project; old index entry cannot silently overwrite
   const first=await engine.buildDeckAsync(options),oldJson=readFileSync(first.jsonPath)
   const second=await engine.buildDeckAsync({...options,title:'Second',overwrite:true})
   lossless(first);lossless(second)
+  const summary=buildPptTools(resolvePptConfig({})).find(tool=>tool.name==='ppt_create').output.render({},second)[0].text
+  const renderedState=JSON.parse(summary.split('Project state (internal; do not attach JSON):\n')[1].split('\n')[0])
+  assert.equal(renderedState.revision,0);assert.equal(renderedState.deckPath,second.jsonPath)
   assert.notEqual(first.deckId,second.deckId);assert.notEqual(first.jsonPath,second.jsonPath)
   assert.equal(first.pptxPath,second.pptxPath);assert.equal(second.revision,0);assert.equal(second.undoAvailable,0)
   assert.deepEqual(readFileSync(first.jsonPath),oldJson)
@@ -162,7 +171,7 @@ test('check renders Russian report data, revision, IDs, full selected slide and 
   assert.equal(data.revision,0);assert.equal(data.deckId,made.deckId)
   assert.equal(data.slides[0].id,'slide-1');assert.deepEqual(data.selectedSlide,result.selectedSlide)
   assert.equal(data.issues.length,result.issues.length)
-  assert.match(rendered,/передайте renderReceipt/)
+  assert.match(rendered,/renderReceipt нужен только для запрошенной/)
 })
 
 test('check accepts numeric page strings, prefers exact numeric-looking IDs and explains invalid references',async t=>{
