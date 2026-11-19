@@ -1,0 +1,92 @@
+{
+  "date": "2026-11-19",
+  "commit": "adc3f46",
+  "scope": "Local reproduction of supplied PPTX through scene import and editor preview; isolated browser iframe using actual tplFitPreview, not an installed DSH session.",
+  "before": {
+    "groupsShown": 0,
+    "variantsShown": 0,
+    "imagesShown": 0,
+    "previewQualityWarnings": 9,
+    "fontSubsetClaimWithNoEmbeddedFaces": true,
+    "fitScriptInsertedInPresenterString": true
+  },
+  "after": {
+    "designGroups": 2,
+    "variants": 2,
+    "layoutStats": {
+      "images": 8,
+      "svg": 0,
+      "backgrounds": 2,
+      "plates": 4,
+      "zones": 3
+    },
+    "pageEmu": {
+      "width": 9906000,
+      "height": 6858000
+    },
+    "embeddedFontFaces": 0,
+    "fontWarnings": [
+      "Шрифт «TT Moscow Economy» не встроен в исходный PPTX; сохранено название, потребуется установленный шрифт."
+    ],
+    "ignoredObjects": [
+      {
+        "kind": "shape",
+        "name": "Номер слайда 5",
+        "source": "element-955fa3880aafa25f50083796",
+        "sourceLabel": "Слайд 1",
+        "slides": [
+          1
+        ],
+        "reason": "Невидимый объект с нулевой площадью"
+      }
+    ],
+    "remainingPreviewIssueCodes": [
+      {
+        "slide": 1,
+        "code": "contrast-unverified"
+      },
+      {
+        "slide": 1,
+        "code": "outside-slide"
+      },
+      {
+        "slide": 2,
+        "code": "contrast-unverified"
+      },
+      {
+        "slide": 2,
+        "code": "outside-slide"
+      },
+      {
+        "slide": 2,
+        "code": "body-overflow"
+      }
+    ],
+    "browser": {
+      "slidesViewed": 2,
+      "slideshowControlsWork": true,
+      "javascriptDisplayedAsText": false,
+      "fitMessage": {
+        "checked": 5,
+        "count": 3
+      },
+      "missingSourceFontStillApplies": true
+    }
+  },
+  "checks": {
+    "targeted": {
+      "passed": 23,
+      "failed": 0
+    },
+    "fullSuite": {
+      "passed": 477,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "remaining": [
+    "Actual source font is not embedded; install it or attach a permitted font through the library.",
+    "Conservative contrast and fit warnings remain; rendered results require review.",
+    "Old stored templates are not silently migrated; recreate a copy from PPTX after installing the fixed build."
+  ]
+}
