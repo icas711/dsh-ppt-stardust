@@ -9,6 +9,7 @@ import * as advanced from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 import * as fonts from '../skills/dsh-ppt/scripts/deck-fonts.mjs'
 import { PptTemplateStore } from '../lib/templates.js'
 import { runInNewContext } from 'node:vm'
+import * as DshDeckModel from '../skills/dsh-ppt/scripts/deck-model.mjs'
 
 const heading = readFileSync(new URL('./fixtures/fonts/DSH-Test-Heading.ttf', import.meta.url))
 const body = readFileSync(new URL('./fixtures/fonts/DSH-Test-Body.ttf', import.meta.url))
@@ -151,7 +152,7 @@ test('placeholder styles inherit from master then layout and resolve theme token
 
 test('editor form conversion preserves typography while editing other template fields', () => {
   const source = readFileSync(new URL('../templates/panels/template-editor.js', import.meta.url), 'utf8')
-  const context = { input: template(), output: null }
+  const context = { input: template(), output: null, DshDeckModel }
   runInNewContext(source + '\nconst draft = tplDraftFrom(input); draft.name = "Новое имя"; output = tplBuild(draft, input);', context)
   const result = JSON.parse(JSON.stringify(context.output))
   assert.deepEqual(result.style.fonts, template().style.fonts)

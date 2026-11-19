@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from 'no
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { runInNewContext } from 'node:vm'
+import * as DshDeckModel from '../skills/dsh-ppt/scripts/deck-model.mjs'
 import { unzipSync } from 'fflate'
 import { PptTemplateStore } from '../lib/templates.js'
 import { PptWorkbench } from '../lib/workbench.js'
@@ -141,7 +142,7 @@ test('font replacement preflights aggregate template limits before changing any 
 }))
 
 test('font UI lists families from imported roles and layouts, exposes four accessible uploads, and replaces a face', () => {
-  const context = { languageOf: () => 'ru', h: (type, props, ...children) => ({ type, props, children }) }
+  const context = { languageOf: () => 'ru', h: (type, props, ...children) => ({ type, props, children }), DshDeckModel }
   runInNewContext(readFileSync(new URL('../templates/panels/template-editor.js', import.meta.url), 'utf8') + '\nthis.api = { tplDraftFrom, tplBuild, TplFontUploads, tplAttachFont };', context)
   const input = draft('ui-fonts'); input.style.layouts = [{ id: 'layout-font', layoutType: 'cover', images: [], textStyles: { subtitle: { fontFamily: 'DSH Test Body' } } }]
   const form = context.api.tplDraftFrom(input), calls = []

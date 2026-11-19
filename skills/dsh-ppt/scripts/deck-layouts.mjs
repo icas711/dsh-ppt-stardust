@@ -1,4 +1,4 @@
-import { normalizeSlotTypography } from './deck-text-slots.mjs'
+import { normalizeTextZones, normalizeTextStyles } from './deck-model.mjs'
 // Макеты шаблона: фон + картинки с положением в долях слайда (проценты 0..100).
 // Чистые функции без зависимостей от deck-core/deck-advanced (их импортируют оба).
 //
@@ -9,7 +9,6 @@ import { normalizeSlotTypography } from './deck-text-slots.mjs'
 //     textZones?: [{ kind: title|body, x, y, w, h }] }
 // Форма в движке: то же, но src → assetId, background → backgroundAssetId.
 
-import { normalizeTextStyles } from './deck-fonts.mjs'
 
 export const LAYOUT_TYPES = ['cover', 'section', 'content', 'closing']
 export const MAX_LAYOUTS = 120
@@ -18,7 +17,6 @@ export const MAX_SVG_BYTES = 300 * 1024
 const LAYOUT_ID = /^[a-z0-9][a-z0-9-]{0,40}$/
 const IMAGE_FITS = ['contain', 'cover', 'fill']
 const ROLES = ['logo', 'decor', 'header', 'background', 'photo']
-const ZONE_KINDS = ['title', 'body', 'image']
 
 const round = value => Math.round(value * 1000) / 1000
 
@@ -109,13 +107,7 @@ export function normalizeDesignLayouts(input, assets, addAsset, fail) {
       }
     }
     if (raw.textZones !== undefined) {
-      if (!Array.isArray(raw.textZones) || raw.textZones.length > 6) fail(`${path}.textZones 最多 6 项`)
-      layout.textZones = raw.textZones.map((zone, i) => {
-        const zpath = `${path}.textZones[${i}]`
-        if (!zone || typeof zone !== 'object' || !ZONE_KINDS.includes(zone.kind)) fail(`${zpath}.kind 只支持 ${ZONE_KINDS.join(' / ')}`)
-        return { ...normalizeSlotTypography(zone), kind: zone.kind, x: number(zone.x, `${zpath}.x`, 0, 100, fail), y: number(zone.y, `${zpath}.y`, 0, 100, fail),
-          w: number(zone.w, `${zpath}.w`, 1, 100, fail), h: number(zone.h, `${zpath}.h`, 1, 100, fail) }
-      })
+      layout.textZones = normalizeTextZones(raw.textZones, `${path}.textZones`)
     }
     out.push(layout)
   }

@@ -1,59 +1,10 @@
 // Effective properties belong to a content area, independently of its semantic
 // role. A body placeholder can serve as a visual heading in a corporate deck.
-import { normalizeTextStyles, inheritedPlaceholderAutoFit, sourceTypefaceHints, fontFamily } from './deck-fonts.mjs'
+import { inheritedPlaceholderAutoFit, sourceTypefaceHints } from './deck-fonts.mjs'
+import { normalizeSlotTypography, TEXT_COLOR_TRANSFORMS } from './deck-model.mjs'
+export { normalizeSlotTypography } from './deck-model.mjs'
 
-const TRANSFORMS = new Set(['lumMod', 'lumOff', 'tint', 'shade', 'satMod', 'satOff', 'hueMod', 'hueOff', 'alpha', 'alphaMod', 'alphaOff', 'redMod', 'redOff', 'greenMod', 'greenOff', 'blueMod', 'blueOff'])
-const check = (value, name, min, max) => {
-  if (!Number.isFinite(value) || value < min || value > max) throw new Error(`Invalid text frame ${name}`)
-  return value
-}
-export function normalizeSlotTypography(zone) {
-  const out = {}
-  if (zone.textStyle !== undefined) out.textStyle = normalizeTextStyles({ body: zone.textStyle }).body
-  if (zone.sourceTypeface !== undefined) { fontFamily(zone.sourceTypeface); out.sourceTypeface = zone.sourceTypeface }
-  if (zone.scriptFonts !== undefined) {
-    out.scriptFonts = {}
-    for (const key of ['eastAsian', 'complexScript']) if (zone.scriptFonts[key] !== undefined) out.scriptFonts[key] = zone.scriptFonts[key] === '' ? '' : fontFamily(zone.scriptFonts[key])
-  }
-  if (zone.fontHints !== undefined) {
-    const hints = {}
-    if (zone.fontHints.panose !== undefined) {
-      if (!/^[\da-f]{20}$/i.test(zone.fontHints.panose)) throw new Error('Invalid font panose')
-      hints.panose = zone.fontHints.panose
-    }
-    for (const key of ['pitchFamily', 'charset']) if (zone.fontHints[key] !== undefined) hints[key] = Math.round(check(zone.fontHints[key], key, 0, 255))
-    out.fontHints = hints
-  }
-  if (zone.colorSpec !== undefined) {
-    const { base, transforms = [] } = zone.colorSpec ?? {}
-    if (!/^#[\da-f]{6}$/i.test(base) || !Array.isArray(transforms) || transforms.length > 24) throw new Error('Invalid slot colorSpec')
-    out.colorSpec = { base: base.toUpperCase(), transforms: transforms.map(t => {
-      if (!TRANSFORMS.has(t.name)) throw new Error('Unsupported text color transform')
-      return { name: t.name, value: check(t.value, t.name, -21600000, 21600000) }
-    }) }
-  }
-  if (zone.textFrame !== undefined) {
-    const f = zone.textFrame
-    if (!f || typeof f !== 'object' || Array.isArray(f)) throw new Error('Invalid text frame')
-    const frame = {}
-    for (const [key, allowed] of Object.entries({ align: ['left', 'center', 'right', 'justify', 'distributed'], anchor: ['top', 'center', 'bottom'], wrap: ['square', 'none'], autoFit: ['none', 'normal', 'shape'] })) {
-      if (f[key] !== undefined) { if (!allowed.includes(f[key])) throw new Error(`Invalid text frame ${key}`); frame[key] = f[key] }
-    }
-    if (f.margins !== undefined) {
-      frame.margins = {}
-      for (const side of ['left', 'top', 'right', 'bottom']) if (f.margins[side] !== undefined) frame.margins[side] = check(f.margins[side], side, 0, 51206400)
-    }
-    for (const key of ['spaceBefore', 'spaceAfter']) if (f[key] !== undefined) frame[key] = check(f[key], key, 0, 4000)
-    for (const key of ['marL', 'marR', 'indent']) if (f[key] !== undefined) frame[key] = check(f[key], key, -51206400, 51206400)
-    if (f.lineSpacing !== undefined) {
-      if (!['pct', 'pts'].includes(f.lineSpacing?.kind)) throw new Error('Invalid line spacing')
-      frame.lineSpacing = { kind: f.lineSpacing.kind, value: check(f.lineSpacing.value, 'lineSpacing', 0, f.lineSpacing.kind === 'pct' ? 100 : 4000) }
-    }
-    if (f.kerning !== undefined) frame.kerning = check(f.kerning, 'kerning', 0, 400000)
-    out.textFrame = frame
-  }
-  return out
-}
+const TRANSFORMS = new Set(TEXT_COLOR_TRANSFORMS)
 
 function sourceColorSpec(xml, theme, colorMap) {
   // Only typed color data is retained, never arbitrary source XML.

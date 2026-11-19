@@ -10,6 +10,7 @@ import * as advanced from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 import { solidPng } from '../skills/dsh-ppt/scripts/deck-pptx-layouts.mjs'
 import { zoneContents } from '../skills/dsh-ppt/scripts/deck-zones.mjs'
 import { runInNewContext } from 'node:vm'
+import * as DshDeckModel from '../skills/dsh-ppt/scripts/deck-model.mjs'
 
 const text = (files, name) => Buffer.from(files[name]).toString('utf8')
 const theme = core.resolveTheme('data'), lang = core.resolveLanguage('ru')
@@ -71,7 +72,7 @@ test('original size and slot geometry survive ZIP, editor, preview, project, exp
   const imported = await templates.templateFromPptx(await sourceDeck(), { templateId: 'page-test', name: 'Формат', lang: 'ru' })
   const bundle = templates.readTemplateZip(templates.buildTemplateBundle(imported.manifest, imported.assets))
   const editorSource = readFileSync(new URL('../templates/panels/template-editor.js', import.meta.url), 'utf8')
-  const form = runInNewContext(editorSource + '\nJSON.stringify(tplBuild(tplDraftFrom(input), input))', { input: bundle.manifest, languageOf: () => 'ru' })
+  const form = runInNewContext(editorSource + '\nJSON.stringify(tplBuild(tplDraftFrom(input), input))', { input: bundle.manifest, languageOf: () => 'ru', DshDeckModel })
   const edited = templates.validateTemplateManifest(JSON.parse(form), { templateAssets: bundle.assets })
   assert.deepEqual(edited.style.pageSize, bundle.manifest.style.pageSize)
   assert.deepEqual(edited.style.layouts, bundle.manifest.style.layouts)

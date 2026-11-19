@@ -111,7 +111,7 @@ function tplDraftFrom(manifest) {
 const TPL_ROLES = ['logo', 'header', 'decor', 'background', 'photo'];
 const tplRoleLabel = role => ({ logo: tplTr('Логотип', 'Logo'), header: tplTr('Шапка / линия', 'Header / rule'), decor: tplTr('Декор', 'Decor'), background: tplTr('Фон-картинка', 'Background picture'), photo: tplTr('Фото', 'Photo') })[role] ?? role;
 const tplNum = value => { const n = Number(value); return Number.isFinite(n) ? Math.round(n * 1000) / 1000 : 0; };
-function tplCleanLayout(layout) {
+function tplCleanLayout(layout, index = 0) {
     const out = { id: layout.id, layoutType: layout.layoutType, images: (layout.images ?? []).map((image, index) => {
         const item = { image: image.image, x: tplNum(image.x), y: tplNum(image.y), w: Math.max(0.1, tplNum(image.w)), h: Math.max(0.1, tplNum(image.h)), z: index, fit: image.fit || 'contain' };
         if (image.role) item.role = image.role;
@@ -123,7 +123,7 @@ function tplCleanLayout(layout) {
     if (layout.textStyles) out.textStyles = tplClone(layout.textStyles);
     if (layout.background?.image) out.background = { image: layout.background.image, fit: layout.background.fit || 'cover' };
     if (layout.backgroundColor) out.backgroundColor = layout.backgroundColor;
-    if (layout.textZones?.length) out.textZones = layout.textZones.map(zone => ({ ...(zone.textStyle ? { textStyle: tplClone(zone.textStyle) } : {}), ...(zone.fontHints ? { fontHints: tplClone(zone.fontHints) } : {}), ...(zone.sourceTypeface ? { sourceTypeface: zone.sourceTypeface } : {}), ...(zone.scriptFonts ? { scriptFonts: tplClone(zone.scriptFonts) } : {}), ...(zone.textFrame ? { textFrame: tplClone(zone.textFrame) } : {}), ...(zone.colorSpec ? { colorSpec: tplClone(zone.colorSpec) } : {}), kind: ['title', 'body', 'image'].includes(zone.kind) ? zone.kind : 'body', x: Math.min(100, Math.max(0, tplNum(zone.x))), y: Math.min(100, Math.max(0, tplNum(zone.y))), w: Math.min(100, Math.max(1, tplNum(zone.w))), h: Math.min(100, Math.max(1, tplNum(zone.h))) }));
+    if (layout.textZones !== undefined) out.textZones = DshDeckModel.normalizeTextZones(layout.textZones, `style.layouts[${index}].textZones`);
     return out;
 }
 function tplCleanSlide(slide) {
@@ -173,6 +173,11 @@ function tplBuild(draft, base) {
 
 // Поля, без которых превью не строится (id и название сервер для превью подставит сам).
 function tplStyleProblem(draft) {
+    try {
+        for (const [index, layout] of (draft.layouts ?? []).entries()) {
+            if (layout.textZones !== undefined) DshDeckModel.normalizeTextZones(layout.textZones, `style.layouts[${index}].textZones`);
+        }
+    } catch (error) { return error instanceof Error ? error.message : String(error); }
     for (const [key, label] of [['primaryColor', tplTr('Основной цвет', 'Primary colour')], ['backgroundColor', tplTr('Цвет фона', 'Background colour')], ['textColor', tplTr('Цвет текста', 'Text colour')]]) {
         if (draft[key] && !TPL_HEX.test(draft[key])) return label + tplTr(': нужен формат #RRGGBB', ': use the #RRGGBB format');
     }

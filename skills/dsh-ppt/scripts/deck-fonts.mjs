@@ -4,58 +4,16 @@ import { posix } from 'node:path'
 import { createHash } from 'node:crypto'
 import { unzipSync, zipSync, strToU8 } from 'fflate'
 import { eotToTtf } from 'mtx-decompressor'
+import { TEXT_ROLES, fontFamily, normalizeTextStyles, normalizeThemeFonts } from './deck-model.mjs'
+export { TEXT_ROLES, fontFamily, normalizeTextStyles, normalizeThemeFonts } from './deck-model.mjs'
 
 export const MAX_FONT = 12 * 1024 * 1024
 export const MAX_FONTS = 32 * 1024 * 1024
 export const FONT_EXT = /\.(ttf|otf|fntdata)$/i
-export const TEXT_ROLES = ['title', 'subtitle', 'body', 'kicker', 'footer', 'caption', 'quote', 'attribution', 'table']
 const variants = ['regular', 'bold', 'italic', 'boldItalic']
 const fail = message => { throw new Error('dsh-ppt: ' + message) }
 const xml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]))
 const decode = value => String(value).replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, s) => s[0] === '#' ? String.fromCodePoint(s[1].toLowerCase() === 'x' ? parseInt(s.slice(2), 16) : Number(s.slice(1))) : ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[s]))
-export function fontFamily(value) {
-  if (typeof value !== 'string' || !value.trim() || value.length > 128 || !/^[\p{L}\p{N} _().&+\-]+$/u.test(value)) fail('Invalid font family')
-  return value.trim()
-}
-
-export function normalizeTextStyles(input) {
-  if (input === undefined) return undefined
-  if (!input || typeof input !== 'object' || Array.isArray(input)) fail('textStyles must be an object')
-  const out = {}
-  for (const [role, raw] of Object.entries(input)) {
-    if (!TEXT_ROLES.includes(role) || !raw || typeof raw !== 'object' || Array.isArray(raw)) fail('Invalid text role: ' + role)
-    const style = {}
-    if (raw.fontFamily !== undefined) style.fontFamily = fontFamily(raw.fontFamily)
-    if (raw.size !== undefined) {
-      if (!Number.isFinite(raw.size) || raw.size < 1 || raw.size > 400) fail('Font size must be 1–400 pt')
-      style.size = raw.size
-    }
-    for (const key of ['bold', 'italic']) if (raw[key] !== undefined) {
-      if (typeof raw[key] !== 'boolean') fail(key + ' must be boolean')
-      style[key] = raw[key]
-    }
-    if (raw.color !== undefined) {
-      if (!/^#[\da-f]{6}$/i.test(raw.color)) fail('Text color must be #RRGGBB')
-      style.color = raw.color.toUpperCase()
-    }
-    out[role] = style
-  }
-  return out
-}
-
-export function normalizeThemeFonts(input) {
-  if (input === undefined) return undefined
-  if (!input || typeof input !== 'object' || Array.isArray(input)) fail('Invalid themeFonts')
-  const out = {}
-  for (const key of ['majorLatin', 'majorEastAsian', 'majorComplexScript', 'minorLatin', 'minorEastAsian', 'minorComplexScript']) {
-    if (input[key] !== undefined) {
-      if (input[key] === null || input[key] === '') out[key] = ''
-      else { fontFamily(input[key]); out[key] = input[key] }
-    }
-  }
-  return out
-}
-
 export function normalizeFontRefs(input, engine = false) {
   if (input === undefined) return undefined
   if (!Array.isArray(input) || input.length > 64) fail('At most 64 embedded font faces are allowed')

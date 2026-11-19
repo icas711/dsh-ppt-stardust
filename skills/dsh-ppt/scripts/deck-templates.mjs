@@ -1,4 +1,4 @@
-import { normalizeSlotTypography } from './deck-text-slots.mjs'
+import { normalizeTextZones } from './deck-model.mjs'
 import { normalizePageSize } from './deck-page.mjs'
 // deck-templates.mjs —— dsh-ppt 模板库核心：模板清单、校验、bundle 读写。
 //
@@ -115,13 +115,7 @@ function validateLayouts(list) {
       return entry
     })
     if (raw.textZones !== undefined) {
-      if (!Array.isArray(raw.textZones) || raw.textZones.length > 6) fail(`${path}.textZones 最多 6 项`)
-      layout.textZones = raw.textZones.map((zone, i) => {
-        const zpath = `${path}.textZones[${i}]`
-        if (!zone || typeof zone !== 'object' || !['title', 'body', 'image'].includes(zone.kind)) fail(`${zpath}.kind 只支持 title / body / image`)
-        return { ...normalizeSlotTypography(zone), kind: zone.kind, x: checkNumber(zone.x, `${zpath}.x`, 0, 100), y: checkNumber(zone.y, `${zpath}.y`, 0, 100),
-          w: checkNumber(zone.w, `${zpath}.w`, 1, 100), h: checkNumber(zone.h, `${zpath}.h`, 1, 100) }
-      })
+      layout.textZones = normalizeTextZones(raw.textZones, `${path}.textZones`)
     }
     return layout
   })
