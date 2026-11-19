@@ -26,7 +26,7 @@ test('font compatibility exports are bindings to the same pure model functions',
   assert.equal(fonts.normalizeThemeFonts, model.normalizeThemeFonts)
   assert.equal(fonts.fontFamily, model.fontFamily)
   const source = readFileSync(new URL('../skills/dsh-ppt/scripts/deck-model.mjs', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /^\s*import\b/m)
+  assert.match(source, /import .*from '\.\/deck-geometry\.mjs'/)
   assert.doesNotMatch(source, /\b(?:Buffer|document|window|process)\./)
 })
 

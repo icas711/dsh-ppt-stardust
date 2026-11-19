@@ -3,6 +3,7 @@ import { resolveLanguage } from './deck-language.mjs'
 import { clampInt, stripInlineMarkdown, splitSentences, truncate, chunk } from './deck-text.mjs'
 import { MEDIA_LAYOUTS, normalizeMediaSlide } from './deck-media.mjs'
 import { normalizeVisual } from './deck-visual.mjs'
+import { assertLegacySlideInput } from './deck-model.mjs'
 
 // ---------------------------------------------------------------------------
 // Markdown → deck
@@ -364,6 +365,7 @@ export function normalizeSlides(rawSlides, maxSlides = 60, lang = 'zh') {
   if (!Array.isArray(rawSlides) || rawSlides.length === 0) {
     throw new Error('dsh-ppt：slides 必须是非空数组（每个元素是 { layout, title, subtitle, kicker, bullets } 对象）')
   }
+  rawSlides.forEach((slide, index) => assertLegacySlideInput(slide, `slides[${index}]`))
   const limit = clampInt(maxSlides, 60, 1, 120)
   const ui = resolveLanguage(lang).ui
   const slides = rawSlides.map(normalizeSlide).flatMap(slide => slide.layout === 'table'

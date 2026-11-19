@@ -1,4 +1,5 @@
 import { normalizePageSize, pageSize } from './deck-page.mjs'
+import { assertLegacySlideInput } from './deck-model.mjs'
 import { mkdirSync, readFileSync, statSync, openSync, closeSync, rmSync, existsSync, unlinkSync } from 'node:fs'
 import { resolve, dirname, extname, basename, join, isAbsolute } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
@@ -180,6 +181,7 @@ function validateRawSlides(slides) {
   if (!Array.isArray(slides)) fail('slides 必须是数组')
   slides.forEach((s, i) => {
     if (!s || typeof s !== 'object' || Array.isArray(s)) fail(`第 ${i + 1} 页必须是对象`)
+    assertLegacySlideInput(s, `slides[${i}]`)
     if (s.layout && !layouts.has(s.layout)) fail(`第 ${i + 1} 页未知布局 ${s.layout}`)
     normalizeVisual(s.visual)
     if (s.chart && s.image) fail(`第 ${i + 1} 页不能同时放入 image 和 chart`)
@@ -773,6 +775,7 @@ export async function editDeck(options = {}) {
     if (used.has(index)) fail('一次修改不能重复指定同一页：' + (index + 1))
     used.add(index)
     if (!edit.patch || typeof edit.patch !== 'object' || Array.isArray(edit.patch)) fail('第 ' + (index + 1) + ' 页 patch 需为对象')
+    assertLegacySlideInput({ ...next.slides[index], ...edit.patch }, `slides[${index}]`)
     for (const key of Object.keys(edit.patch)) if (!allowed.has(key)) fail('不支持修改页面字段：' + key)
     validateRawSlides([edit.patch])
     const changed = { ...next.slides[index], ...next.slides[index].dataTemplate, ...edit.patch }

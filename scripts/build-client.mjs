@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { bundleClientModel } from './bundle-client-model.mjs'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const normalize = value => value.replace(/\r\n/g, '\n')
 const kit = normalize(readFileSync(join(root, 'templates/workbench-ui.js'), 'utf8'))
@@ -9,14 +10,8 @@ const ru = normalize(readFileSync(join(root, 'templates/client-ru.js'), 'utf8'))
 // Compiled model catalog RPC (src/model-catalog.ts, no imports): inlined into the
 // client scope with its export keywords stripped.
 const catalog = normalize(readFileSync(join(root, 'lib/model-catalog.js'), 'utf8')).replace(/^export (?=(?:async )?(?:function|class|const|let|var))/gm, '')
-// One self-contained ES module supplies the same validators to Node and panels.
-const modelSource = normalize(readFileSync(join(root, 'skills/dsh-ppt/scripts/deck-model.mjs'), 'utf8'))
-if (/^\s*import\b|^\s*export\s*(?:\{|\*|default\b)/m.test(modelSource)) throw new Error('deck-model must stay self-contained; imports/re-exports need an explicit module bundler')
-const modelExports = [...modelSource.matchAll(/^export (?:function|const) (\w+)/gm)].map(match => match[1])
-if (!modelExports.length) throw new Error('Shared model has no declared exports')
-const modelBody = modelSource.replace(/^export (?=(?:function|const)\b)/gm, '')
-if (/^\s*export\b/m.test(modelBody)) throw new Error('Unsupported shared model export declaration')
-const model = '// BEGIN DSH_DECK_MODEL\nconst DshDeckModel = (() => {\n' + modelBody + '\nreturn Object.freeze({ ' + modelExports.join(', ') + ' });\n})();\n// END DSH_DECK_MODEL\n'
+// Compile the same pure ES module graph used by Node, including shared geometry.
+const model = bundleClientModel(join(root, 'skills/dsh-ppt/scripts'))
 let client = normalize(readFileSync(join(root, 'templates/client.js'), 'utf8'))
 if (client.includes('__ENGINE__')) {
   const name = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name
