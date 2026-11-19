@@ -30,12 +30,17 @@ test('explicit chart settings win, legacy charts stay compatible, and large sets
  assert.equal(old.title,undefined);assert.equal(old.series[0].color,undefined)
  const large={...data,categories:Array.from({length:13},(_,i)=>String(i)),series:[{name:'Known series',values:Array(13).fill(2)}]}
  assert.equal(diagramToScene({diagram:{version:2,kind:'chart',chart:large}}).elements[0].chart.dataLabels,undefined)
+ const pie=diagramToScene({diagram:{version:2,kind:'chart',chart:{...data,kind:'pie'}}},{accent:'#7C3AED',background:'#FFFFFF',color:'#242424'}).elements[0].chart
+ assert.equal(new Set(pie.series[0].pointColors).size,2);assert.equal(pie.dataLabels.position,'outEnd')
+ const area=diagramToScene({diagram:{version:2,kind:'chart',chart:{...data,kind:'area'}}}).elements[0].chart
+ assert.equal(area.dataLabels,undefined,'area labels require deliberate placement after visual review')
+ for(const kind of ['area','doughnut'])assert.throws(()=>diagramToScene({diagram:{version:2,kind:'chart',chart:{...data,kind,dataLabels:{showValue:true,position:'t'}}}}),{code:'chart-label-position'})
 })
-test('all eight confirmed semantic chart variants export with the visible-label defaults',async t=>{
+test('all eight confirmed semantic chart variants export with supported label defaults',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'semantic-chart-matrix-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
  const {selectSceneChartVariant,CONFIRMED_CHART_VARIANTS}=await import('../skills/dsh-ppt/scripts/deck-generation.mjs')
  const slides=CONFIRMED_CHART_VARIANTS.map((v,i)=>({...diagramToScene({diagram:{version:2,kind:'chart',chart:selectSceneChartVariant(data,v)}},{accent:'#7C3AED',background:'#FFFFFF',color:'#242424'}),id:'chart-'+i,backgroundColor:'#FFFFFF'}))
  const built=await buildDeckAsync({title:'Chart matrix',slides,outputDir:dir,lang:'en'}),parts=unzipSync(readFileSync(built.pptxPath))
  assert.equal(Object.keys(parts).filter(p=>/^ppt\/charts\/chart\d+\.xml$/.test(p)).length,8)
- for(let i=1;i<=8;i++){const xml=strFromU8(parts['ppt/charts/chart'+i+'.xml']);assert.match(xml,/<c:title[ >]/);assert.match(xml,/<c:showVal val="1"/);assert.ok(xml.includes('7C3AED'))}
+ for(let i=1;i<=8;i++){const xml=strFromU8(parts['ppt/charts/chart'+i+'.xml']);assert.match(xml,/<c:title[ >]/);if(CONFIRMED_CHART_VARIANTS[i-1]!=='area')assert.match(xml,/<c:showVal val="1"/);assert.ok(xml.includes('7C3AED'))}
 })

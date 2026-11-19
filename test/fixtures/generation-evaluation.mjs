@@ -14,7 +14,7 @@ const scenarios=[
 ]
 export function generationEvaluationCases(){const cases=scenarios.map((s,i)=>{
  const {plan:_,...input}=generationFixture(3,1)
- input.id='generation-evaluation';input.name='Оценка генерации — 3 варианта'
+ input.id='generation-evaluation-v2';input.name='Оценка генерации v2 — 3 варианта'
  input.style.theme='swiss';input.style.brand={backgroundColor:'#FFFFFF',textColor:'#242424',primaryColor:'#7C3AED'}
  input.style.layouts.forEach((l,n)=>{l.backgroundColor='#FFFFFF';l.elements[0].frame={x:500000+n*100000,y:800000+n*200000,w:8500000-n*300000,h:5000000-n*200000};l.elements[0].textStyle={size:20,fontFamily:'Liberation Sans',color:'#242424'}})
  const template=normalizeSceneTemplate(input),sourceId='material:'+s.id
