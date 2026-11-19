@@ -12,7 +12,8 @@ export interface PptQualityResult { ok: boolean; slideCount: number; errorCount:
 export interface PptVerification { static: 'checked'; pptxRender: 'not-verified' | 'rendered'; visual: 'not-verified' }
 export interface PptRenderArgs { pptxPath: string; outputDir?: string; format?: 'png' | 'pdf' | 'both'; width?: number; timeoutMs?: number }
 export interface PptRenderResult { ok: boolean; status: 'unavailable' | 'not-verified' | 'rendered'; backend?: string; rendererVersion?: string; sourceSha256?: string; outputDir?: string; reason?: string; slideCount?: number; pngPaths?: string[]; pdfPath?: string; receiptPath?: string; missingFonts?: string[]; message?: string; installationHint?: string; visual?: 'not-verified' }
-export interface PptCheckResult extends PptQualityResult { verification: PptVerification; render?: PptRenderResult }
+export interface PptGenerationReport { valid: boolean; stale?: boolean; diagnostics: Array<{severity:string;code:string;message:string;slideId?:string;slotId?:string;alternatives?:string[]}>; metrics?:Record<string,number>; usedVariants?:string[]; usedStructures?:string[]; unusedVariants?:string[] }
+export interface PptCheckResult extends PptQualityResult { verification: PptVerification; render?: PptRenderResult; generationReport?:PptGenerationReport }
 export interface PptEditArgs { deckPath: string; edits?: Array<{ slide: number | string; patch: Partial<Omit<PptSlideSpec, 'id'>> }>; order?: string[]; brand?: PptBrand | null; expectedRevision?: number; saveAs?: boolean }
 export interface PptProjectArgs { deckPath: string; expectedRevision?: number }
 export interface PptDataSource { id: string; name?: string; format?: 'csv' | 'tsv' | 'text'; path?: string; content?: string; kind?: 'table' | 'text'; rows?: Array<Array<string | number>>; text?: string }
@@ -131,6 +132,7 @@ export interface PptCreateResult {
   deliveryStatus?: 'draft' | 'ready-for-review'
   changed?: boolean
   quality?: PptQualityResult
+  generationReport?: PptGenerationReport
   verification?: PptVerification
 }
 

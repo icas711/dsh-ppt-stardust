@@ -81,9 +81,26 @@ export interface PptRenderResult {
     installationHint?: string;
     visual?: 'not-verified';
 }
+export interface PptGenerationReport {
+    valid: boolean;
+    stale?: boolean;
+    diagnostics: Array<{
+        severity: string;
+        code: string;
+        message: string;
+        slideId?: string;
+        slotId?: string;
+        alternatives?: string[];
+    }>;
+    metrics?: Record<string, number>;
+    usedVariants?: string[];
+    usedStructures?: string[];
+    unusedVariants?: string[];
+}
 export interface PptCheckResult extends PptQualityResult {
     verification: PptVerification;
     render?: PptRenderResult;
+    generationReport?: PptGenerationReport;
 }
 export interface PptEditArgs {
     deckPath: string;
@@ -292,6 +309,7 @@ export interface PptCreateResult {
     deliveryStatus?: 'draft' | 'ready-for-review';
     changed?: boolean;
     quality?: PptQualityResult;
+    generationReport?: PptGenerationReport;
     verification?: PptVerification;
 }
 /** Library template manifest (schemaVersion 1) summary as shown in lists. */

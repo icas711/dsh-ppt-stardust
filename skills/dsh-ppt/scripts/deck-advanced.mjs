@@ -1015,6 +1015,7 @@ export function checkDeck(options = {}) {
     quality.errorCount++; quality.ok = false
   }
   return { ...quality, deckPath: path, deckId: manifest.deckId, revision: manifest.revision,
+    ...(manifest.generation?{generationReport:{...manifest.generation.report,stale:manifest.generation.contentFingerprint!==generationFingerprint(manifest.slides)}}:{}),
     verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' },
     undoAvailable: manifest.history.length, slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.label ?? s.title, layout: s.layout })),
     template: manifest.template ?? null }
