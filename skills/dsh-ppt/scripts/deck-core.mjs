@@ -1,6 +1,7 @@
 #! /usr/bin/env node
 import { resolveLanguage } from './deck-language.mjs'
 import { clampInt, escapeXml, escapeHtml, stripInlineMarkdown } from './deck-text.mjs'
+import { normalizeSceneSlides, validateSlideRepresentation } from './deck-model.mjs'
 import { parseMarkdownDeck, normalizeSlides, checkSlideLimit } from './deck-legacy.mjs'
 export { LANGUAGES, resolveLanguage } from './deck-language.mjs'
 export { clampInt, escapeXml, escapeHtml, stripInlineMarkdown, splitSentences, truncate } from './deck-text.mjs'
@@ -218,7 +219,8 @@ export function normalizeBuildOptions(options = {}) {
     deck = {
       title,
       subtitle: stripInlineMarkdown(options.subtitle ?? ''),
-      slides: normalizeSlides(options.slides, maxSlides, language.id),
+      slides: options.slides.some(s => s?.layout === 'scene' || Object.hasOwn(s ?? {}, 'elements'))
+        ? normalizeSceneSlides(options.slides, {assets:options.assets ?? {}}) : normalizeSlides(options.slides, maxSlides, language.id),
     }
   } else {
     const content = String(options.content ?? '').trim()
@@ -292,6 +294,8 @@ export function commitDeckArtifacts(artifacts) {
 }
 
 export function buildDeck(options = {}) {
+  options.slides?.forEach((s,i) => validateSlideRepresentation(s, `slides[${i}]`))
+  if (options.slides?.some(s => s?.layout === 'scene')) throw new Error('Scene projects require buildDeckAsync / ppt_create')
   if(options.dataModel!==undefined)throw new Error('dsh-ppt：数据绑定请使用 deck-advanced.mjs 的 buildDeckAsync / Data models require buildDeckAsync from deck-advanced.mjs')
   if (options.brand || options.template || options.slides?.some(slide => MEDIA_LAYOUTS.has(slide.layout) || slide.image || slide.chart)) {
     throw new Error('dsh-ppt：图片、图表、模板与品牌请使用异步 buildDeckAsync 或 ppt_create / CLI')

@@ -58,3 +58,18 @@ export function normalizeLegacyProjectEnvelope(input, {fingerprint} = {}) {
   })
   return document
 }
+
+/** Schema 2 has one representation throughout current state and history. */
+export function normalizeProjectEnvelope(input, options) {
+  if (input?.schemaVersion !== 2) return normalizeLegacyProjectEnvelope(input, options)
+  const copy = structuredClone(input)
+  for (const state of [copy,...(copy.history ?? [])]) {
+    if (!Array.isArray(state.slides) || state.slides.some(s => s?.layout !== 'scene')) projectError('unsupported-project-schema', 'slides', 'Schema 2 requires scenes in every snapshot')
+    if (state.schemaVersion !== undefined && state.schemaVersion !== 2) projectError('unsupported-project-schema','history','Mixed project schemas')
+    if (state !== copy) delete state.schemaVersion
+  }
+  copy.schemaVersion = 1
+  const result = normalizeLegacyProjectEnvelope(copy, options)
+  result.schemaVersion = 2
+  return result
+}

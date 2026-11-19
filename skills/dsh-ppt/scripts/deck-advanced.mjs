@@ -1,6 +1,6 @@
 import { normalizePageSize, pageSize } from './deck-page.mjs'
-import { assertLegacySlideInput } from './deck-model.mjs'
-import { PROJECT_SCHEMA_VERSION, MAX_PROJECT_HISTORY as MAX_HISTORY, normalizeLegacyProjectEnvelope, nextProjectRevision } from './deck-migrations.mjs'
+import { assertLegacySlideInput, validateSlideRepresentation, normalizeSceneSlides, normalizeSceneSlide } from './deck-model.mjs'
+import { PROJECT_SCHEMA_VERSION, MAX_PROJECT_HISTORY as MAX_HISTORY, normalizeProjectEnvelope, nextProjectRevision } from './deck-migrations.mjs'
 import { mkdirSync, readFileSync, statSync, openSync, closeSync, rmSync, existsSync, unlinkSync } from 'node:fs'
 import { resolve, dirname, extname, basename, join, isAbsolute } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
@@ -146,6 +146,8 @@ function validateRawSlides(slides) {
   if (!Array.isArray(slides)) fail('slides 必须是数组')
   slides.forEach((s, i) => {
     if (!s || typeof s !== 'object' || Array.isArray(s)) fail(`第 ${i + 1} 页必须是对象`)
+    validateSlideRepresentation(s, `slides[${i}]`)
+    if (s.layout === 'scene') return
     assertLegacySlideInput(s, `slides[${i}]`)
     if (s.layout && !layouts.has(s.layout)) fail(`第 ${i + 1} 页未知布局 ${s.layout}`)
     normalizeVisual(s.visual)
@@ -164,7 +166,10 @@ function collectAssets(manifest) {
     for (const face of state.style?.fonts ?? []) ids.add(face.assetId)
     for (const bg of state.style?.backgrounds ?? []) ids.add(bg.assetId)
     for (const layout of state.style?.layouts ?? []) for (const id of layoutAssetIds(layout)) ids.add(id)
-    for (const slide of state.slides) if (slide.image?.assetId) ids.add(slide.image.assetId)
+    for (const slide of state.slides) {
+      if (slide.image?.assetId) ids.add(slide.image.assetId)
+      for (const e of slide.elements ?? []) { if (e.assetId) ids.add(e.assetId); if (e.previewAssetId) ids.add(e.previewAssetId) }
+    }
   }
   manifest.assets = Object.fromEntries([...ids].map(id => [id, manifest.assets[id]]))
   const size = Object.entries(manifest.assets).filter(([id]) => !id.startsWith('font-')).reduce((sum, [, asset]) => sum + (asset?.data?.length ?? 0), 0)
@@ -351,6 +356,16 @@ export function checkManifest(manifest) {
     })
   }
   manifest.slides.forEach((slide, i) => {
+    if (slide.layout === 'scene') {
+      const size = pageSize(manifest)
+      for (const e of slide.elements) {
+        const id = e.assetId ?? e.previewAssetId
+        if (id && assetError(id)) issue(i, 'invalid-image', {severity:'error', detail:assetError(id), suggestionCode:'invalid-image-suggestion'})
+        if (e.type === 'unsupported') issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'unsupported-object',severity:'warning',message:e.reason,messageRu:e.reason,messageEn:e.reason})
+        if (e.frame.x < 0 || e.frame.y < 0 || e.frame.x+e.frame.w > size.width || e.frame.y+e.frame.h > size.height) issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'outside-slide',severity:'warning',message:'Object extends beyond slide',messageRu:'Объект выходит за границы слайда',messageEn:'Object extends beyond slide'})
+      }
+      return
+    }
     if (!slide.title?.trim()) issue(i, 'missing-title')
     const titleLimit = ['cover', 'closing', 'statement', 'quote', 'section'].includes(slide.layout) ? 40 : 24
     if (textWidth(slide.title) > titleLimit) issue(i, 'title-overflow')
@@ -395,6 +410,7 @@ export function checkManifest(manifest) {
 async function exportPptx(manifest, theme, language, signal) {
   const size = pageSize(manifest), SLIDE_W_IN = size.width / 914400, SLIDE_H_IN = size.height / 914400
   const base = buildPptx({ ...manifest, slides: manifest.slides.map(s => ({ ...s, notes: dataNotes(manifest,s) })) }, theme, language)
+  if (manifest.slides.every(s => s.layout === 'scene')) return embedPptxFonts(base, manifest)
   const hasBackgrounds = (Array.isArray(manifest.style?.backgrounds) && manifest.style.backgrounds.some(bg => manifest.assets?.[bg.assetId]?.data)) || Boolean(manifest.style?.layouts?.length)
   if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !hasBackgrounds && !manifest.slides.some(s => s.image || s.chart)) return embedPptxFonts(base, manifest)
   abort(signal)
@@ -494,7 +510,7 @@ function documentBytes(manifest) {
 function result(manifest, paths) {
   return { ok: true, title: manifest.title, theme: manifest.theme, language: manifest.language,
     slideCount: manifest.slides.length, deckId: manifest.deckId, revision: manifest.revision,
-    slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.title, layout: s.layout })),
+    slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.label ?? s.title, layout: s.layout })),
     undoAvailable: manifest.history.length, deliveryStatus: manifest.quality?.issues.some(i => i.code === 'template-unfilled') ? 'draft' : 'ready-for-review',
     quality: manifest.quality, verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' }, outputDir: dirname(paths.html),
     internalProject: !!manifest.delivery,
@@ -570,6 +586,11 @@ function commit(paths, data) {
 function validateSnapshot(value, assets) {
   resolveTheme(value.theme); resolveLanguage(value.language)
   validateRawSlides(value.slides)
+  const scenes = value.slides.some(s => s.layout === 'scene')
+  if (scenes) {
+    if (value.dataModel) fail('scene-data-binding-not-supported: explicit object bindings are required')
+    value.slides = normalizeSceneSlides(value.slides, {assets})
+  }
   validateDataSnapshot(value, normalizeSlides)
   if (value.brand != null) {
     if (Object.hasOwn(value.brand, 'logo')) fail('工程品牌仅支持嵌入的 logoAssetId，不读取本地 logo 路径')
@@ -612,13 +633,13 @@ export async function buildDeckAsync(options = {}) {
   const prepared = dataModel ? prepareDataSlides(input.slides, dataModel, normalizeSlides, resolveLanguage(input.lang).id) : undefined
   const normalized = normalizeBuildOptions({ ...input, ...(prepared ? { slides:prepared } : {}) })
   if(prepared) normalized.deck.slides = prepared
-  const assets = {}
+  const assets = clone(options.assets ?? {})
   const brand = normalizeBrand(options.brand, assets, cwd)
   const style = normalizeStyle(options.style, assets, cwd)
   const lineage = options.templateLineage
   if (lineage !== undefined && (lineage === null || typeof lineage !== 'object' || Array.isArray(lineage)
     || typeof lineage.id !== 'string' || !Number.isInteger(lineage.revision))) fail('templateLineage 需为 { id, revision }')
-  const manifest = { version: DECK_VERSION, schemaVersion: PROJECT_SCHEMA_VERSION, deckId: randomUUID(), revision: 0,
+  const manifest = { version: DECK_VERSION, schemaVersion: normalized.deck.slides.every(s => s.layout === 'scene') ? 2 : PROJECT_SCHEMA_VERSION, deckId: randomUUID(), revision: 0,
     title: normalized.title, theme: normalized.theme.id, language: normalized.language.id, motion: normalized.motion,
     ...(scenario ? { template: scenario.id } : {}), ...(lineage ? { template: { id: lineage.id, revision: lineage.revision } } : {}),
     ...(brand ? { brand } : {}), ...(style ? { style } : {}), ...(dataModel ? {dataModel} : {}), assets, history: [],
@@ -646,7 +667,7 @@ export async function buildDeckAsync(options = {}) {
 export function previewDeckHtml(options = {}) {
   validateRawSlides(options.slides)
   const normalized = normalizeBuildOptions({ ...options, outputDir: '.' })
-  const cwd = resolve('.'), assets = {}
+  const cwd = resolve('.'), assets = clone(options.assets ?? {})
   const brand = normalizeBrand(options.brand, assets, cwd)
   const style = normalizeStyle(options.style, assets, cwd)
   const manifest = { version: DECK_VERSION, schemaVersion: PROJECT_SCHEMA_VERSION, deckId: 'preview', revision: 0,
@@ -668,7 +689,7 @@ function readDocument(pathInput, cwd = '.') {
   let document
   try { document = JSON.parse(bytes) } catch { fail('JSON 工程无法解析：' + path) }
   const fingerprint = hash(bytes)
-  document = normalizeLegacyProjectEnvelope(document, {fingerprint})
+  document = normalizeProjectEnvelope(document, {fingerprint})
   if (document.delivery !== undefined && (!document.delivery || typeof document.delivery.base !== 'string' || !isAbsolute(document.delivery.base))) fail('Некорректные пути выдачи проекта')
   resolveTheme(document.theme); resolveLanguage(document.language)
   validateSnapshot(document, document.assets)
@@ -676,7 +697,7 @@ function readDocument(pathInput, cwd = '.') {
   if (document.artifacts !== undefined && (!document.artifacts || typeof document.artifacts !== 'object'
     || ['html', 'pptx'].some(kind => !/^[a-f0-9]{64}$/.test(document.artifacts[kind])))) fail('工程成品校验记录无效')
   for (const slide of document.slides) {
-    if (!slide || !layouts.has(slide.layout)) fail('工程含有未知页面布局')
+    if (!slide || slide.layout !== 'scene' && !layouts.has(slide.layout)) fail('工程含有未知页面布局')
   }
   return { manifest: document, path, fingerprint }
 }
@@ -691,7 +712,7 @@ function expected(manifest, revision) {
 }
 async function saveRevision(state, next, signal, saveAs = false, preserveUndo = false) {
   if (!saveAs) { const problem = artifactProblem(state.manifest, pathsFor(state.path)); if (problem) fail(problem) }
-  next.version = DECK_VERSION; next.schemaVersion = PROJECT_SCHEMA_VERSION; next.revision = saveAs ? 0 : nextProjectRevision(state.manifest.revision)
+  next.version = DECK_VERSION; next.schemaVersion = next.slides.every(s => s.layout === 'scene') ? 2 : PROJECT_SCHEMA_VERSION; next.revision = saveAs ? 0 : nextProjectRevision(state.manifest.revision)
   if (saveAs) { next.deckId = randomUUID(); next.revision = 0; next.history = preserveUndo ? [snapshot(state.manifest)] : [] }
   const data = await generate(next, signal)
   let paths = pathsFor(state.path)
@@ -730,6 +751,12 @@ export async function editDeck(options = {}) {
     if (used.has(index)) fail('一次修改不能重复指定同一页：' + (index + 1))
     used.add(index)
     if (!edit.patch || typeof edit.patch !== 'object' || Array.isArray(edit.patch)) fail('第 ' + (index + 1) + ' 页 patch 需为对象')
+    validateSlideRepresentation({ ...next.slides[index], ...edit.patch }, `slides[${index}]`)
+    if (next.slides[index].layout === 'scene') {
+      for (const key of Object.keys(edit.patch)) if (!['elements','notes','label','purpose','designLayout'].includes(key)) fail('Unsupported scene patch: '+key)
+      next.slides[index] = normalizeSceneSlide({...next.slides[index],...edit.patch}, {assets:next.assets})
+      continue
+    }
     assertLegacySlideInput({ ...next.slides[index], ...edit.patch }, `slides[${index}]`)
     for (const key of Object.keys(edit.patch)) if (!allowed.has(key)) fail('不支持修改页面字段：' + key)
     validateRawSlides([edit.patch])
@@ -773,7 +800,7 @@ export async function editDeck(options = {}) {
   if (options.append !== undefined) {
     if (!Array.isArray(options.append) || options.append.length < 1 || options.append.length > 5) fail('append 需为 1-5 页')
     validateRawSlides(options.append)
-    const added = next.dataModel ? prepareDataSlides(options.append, next.dataModel, normalizeSlides, next.language) : normalizeSlides(options.append, 120, next.language)
+    const added = next.slides[0].layout === 'scene' ? normalizeSceneSlides(options.append, {assets:next.assets}) : next.dataModel ? prepareDataSlides(options.append, next.dataModel, normalizeSlides, next.language) : normalizeSlides(options.append, 120, next.language)
     if (next.slides.length + added.length > 120) fail('工程页数超过 120')
     next.slides.push(...embedSlides(added, next.assets, resolve(options.cwd || '.')).map(slide => ({ ...slide, id: randomUUID() })))
   }
@@ -858,7 +885,7 @@ export function checkDeck(options = {}) {
   }
   return { ...quality, deckPath: path, deckId: manifest.deckId, revision: manifest.revision,
     verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' },
-    undoAvailable: manifest.history.length, slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.title, layout: s.layout })),
+    undoAvailable: manifest.history.length, slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.label ?? s.title, layout: s.layout })),
     template: manifest.template ?? null }
 }
 

@@ -122,7 +122,7 @@ export class PptWorkbench {
     const engine = await this.loadEngine()
     const { manifest } = engine.readDeckProject({ deckPath: path })
     // Versioned generator projects only; arbitrary JSON and externally edited PPTX cannot enter.
-    if (manifest.schemaVersion !== 1 || typeof manifest.deckId !== 'string' || manifest.slides.some((s: any) => typeof s.id !== 'string')) return
+    if (![1, 2].includes(manifest.schemaVersion) || typeof manifest.deckId !== 'string' || manifest.slides.some((s: any) => typeof s.id !== 'string')) return
     let route = exec?.agent?.session.requestContext?.()
     if (!route?.provider || !route?.model) route = exec?.agent?.session.requestHeader?.()?.config
     const previous = this.catalog().find(p => p.path === path)
