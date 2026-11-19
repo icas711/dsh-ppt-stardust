@@ -47,10 +47,10 @@ export function createSceneVariant(layout,{id,mode='duplicate',pageSize={width:1
  return out
 }
 export function duplicateVariantIds(layouts,pageSize){const seen=new Map(),duplicates=[];for(const l of layouts){const signature=variantSignature(l,pageSize);if(seen.has(signature))duplicates.push({variantId:l.id,duplicateOf:seen.get(signature)});else seen.set(signature,l.id)}return duplicates}
-export function variantSampleValues(layout,length='short'){
+export function variantSampleValues(layout,length='short',lang='ru'){
  const values={}
  for(const slot of layout.slots){const e=layout.elements.find(e=>e.id===slot.elementId)
-  if(slot.type==='text')values[slot.id]=Array.from({length:length==='long'?6:2},(_,i)=>'Sample '+(i+1)+(length==='long'?': a deliberately longer fact to inspect wrapping and overflow.':': a short fact.')).join('\n')
+  if(slot.type==='text')values[slot.id]=length==='short'?(lang==='ru'?(/заголов|heading|title/i.test(slot.name??slot.id)?'Заголовок':'Пример текста'):lang==='zh'?'示例文本':'Sample text'):Array.from({length:length==='long'?6:2},(_,i)=>'Sample '+(i+1)+(length==='long'?': a deliberately longer fact to inspect wrapping and overflow.':': a short fact.')).join('\n')
   if(slot.type==='image')values[slot.id]=e.assetId
   if(slot.type==='chart')values[slot.id]=clone(e.chart)
   if(slot.type==='table')values[slot.id]=clone(e.table)

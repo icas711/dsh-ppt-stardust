@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdtempSync,rmSync,writeFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
+import {unzipSync,zipSync,strFromU8,strToU8} from 'fflate'
 import {PptTemplateStore} from '../lib/templates.js'
 import {PptWorkbench} from '../lib/workbench.js'
 import * as templates from '../skills/dsh-ppt/scripts/deck-templates.mjs'
@@ -40,4 +41,22 @@ test('scene draft save still rejects genuinely missing raster bytes',async t=>{
  const store=new PptTemplateStore({root,templatesModuleLoader:async()=>templates})
  const source=await templates.templateFromPptxScene(fixtures().find(f=>f.id==='artwork').bytes,{templateId:'missing-image',name:'Missing'})
  await assert.rejects(store.saveDraft({manifest:source.manifest,identity}),/Missing scene asset/)
+})
+
+
+test('scene import reports actual groups, images, backgrounds and invisible fields; a save-subset flag is not an embedded font',async()=>{
+ const source=fixtures().find(f=>f.id==='artwork').bytes,parts=unzipSync(source)
+ const field=(id,w,text)=>'<p:sp><p:nvSpPr><p:cNvPr id="'+id+'" name="Page field '+id+'"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="100000" y="100000"/><a:ext cx="'+w+'" cy="200000"/></a:xfrm></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:fld id="{11111111-1111-1111-1111-111111111111}" type="slidenum"><a:rPr sz="1000"/><a:t>'+text+'</a:t></a:fld></a:p></p:txBody></p:sp>'
+ parts['ppt/slides/slide1.xml']=strToU8(strFromU8(parts['ppt/slides/slide1.xml']).replace('</p:spTree>',field(900,0,'1')+field(901,300000,'1')+'</p:spTree>'))
+ parts['ppt/presentation.xml']=strToU8(strFromU8(parts['ppt/presentation.xml']).replace('<p:presentation ','<p:presentation saveSubsetFonts="1" '))
+ const r=await templates.templateFromPptxScene(zipSync(parts),{templateId:'stats-fields',name:'Stats'})
+ assert.equal(r.report.layouts,new Set(r.manifest.style.layouts.map(l=>l.familyId)).size)
+ assert.equal(r.report.layoutVariants,r.manifest.style.layouts.length)
+ assert.ok(r.report.layoutStats.images>0);assert.ok(r.report.layoutStats.backgrounds>0)
+ assert.equal(r.report.slide.adapted,false)
+ assert.ok(r.report.skippedObjects.some(o=>o.name==='Page field 900'&&o.reason.includes('нулевой')))
+ assert.ok(!r.report.objects.some(o=>o.mode==='unsupported'&&o.reason?.includes('invalid-number')))
+ assert.equal(r.report.fonts.embedded,0);assert.ok(!r.report.warnings.some(w=>typeof w==='string'&&w.includes('подмножества')))
+ assert.equal(r.manifest.style.layouts[0].elements.find(e=>e.name==='Page field 901').role,'decor')
+ assert.ok(!r.manifest.style.layouts[0].slots.some(s=>s.name==='Page field 901'))
 })

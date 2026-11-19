@@ -29,8 +29,12 @@ export async function importPptxScenes(bytes,{signal,strict=false}={}){
    const shapeId=String(lib.getShapeId(shape)),kind=lib.getShapeKind(shape),name=lib.getShapeName(shape)||kind,id='element-'+hash(origin+'|'+shapeId+'|'+decor).slice(0,24)
    if(seen.has(id))return [];seen.add(id)
    const bounds=lib.getShapeBoundsResolved(pres,shape)??{x:0,y:0,w:1,h:1},box=frame(bounds),flip=lib.getShapeFlip(shape),rotation=lib.getShapeRotation(shape)
+   if(kind!=='group'&&kind!=='connector'&&lib.getShapePreset(shape)!=='line'&&(box.w===0||box.h===0)){
+    report.objects.push({slide:index+1,elementId:id,shapeId,name,kind,mode:'ignored',reason:'Невидимый объект с нулевой площадью'});return []
+   }
+   const automaticField=/<(?:\w+:)?fld\b[^>]*\btype="(?:slidenum|datetime[^"]*)"/i.test(lib.getShapeXmlString(shape))||/<(?:\w+:)?ph\b[^>]*\btype="(?:sldNum|dt|ftr)"/i.test(lib.getShapeXmlString(shape))
    const transform=composeTransforms(parent,frameTransform(box,{rotation:rotation??0,flipH:flip?.horizontal??false,flipV:flip?.vertical??false}))
-   const common={id,type:'unsupported',...(lib.isShapeHidden(shape)?{hidden:true}:{}),name,role:decor||/logo/i.test(name)?'decor':'content',frame:box,transform,source:{part:origin,shapeId,slide:index+1,kind}}
+   const common={id,type:'unsupported',...(lib.isShapeHidden(shape)?{hidden:true}:{}),name,role:decor||automaticField||/logo/i.test(name)?'decor':'content',frame:box,transform,source:{part:origin,shapeId,slide:index+1,kind}}
    const at=elements.length,reportAt=report.objects.length
    try{
     if(kind==='group'){

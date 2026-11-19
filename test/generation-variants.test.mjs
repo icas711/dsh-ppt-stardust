@@ -76,3 +76,15 @@ test('preview measures DOM overflow and restores hidden slide styles without shr
  await new Promise(resolve=>setImmediate(resolve));assert.equal(message.count,1);assert.equal(message.checked,2);assert.equal(message.token,7);assert.equal(restored,'display:none')
  assert.ok(!script.includes('fontSize'))
 })
+
+
+test('preview fit script is inserted at the real body end, never into the presenter JavaScript string',()=>{
+ const editor=readFileSync('templates/panels/template-editor.js','utf8'),context=vm.createContext({})
+ const html='<html><body><script>const presenter="</body></html>";</script><div>Slide</div></body></html>'
+ context.html=html
+ const fixed=vm.runInContext(editor+'\ntplFitPreview(html,17)',context)
+ assert.ok(fixed.includes('const presenter="</body></html>";</script>'))
+ const scripts=[...fixed.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1])
+ assert.equal(scripts.length,2);scripts.forEach(script=>new vm.Script(script))
+ assert.ok(scripts[1].includes('token:17'))
+})

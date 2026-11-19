@@ -754,7 +754,9 @@ export function previewDeckHtml(options = {}) {
   collectAssets(manifest)
   manifest.slideCount = manifest.slides.length
   const html = renderHtml(manifest, brandedTheme(manifest), resolveLanguage(manifest.language), { pptx: 'preview.pptx', json: 'preview.json' })
-  return { ok: true, html, slideCount: manifest.slideCount,quality:checkManifest(manifest),fitAssessment:'estimated' }
+  const quality=checkManifest(manifest)
+  quality.issues=quality.issues.map(issue=>{const element=manifest.slides[issue.slide-1]?.elements?.find(e=>e.id===issue.elementId);return {...issue,...(element?.name?{elementName:element.name}:{}),scope:'sample'}})
+  return { ok: true, html, slideCount: manifest.slideCount,quality,fitAssessment:'estimated' }
 }
 
 function readDocument(pathInput, cwd = '.') {

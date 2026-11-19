@@ -231,7 +231,7 @@ function TemplatesPanel({ onCreated }) {
                     pptxResult.report.layoutStats?.shrunk ? h('li', null, tplTr('Сжато крупных изображений: ', 'Large images compressed: ') + pptxResult.report.layoutStats.shrunk) : null,
                     pptxResult.report.slide ? h('li', null, tplTr('Размер сохранён: ', 'Original size preserved: ') + (pptxResult.report.slide.width / 36000).toFixed(2) + ' × ' + (pptxResult.report.slide.height / 36000).toFixed(2) + tplTr(' мм', ' mm')) : null,
                     ...(pptxResult.report.skippedObjects ?? []).map((item, i) => h('li', { key: 'skip-' + i }, tplTr('Пропущен объект «', 'Skipped object “') + item.name + tplTr('». Слайды: ', '”. Slides: ') + item.slides.join(', ') + '. ' + (item.sourceLabel || item.source) + ': ' + item.reason)),
-                    (pptxResult.report.warnings ?? []).map((w, i) => h('li', { key: i }, w))),
+                    (pptxResult.report.warnings ?? []).map((w, i) => h('li', { key: i }, typeof w==='string'?w:w.reason??w.message??w.code))),
                 h(W.Button, { variant: 'primary', onClick: () => { setPptxOpen(false); setEditing({ key: pptxResult.key, nonce: 0 }); } }, tplTr('Открыть в редакторе', 'Open in editor')))
             : h('div', { className: 'ppt-tpl-import' },
                 h('p', { className: 'w-muted' }, tplTr('Шаблон строится по существующим слайдам. Общее оформление объединяется, структура контента сохраняется в вариантах. Размер страницы сохраняется. Файл до 64 MiB; крупные картинки сжимаются на сервере.', 'The template uses actual slides, grouping common artwork with content structure variants. Original page dimensions are preserved. Up to 64 MiB; large images are compressed on the server.')),

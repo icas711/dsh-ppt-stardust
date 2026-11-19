@@ -212,7 +212,7 @@ export function extractTypography(bytes, layouts, layoutIdByPart, assets, report
       } catch (error) { warn(`Не удалось прочитать встроенный шрифт «${family}»: ${error.message}`) }
     }
   }
-  if (['1', 'true'].includes(first(root, 'presentation')?.attrs.saveSubsetFonts)) warn('В PPTX встроены подмножества шрифтов: символы нового текста могут отсутствовать.')
+  if (fonts.length && ['1', 'true'].includes(first(root, 'presentation')?.attrs.saveSubsetFonts)) warn('В PPTX встроены подмножества шрифтов: символы нового текста могут отсутствовать.')
   const firstMaster = rels.find(r => r.type === 'slideMaster')?.target
   const mainTheme = (firstMaster && relationships(files, firstMaster).find(r => r.type === 'theme')?.target) ?? Object.keys(files).find(p => /^ppt\/theme\/theme\d+\.xml$/.test(p))
   const themeFor = (part, fallback) => {
@@ -307,7 +307,7 @@ export function extractTypography(bytes, layouts, layoutIdByPart, assets, report
     layout.textStyles = normalizeTextStyles(styles)
   }
   for (const styles of [textStyles, ...layouts.map(l => l.textStyles ?? {})]) for (const s of Object.values(styles)) if (s.fontFamily) used.add(s.fontFamily)
-  for (const family of used) if (!fonts.some(f => f.family.toLowerCase() === family.toLowerCase())) warn(`Шрифт «${family}» не встроен в исходный PPTX; сохранено название, потребуется установленный шрифт.`)
+  for (const family of new Set([...used].map(f=>f.trim()))) if (!fonts.some(f => f.family.trim().toLowerCase() === family.toLowerCase())) warn(`Шрифт «${family}» не встроен в исходный PPTX; сохранено название, потребуется установленный шрифт.`)
   report.fonts = { ...(report.fonts ?? {}), major: globalFonts.heading, minor: globalFonts.body, embedded: fonts.length }
   return { textStyles: normalizeTextStyles(textStyles), fonts: normalizeFontRefs(fonts) }
 }

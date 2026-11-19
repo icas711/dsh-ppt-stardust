@@ -601,7 +601,7 @@ export function templateCreateOptions(template, assets, options = {}) {
  */
 export function templatePreviewOptions(template, assets, options = {}) {
   const manifest = validateTemplateManifest(template, { templateAssets: assets })
-  if (manifest.schemaVersion === 3) return {...sceneTemplateCreate(manifest,assets,{...options,title:manifest.name,...(options.sampleLength?{selections:manifest.style.layouts.map(l=>({layoutId:l.id,values:variantSampleValues(l,options.sampleLength)}))}:{})}).create,lang:options.lang??'ru'}
+  if (manifest.schemaVersion === 3) return {...sceneTemplateCreate(manifest,assets,{...options,title:manifest.name,...(options.sampleLength?{selections:manifest.style.layouts.map(l=>({layoutId:l.id,values:variantSampleValues(l,options.sampleLength,options.lang)}))}:{})}).create,lang:options.lang??'ru'}
   const lang = options.lang ?? 'ru'
   const slides = [
     { layout: 'cover', kicker: L(lang, '模板预览', 'Template preview', 'Предпросмотр шаблона'), title: manifest.name,
@@ -1006,5 +1006,9 @@ export async function templateFromPptxScene(source,options={}){
   const bytes=source instanceof Uint8Array?source:readFileSync(source)
   const imported=await importPptxScenes(bytes,{signal:options.signal})
   const result=templateFromSceneManifest({...imported,theme:'data',style:{pageSize:imported.pageSize}},options)
-  return {...result,report:{...imported.report,slideCount:imported.slides.length,layoutCount:result.manifest.style.layouts.length,pageSize:imported.pageSize,warnings:imported.report.warnings}}
+  const layouts=result.manifest.style.layouts,all=layouts.flatMap(l=>l.elements),families=new Set(layouts.map(l=>l.familyId)),page=imported.pageSize
+  const skipped=imported.report.objects.filter(o=>['ignored','unsupported','preview'].includes(o.mode))
+  return {...result,report:{...imported.report,slideCount:imported.slides.length,sourceSlides:imported.slides.length,layoutCount:layouts.length,layouts:families.size,layoutVariants:layouts.length,pageSize:page,slide:{...page,ratio:Math.round(page.width/page.height*1000)/1000,adapted:false},
+    layoutStats:{images:all.filter(e=>e.type==='image'||e.previewAssetId).length,svg:0,backgrounds:layouts.filter(l=>l.backgroundColor||l.backgroundAssetId).length,plates:all.filter(e=>e.type==='shape'&&e.fill?.opacity!==0&&e.fill).length,zones:layouts.reduce((n,l)=>n+l.slots.length,0)},
+    skippedObjects:skipped.map(o=>({kind:o.kind,name:o.name,source:o.elementId,sourceLabel:'Слайд '+o.slide,slides:[o.slide],reason:o.reason})),warnings:imported.report.warnings}}
 }

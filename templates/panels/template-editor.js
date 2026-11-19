@@ -283,7 +283,8 @@ function TplSlideList({ slides, limit, hint, disabled, onChange, designLayouts =
 
 function tplFitPreview(html,token) {
     const script='<script>document.fonts.ready.then(()=>{let count=0,checked=0;for(const slide of document.querySelectorAll(".slide")){const before=slide.getAttribute("style");slide.style.setProperty("display","block","important");slide.style.visibility="hidden";for(const frame of slide.querySelectorAll("foreignObject > div")){if(!frame.clientWidth||!frame.clientHeight)continue;checked++;const body=frame.firstElementChild;if(frame.scrollHeight>frame.clientHeight+1||frame.scrollWidth>frame.clientWidth+1||(body&&(body.scrollHeight>frame.clientHeight+1||body.scrollWidth>frame.clientWidth+1)))count++;}if(before===null)slide.removeAttribute("style");else slide.setAttribute("style",before);}parent.postMessage({type:"dsh-template-fit",token:'+token+',count,checked},"*");});</script>';
-    return html.replace('</body>',script+'</body>');
+    const end=html.toLowerCase().lastIndexOf('</body>');
+    return end<0?html:html.slice(0,end)+script+html.slice(end);
 }
 function TplLayoutsEditor({ draft, images, disabled, set, pickImage, error, sampleLength, onSampleLength,onSceneAsset,onImagePending }) {
     const [index, setIndex] = React.useState(0);
@@ -593,9 +594,9 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
                     ? h('iframe', { ref:previewFrame,title: tplTr('Предпросмотр шаблона', 'Template preview'), sandbox: 'allow-scripts', srcDoc: preview })
                     : previewError ? null : h('p', { className: 'tpe-hint', style: { padding: '12px', minHeight: '80px' } }, tplTr('Готовлю предпросмотр…', 'Preparing the preview…'))),
                 previewError ? h(W.Status, { tone: 'error' }, previewError) : null,
-                ...previewWarnings.map((issue,i)=>h('p',{key:'fit-'+i,role:'status'},tplTr('Проверка образца (оценка): ','Sample check (estimate): ')+(issue.message??issue.code))),
+                ...previewWarnings.map((issue,i)=>h('p',{key:'fit-'+i,role:'status'},tplTr('Проверка образца (оценка): ','Sample check (estimate): ')+(issue.slide?tplTr('Слайд ','Slide ')+issue.slide+' · ':'')+(issue.elementName?issue.elementName+' · ':'')+(languageOf()==='ru'?(issue.messageRu??issue.messageEn??issue.message??issue.code):languageOf()==='zh'?(issue.message??issue.code):(issue.messageEn??issue.message??issue.code)))),
                 measuredFit?h('p',{role:'status'},tplTr('Измерено в HTML: областей ','Measured in HTML: areas ')+measuredFit.checked+tplTr(', с переполнением ', ', overflowing ')+measuredFit.count+tplTr('. Финальный PPTX проверяется отдельно.','. Review the final PPTX separately.')):null,
-                h('p', { className: 'tpe-hint' }, tplTr('Предпросмотр показывает тему, цвета, шрифт, логотип, футер и фоны на типовых страницах. Он обновляется при каждой правке и ничего не сохраняет.', 'The preview shows the theme, colours, font, logo, footer and backgrounds on typical slides. It updates as you edit and saves nothing.')))),
+                h('p', { className: 'tpe-hint' }, (draft.schemaVersion===3?tplTr('Предпросмотр показывает макеты и заполнение их областей образцом текста. Он обновляется при правке; сохранение выполняется отдельно.','The preview shows template layouts and sample content in their slots. It updates while editing; saving is separate.'):tplTr('Предпросмотр показывает тему, цвета, шрифт, логотип, футер и фоны на типовых страницах. Он обновляется при каждой правке и ничего не сохраняет.', 'The preview shows the theme, colours, font, logo, footer and backgrounds on typical slides. It updates as you edit and saves nothing.'))))),
         copy ? h(TplDialog, { busyLabel: tplTr('Сохраняю копию…', 'Saving the copy…'), title: tplTr('Сохранить как копию', 'Save as a copy'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setCopy(null) },
             h('div', { className: 'ppt-tpl-import' },
                 h('p', { className: 'w-muted' }, tplTr('Копия сохранится в ваши личные шаблоны вместе с текущими правками.', 'The copy is saved into your private templates together with the current edits.')),
