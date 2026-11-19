@@ -1,3 +1,4 @@
+import { renderScenePptx } from './deck-scene-pptx.mjs'
 // Legacy native OOXML serializer. No dependency on deck-core orchestration.
 import { deflateRawSync } from 'node:zlib'
 import { escapeXml } from './deck-text.mjs'
@@ -312,21 +313,21 @@ function slideXml(slide, index, total, theme, langId, motion) {
     '<p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="' + hex(p.bg) + '"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>' +
     '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>' +
     '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>' +
-    (slide.__layout?.familyId && !['table', 'chart'].includes(slide.layout) ? applyTextStylesPptx(slideShapeList(slide, index, total, theme, langId), slide.__textStyles, slide.__layout.textZones) : remapTextShapes(applyTextStylesPptx(slideShapeList(slide, index, total, theme, langId), slide.__textStyles), slide.__layout)) +
+    (slide.__scene ?? (slide.__layout?.familyId && !['table', 'chart'].includes(slide.layout) ? applyTextStylesPptx(slideShapeList(slide, index, total, theme, langId), slide.__textStyles, slide.__layout.textZones) : remapTextShapes(applyTextStylesPptx(slideShapeList(slide, index, total, theme, langId), slide.__textStyles), slide.__layout))) +
     '</p:spTree></p:cSld>' +
     '<p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr>' +
     motionXml +
     '</p:sld>'
 }
 
-function slideRelXml(hasNotes, slideIndex) {
+function slideRelXml(hasNotes, slideIndex, images = '') {
   const notesRel = hasNotes
     ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide' + slideIndex + '.xml"/>'
     : ''
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
     '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>' +
-    notesRel +
+    notesRel + images +
     '</Relationships>'
 }
 
@@ -488,7 +489,7 @@ function themeXml(theme, sourceFonts) {
     '</a:theme>'
 }
 
-function contentTypesXml(slideCount, noteIndexes) {
+function contentTypesXml(slideCount, noteIndexes, images = false) {
   const overrides = Array.from({ length: slideCount }, (_, i) =>
     '<Override PartName="/ppt/slides/slide' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>').join('')
   const notesOverrides = noteIndexes.map((index) =>
@@ -500,6 +501,7 @@ function contentTypesXml(slideCount, noteIndexes) {
     '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
     '<Default Extension="xml" ContentType="application/xml"/>' +
+    (images ? '<Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/>' : '') +
     '<Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>' +
     '<Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>' +
     '<Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>' +
@@ -634,8 +636,11 @@ export function buildPptx(manifest, themeInput, languageInput) {
     if (typeof slide.notes === 'string' && slide.notes.trim() !== '') noteIndexes.push(index)
   })
   const hasNotesMaster = noteIndexes.length > 0
+  const mediaRegistry = new Map()
+  const scenes = slides.map(slide => slide.layout === 'scene' ? renderScenePptx(slide, {assets:manifest.assets, font:pptxFontName(theme.fonts.body), textColor:theme.palette.fg, lang:language.attr, mediaRegistry}) : undefined)
   const entries = [
-    { name: '[Content_Types].xml', data: contentTypesXml(slides.length, noteIndexes) },
+    ...scenes.flatMap(scene => scene?.media ?? []),
+    { name: '[Content_Types].xml', data: contentTypesXml(slides.length, noteIndexes, mediaRegistry.size > 0) },
     { name: '_rels/.rels', data: rootRelXml() },
     { name: 'docProps/app.xml', data: appXml(slides.length, noteIndexes.length) },
     { name: 'docProps/core.xml', data: coreXml(manifest.title) },
@@ -656,8 +661,10 @@ export function buildPptx(manifest, themeInput, languageInput) {
     const layout = pickDesignLayout(manifest.style?.layouts, slide, backgroundTypeOfLayout(slide.layout))
     const textStyles = structuredClone(manifest.style?.textStyles ?? {})
     for (const [role, style] of Object.entries(layout?.textStyles ?? {})) textStyles[role] = { ...textStyles[role], ...style }
-    entries.push({ name: 'ppt/slides/slide' + (index + 1) + '.xml', data: resizeSlideXml(slideXml({ ...slide, __layout: layout, __textStyles: textStyles }, index, slides.length, theme, language.attr, motion), size) })
-    entries.push({ name: 'ppt/slides/_rels/slide' + (index + 1) + '.xml.rels', data: slideRelXml(hasNotes, index + 1) })
+    if (scenes[index]) {
+      entries.push({name:'ppt/slides/slide'+(index+1)+'.xml',data:slideXml({...slide,__scene:scenes[index].xml},index,slides.length,theme,language.attr,motion)})
+    } else entries.push({ name: 'ppt/slides/slide' + (index + 1) + '.xml', data: resizeSlideXml(slideXml({ ...slide, __layout: layout, __textStyles: textStyles }, index, slides.length, theme, language.attr, motion), size) })
+    entries.push({ name: 'ppt/slides/_rels/slide' + (index + 1) + '.xml.rels', data: slideRelXml(hasNotes, index + 1, scenes[index]?.relationships) })
     if (hasNotes) {
       entries.push({ name: 'ppt/notesSlides/notesSlide' + (index + 1) + '.xml', data: notesSlideXml(slide.notes, language.attr) })
       entries.push({ name: 'ppt/notesSlides/_rels/notesSlide' + (index + 1) + '.xml.rels', data: notesSlideRelXml(index + 1) })

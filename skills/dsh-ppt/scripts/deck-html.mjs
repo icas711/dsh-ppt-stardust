@@ -9,6 +9,7 @@ import { renderDataView } from './deck-data-view.mjs'
 import { visualHtmlStyle, VISUAL_CSS } from './deck-visual.mjs'
 import { LAYOUT_CSS, pickDesignLayout, renderLayoutLayer, zoneInnerStyle } from './deck-layouts.mjs'
 import { typographyCss } from './deck-fonts.mjs'
+import { renderSceneHtml } from './deck-scene-html.mjs'
 
 // ---------------------------------------------------------------------------
 // HTML 网页放映
@@ -40,7 +41,7 @@ body.motion .bullets li{
 @keyframes bullet-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}`
     : ''
   const slides = manifest.slides.map((slide, index) => {
-    const label = slide.title || slide.kicker || (ui.slide + ' ' + (index + 1))
+    const label = slide.title || slide.kicker || slide.label || (ui.slide + ' ' + (index + 1))
     return '<div class="slide-frame" data-frame="' + (index + 1) + '" tabindex="-1" role="button" aria-label="' + escapeHtml(String(label)) + '">' +
       renderHtmlSlide(slide, index, ui, lang.id, manifest, theme) + '</div>'
   }).join('\n')
@@ -692,6 +693,7 @@ ${dataView.script}
 </html>`
 }
 function renderHtmlSlide(slide, index, ui, langId, manifest = {}, theme) {
+  if (slide.layout === 'scene') return '<section class="slide slide--scene" data-index="' + String(index+1).padStart(2,'0') + '" data-notes="' + escapeHtml(slide.notes ?? '') + '">' + renderSceneHtml(slide,manifest,theme,'scene-'+index) + '</section>'
   const kicker = slide.kicker || (slide.layout === 'cover' ? ui.coverKicker : '')
   const title = slide.title || ''
   const subtitle = slide.subtitle || ''

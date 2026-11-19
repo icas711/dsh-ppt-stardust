@@ -67,6 +67,8 @@ try {
   const args = [join(root, 'scripts/golden-pptx-synthetic-metrics.py'), out, join(fixtureRoot, 'render-baselines')]
   if (record) args.push('--record')
   execFileSync(process.env.DSH_PPT_GOLDEN_PYTHON ?? 'python', args, { stdio: 'inherit', timeout: 120000 })
+  const { goldenScenes } = await import('./golden-pptx-scenes.mjs')
+  await goldenScenes(join(out,'scenes'))
 } catch (error) {
   writeFileSync(join(out, 'failure.json'), JSON.stringify({ message: error.message, stack: error.stack }, null, 2))
   throw error
