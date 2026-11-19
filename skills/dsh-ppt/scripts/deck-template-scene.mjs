@@ -6,6 +6,8 @@ const id=(x,p)=>{if(typeof x!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.
 export function normalizeSceneTemplate(input,{assets}={}){
  if(!input||input.schemaVersion!==3)fail('template-schema','schemaVersion','Expected schema 3')
  const out=clone(input)
+ for(const key of Object.keys(out))if(!['schemaVersion','id','name','description','author','revision','createdAt','updatedAt','style','assetMap'].includes(key))fail('unknown-field',key,'Unknown scene template field')
+ for(const key of Object.keys(out.style??{}))if(!['theme','pageSize','themeFonts','fonts','textStyles','brand','layouts'].includes(key))fail('unknown-field','style.'+key,'Unknown scene style field')
  if(out.style?.backgrounds||out.style?.layouts?.some(l=>Object.hasOwn(l,'textZones')||Object.hasOwn(l,'images')||Object.hasOwn(l,'background')))fail('mixed-template-layout','style.layouts','Scene templates cannot carry legacy layout fields')
  if(!Array.isArray(out.style?.layouts)||!out.style.layouts.length||out.style.layouts.length>120)fail('layout-limit','style.layouts','Expected 1–120 layouts')
  const bag=assets??Object.fromEntries(Object.entries(out.assetMap??{}).map(([key,v])=>[key,{mime:v.mime,width:v.width,height:v.height}]))

@@ -197,6 +197,7 @@ function sceneTextStyle(value, path) {
   }
   if (value.colorSpec !== undefined) {
     record(value.colorSpec,path+'.colorSpec',['base','transforms'])
+    if (value.colorSpec.transforms !== undefined && !Array.isArray(value.colorSpec.transforms)) sceneError('invalid-text-style',path+'.colorSpec.transforms','Expected array')
     for (const [i,t] of (value.colorSpec.transforms??[]).entries()) record(t,path+`.colorSpec.transforms[${i}]`,['name','value'])
     try {style.colorSpec=normalizeSlotTypography({colorSpec:value.colorSpec}).colorSpec} catch(error) {sceneError('invalid-text-style',path+'.colorSpec',error.message)}
   }
@@ -403,4 +404,17 @@ export function sceneInputProperties(){
  const arrays=new Set(['paragraphs','children']),strings=new Set(['assetId','alt','fit','preset','sourceKind','reason','previewAssetId'])
  const variants=Object.entries(SCENE_ELEMENT_FIELDS).map(([type,fields])=>({type:'object',properties:{...common,type:{type:'string',enum:[type]},...Object.fromEntries(fields.map(k=>[k,{type:arrays.has(k)?'array':strings.has(k)?'string':'object',...(k==='paragraphs'?{items:{type:'object',properties:{runs:{type:'array',items:{type:'object',properties:{text:{type:'string'},break:{type:'boolean'},style:{type:'object'}}}},style:{type:'object'}},required:['runs']}}:k==='children'?{items:{type:'string'}}:{})}]))},required:['id','type','frame',...(type==='text'?['paragraphs']:type==='chart'?['chart']:type==='table'?['table']:[])],additionalProperties:false}))
  return {layout:{type:'string',enum:['scene']},label:{type:'string'},purpose:{type:'string',enum:['cover','section','content','closing']},backgroundColor:{type:'string',pattern:'^#[a-fA-F0-9]{6}$'},elements:{type:'array',maxItems:SCENE_LIMITS.elements,items:{oneOf:variants},description:'Drawing order in original EMU. Text: paragraphs:[{runs:[{text,style:{fontFamily,size,bold,italic,color}}],style:{align}}]. Charts: chart:{kind,categories,series:[{name,values}],...}. Tables: table:{columns:[EMU],rows:[EMU],cells:[{row,col,rowSpan,colSpan,paragraphs}]}. Groups reference child IDs; child transforms are already final.'}}
+}
+/** Preserve unrelated concurrent object edits when the user explicitly reloads while keeping their draft. */
+export function mergeSceneDraftElements(original,draft,latest){
+ const old=new Map(original.map(e=>[e.id,e])),fresh=new Map(latest.map(e=>[e.id,e])),used=new Set(),conflicts=[]
+ const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b),elements=[]
+ for(const local of draft){
+  const before=old.get(local.id),remote=fresh.get(local.id)
+  if(equal(local,before)){if(remote){elements.push(remote);used.add(remote.id)}continue}
+  if(!equal(remote,before)&&!equal(remote,local))conflicts.push({id:local.id,latest:remote??null,draft:local})
+  elements.push(local);used.add(local.id)
+ }
+ for(const remote of latest)if(!used.has(remote.id)&&!old.has(remote.id))elements.push(remote)
+ return {elements,conflicts}
 }

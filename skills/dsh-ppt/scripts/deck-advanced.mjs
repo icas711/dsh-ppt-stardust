@@ -1,3 +1,4 @@
+import {transformedBounds} from './deck-geometry.mjs'
 import {normalizeSceneTemplate,remapSceneLayout} from './deck-template-scene.mjs'
 import {expandDiagramSlides,diagramToScene} from './deck-diagrams.mjs'
 import {scenePptxPlacement} from './deck-scene-pptx.mjs'
@@ -233,6 +234,25 @@ function localizeAssetError(text) {
   }
   return undefined
 }
+function sceneTextOverflows(e,frame=e.frame){
+  if(e.textFrame?.autoFit==='normal')return false
+  const margins={left:91440,right:91440,top:45720,bottom:45720,...e.textFrame?.margins}
+  const width=Math.max(1,frame.w-margins.left-margins.right),height=Math.max(0,frame.h-margins.top-margins.bottom)
+  let estimated=0
+  for(const p of e.paragraphs){
+    let lineWidth=0,lineHeight=0
+    const finish=()=>{estimated+=lineHeight||18*12700*1.2;lineWidth=0;lineHeight=0}
+    for(const r of p.runs){
+      if(r.break){finish();continue}
+      const size=r.style?.size??e.textStyle?.size??18
+      const leading=p.style?.lineSpacing??e.textFrame?.lineSpacing
+      const h=leading?.kind==='pt'?leading.value*12700:size*12700*(leading?.value??1.2)
+      for(const c of r.text){if(c==='\n'){lineHeight=Math.max(lineHeight,h);finish();continue}const w=textWidth(c)*size*12700;if(e.textFrame?.wrap!=='none'&&lineWidth+w>width&&lineWidth>0)finish();lineWidth+=w;lineHeight=Math.max(lineHeight,h)}
+    }
+    finish();estimated+=((p.style?.spaceBefore??0)+(p.style?.spaceAfter??0))*12700
+  }
+  return estimated>height
+}
 export function checkManifest(manifest) {
   const issues = [], theme = brandedTheme(manifest)
   const invalidAssets = new Map()
@@ -371,7 +391,9 @@ export function checkManifest(manifest) {
         if (e.slotId && /待填写|To fill:|Заполнить:/i.test(JSON.stringify(e.paragraphs ?? e.table ?? e.chart?.categories ?? e.alt ?? ''))) issue(i,'template-unfilled')
         if (e.support?.mode === 'lossy') issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'lossy-object',severity:'warning',message:e.support.reason,messageRu:e.support.reason,messageEn:e.support.reason})
         if (e.type === 'unsupported') issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'unsupported-object',severity:'warning',message:e.reason,messageRu:e.reason,messageEn:e.reason})
-        if (e.frame.x < 0 || e.frame.y < 0 || e.frame.x+e.frame.w > size.width || e.frame.y+e.frame.h > size.height) issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'outside-slide',severity:'warning',message:'Object extends beyond slide',messageRu:'Объект выходит за границы слайда',messageEn:'Object extends beyond slide'})
+        if(e.type==='text'&&e.role!=='decor'&&!e.hidden&&sceneTextOverflows(e,scenePptxPlacement(e))){issue(i,'body-overflow');issues.at(-1).elementId=e.id}
+        const bounds=transformedBounds(e.frame,e.transform)
+        if (!e.hidden && (bounds.x < 0 || bounds.y < 0 || bounds.x+bounds.w > size.width || bounds.y+bounds.h > size.height)) issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'outside-slide',severity:'warning',message:'Object extends beyond slide',messageRu:'Объект выходит за границы слайда',messageEn:'Object extends beyond slide'})
       }
       return
     }
@@ -427,7 +449,7 @@ async function exportPptx(manifest, theme, language, signal) {
       const slide = lib.getSlides(presentation)[index]
       for (const e of source.elements.filter(e => e.type === 'chart')) {
         abort(signal)
-        const marker = lib.findShapeByName(slide,'__scene_chart__'+e.id)
+        const marker = lib.getSlideShapes(slide).find(shape=>lib.getShapeName(shape)==='__scene_chart__'+e.id&&lib.getShapeDescription(shape)===e.id)
         if (!marker) fail('Missing native chart placeholder '+e.id)
         const at = lib.getShapeZIndex(marker), placement = scenePptxPlacement(e)
         lib.removeShape(marker)

@@ -385,6 +385,7 @@ export class PptWorkbench {
       if (body.slide !== undefined && (typeof body.slide !== 'string' || !manifest.slides.some((s: any) => s.id === body.slide))) throw new Error('页面不存在')
       const args = { deckPath: entry.path, expectedRevision: body.expectedRevision, signal,
         saveAs: body.saveAs === true,
+        ...(body.assets===undefined?{}:{assets:body.assets}),
         ...(body.slide === undefined ? {} : { edits: [{ slide: body.slide, patch: this.patch(body.patch) }] }),
         ...(body.order === undefined ? {} : { order: body.order }) }
       const result = await engine.editDeck(args)

@@ -194,7 +194,7 @@ window.__ModuleLoader__.load({ id: 'dsh-ppt', factory: require => {
             return value;
         }
         function draftFor(slide) {
-            if (slide.layout === 'scene') return {label:slide.label??'',notes:slide.notes??'',elements:JSON.parse(JSON.stringify(slide.elements))};
+            if (slide.layout === 'scene') return {label:slide.label??'',notes:slide.notes??'',newAssets:{},elements:JSON.parse(JSON.stringify(slide.elements))};
             const source = { ...slide, ...slide.dataTemplate };
             return { title: source.title || '', subtitle: source.subtitle || '', kicker: source.kicker || '', text: source.text || '',
                 bullets: (source.bullets || []).join('\n'), notes: source.notes || '' };
@@ -751,7 +751,7 @@ __stardustUpdatesGuard(React, "dsh-ppt.data", { busy: busy || readingFile });
 const [activeTab,setActiveTab]=useState('content'),[listTab,setListTab]=useState('projects'),[downloadOpen,setDownloadOpen]=useState(false),[pendingNav,setPendingNav]=useState(null),[deleteOpen,setDeleteOpen]=useState(false),[restyleOpen,setRestyleOpen]=useState(false),[restyleList,setRestyleList]=useState(null),[restyleKey,setRestyleKey]=useState(''),[restyleVariant,setRestyleVariant]=useState(''),[restyleCopy,setRestyleCopy]=useState(false);
 const controlId=React.useId(),rootElement=useRef(null),fullscreenBoundary=useRef({was:false,exitedAt:0});
 useEffect(()=>{const changed=()=>{const active=!!document.fullscreenElement;if(fullscreenBoundary.current.was && !active)fullscreenBoundary.current.exitedAt=Date.now();fullscreenBoundary.current.was=active;};document.addEventListener('fullscreenchange',changed);return()=>document.removeEventListener('fullscreenchange',changed);},[]);
-function clearEdits(){imageLoader.current.cancel();setDraft(draftFor(slide));setImage(null);setDirty(false);setError('');setMessage('');setConflict(false);setOverlaps([]);}
+function clearEdits(){sceneUploadGeneration.current++;setSceneImagePending(false);imageLoader.current.cancel();setDraft(draftFor(slide));setImage(null);setDirty(false);setError('');setMessage('');setConflict(false);setOverlaps([]);}
 function finishNavigation(target,saved){setPendingNav(null);if(target.kind==='back'){imageLoader.current.cancel();setImage(null);setDirty(false);setProject(null);refreshList();return;}if(target.kind==='slide'){if(saved)adopt(saved,target.id);else choose(project.slides.find(row=>row.id===target.id),true);return;}if(saved)adopt(saved,selected);else clearEdits();}
 function requestNavigation(target){if(busy)return;if(dataDirty){setActiveTab('data');setMessage(pptText('请先确认或恢复数据推演。','Confirm or reset the scenario first.'));return;}if(dirty){setPendingNav(target);return;}finishNavigation(target);}
             useLanguage(locale);
@@ -763,10 +763,11 @@ function requestNavigation(target){if(busy)return;if(dataDirty){setActiveTab('da
             const [mode, setMode] = useState('html'), [raster, setRaster] = useState('');
             const [conflict, setConflict] = useState(false), [overlaps, setOverlaps] = useState([]);
             const frame = useRef(null), previewBox = useRef(null), fieldRefs = useRef({}), alive = useRef(true), operations = useRef(new Set());
-            const imageLoader = useRef(null);
+            const imageLoader = useRef(null),sceneUploadGeneration=useRef(0);
             if (!imageLoader.current)
                 imageLoader.current = createImageLoader();
-            const imagePending = imageLoader.current.pending;
+            const [sceneImagePending,setSceneImagePending]=useState(false);
+            const imagePending = imageLoader.current.pending || sceneImagePending;
 // Update protection: dsh-ppt
 __stardustUpdatesGuard(React, "dsh-ppt", { dirty: dirty || dataDirty, busy: busy || imagePending });
 
@@ -933,7 +934,7 @@ if(!rootElement.current?.contains(event.target) || event.target?.closest?.('[rol
             }, [dirty, dataDirty]);
             function open(id) { return perform(signal => action({ operation: 'open', id }, signal), value => { adopt(value.project); setMessage(t("点击预览里的文字，或在下方修改字段。")); }); }
             function keepInputsAndReload() {
-                const original = draftFor(slide), keys = fields.filter(([key]) => draft[key] !== original[key]).map(([key]) => key), pending = { ...draft }, pendingImage = image;
+                const original = draftFor(slide), keys = slide.layout==='scene'?['label','notes','elements','newAssets'].filter(key=>JSON.stringify(draft[key])!==JSON.stringify(original[key])):fields.filter(([key]) => draft[key] !== original[key]).map(([key]) => key), pending = { ...draft }, pendingImage = image;
                 return perform(signal => action({ operation: 'open', id: project.id }, signal), value => {
                     const row = value.project.slides.find(s => s.id === selected);
                     if (!row) {
@@ -942,6 +943,10 @@ if(!rootElement.current?.contains(event.target) || event.target?.closest?.('[rol
                     }
                     const latest = draftFor(row), merged = { ...latest }, shared = [];
                     for (const key of keys) {
+                        if(key==='elements'&&row.layout==='scene'){
+                          const result=DshDeckModel.mergeSceneDraftElements(original.elements,pending.elements,latest.elements);merged.elements=result.elements;
+                          shared.push(...result.conflicts.map(c=>({key:'Object '+c.id,latest:JSON.stringify(c.latest,null,2),yours:JSON.stringify(c.draft,null,2)})));continue;
+                        }
                         merged[key] = pending[key];
                         if (latest[key] !== original[key] && latest[key] !== pending[key])
                             shared.push({ key, latest: latest[key], yours: pending[key] });
@@ -960,7 +965,8 @@ if(!rootElement.current?.contains(event.target) || event.target?.closest?.('[rol
                     return;
                 const original = draftFor(slide), patch = {};
                 if (slide.layout === 'scene') {
-                  DshDeckModel.normalizeSceneSlide({...slide,...draft},{assets:project.assets});
+                  const {newAssets,...sceneDraft}=draft;
+                  try{DshDeckModel.normalizeSceneSlide({...slide,...sceneDraft},{assets:{...project.assets,...newAssets}})}catch(error){setError(error.message);return}
                   for (const key of ['label','notes','elements']) if (JSON.stringify(draft[key]) !== JSON.stringify(original[key])) patch[key]=draft[key];
                 }
                 for (const [key] of slide.layout === 'scene' ? [] : fields)
@@ -968,7 +974,7 @@ if(!rootElement.current?.contains(event.target) || event.target?.closest?.('[rol
                         patch[key] = key === 'bullets' ? draft[key].split('\n').map(v => v.trim()).filter(Boolean) : draft[key];
                 if (image)
                     patch.image = { src: image.src, alt: image.alt, fit: image.fit, caption: image.caption };
-                return perform(signal => action({ operation: 'edit', id: project.id, expectedRevision: project.revision, slide: slide.id, patch, saveAs }, signal), value => {
+                return perform(signal => action({ operation: 'edit', id: project.id, expectedRevision: project.revision, slide: slide.id, patch, saveAs,...(slide.layout==='scene'?{assets:draft.newAssets}:{}) }, signal), value => {
                     adopt(value.project, slide.id);
                     setMessage(saveAs ? t("副本已保存，原文件保留。副本从工程生成，不包含 Office 手工修改。") : value.changed === false ? t("内容没有变化。") : t("已保存，HTML、PPTX 和工程文件已同步更新。"));
                 });
@@ -1063,11 +1069,11 @@ if(!rootElement.current?.contains(event.target) || event.target?.closest?.('[rol
  h('aside',{className:'ppt-inspector','aria-label':pptText('页面与辅助工具','Slide properties and tools')},
  h('section',{className:'ppt-inspector-panel',hidden:activeTab!=='content'},h('div',{className:'card'},h('h3',null,pptText('页面内容','Slide content')),dirty && h('p', { className: 'dirty' }, t("有未保存修改，请先保存或取消，再切换页面。")),
 overlaps.length ? h('div', { className: 'notice' }, h('strong', null, t("这些字段也被修改过，请比较后决定是否保存：")), overlaps.map(row => h('div', { key: row.key }, h('strong', null, t(fields.find(([key]) => key === row.key)[1])), h('p', null, t("最新版本：") + row.latest), h('p', null, t("你的修改：") + row.yours)))) : null,
-(slide.layout === 'scene' ? h(PptSceneObjects,{label:draft.label,notes:draft.notes,onMeta:patch=>{setDraft({...draft,...patch});setDirty(true);},elements:draft.elements??slide.elements,assets:project.assets,disabled:busy||dataDirty,onChange:elements=>{setDraft({...draft,elements});setDirty(true);}}) : fields.filter(([key]) => key === 'title' || key === 'notes' || key === 'bullets' && (slide.layout === 'bullets' || slide.bullets?.length > 0) || key !== 'bullets' && (slide[key] || key === 'subtitle' && ['cover', 'section', 'closing', 'quote'].includes(slide.layout) || key === 'kicker' && ['cover', 'section', 'closing'].includes(slide.layout))).map(([key, label]) => h('div', { key }, h('label', { htmlFor: controlId+'-'+key }, t(label)), h(key === 'title' || key === 'kicker' ? 'input' : 'textarea', { id: controlId+'-'+key, ref: el => { fieldRefs.current[key] = el; }, disabled: busy || dataDirty, value: draft[key] || '', rows: key === 'bullets' ? 4 : 2, maxLength: 8000, onChange: e => { setDraft({ ...draft, [key]: e.target.value }); setDirty(true); } })))),slide.layout !== 'scene' && h('details',{className:'ppt-image-section',open:!!image},h('summary',null,pptText('图片','Image')),h('label', { htmlFor: controlId+'-image' }, slide.image ? t("替换图片（PNG / JPEG）") : t("添加图片（会改为图文布局）")),
+(slide.layout === 'scene' ? h(PptSceneObjects,{key:slide.id,uploadGeneration:sceneUploadGeneration,onPending:setSceneImagePending,onError:setError,onAsset:(elementId,assetId,asset)=>{setDraft({...draft,newAssets:{...draft.newAssets,[assetId]:asset},elements:draft.elements.map(e=>e.id===elementId?{...e,assetId}:e)});setDirty(true);},label:draft.label,notes:draft.notes,onMeta:patch=>{setDraft({...draft,...patch});setDirty(true);},elements:draft.elements??slide.elements,assets:{...project.assets,...draft.newAssets},disabled:busy||dataDirty,onChange:elements=>{setDraft({...draft,elements});setDirty(true);}}) : fields.filter(([key]) => key === 'title' || key === 'notes' || key === 'bullets' && (slide.layout === 'bullets' || slide.bullets?.length > 0) || key !== 'bullets' && (slide[key] || key === 'subtitle' && ['cover', 'section', 'closing', 'quote'].includes(slide.layout) || key === 'kicker' && ['cover', 'section', 'closing'].includes(slide.layout))).map(([key, label]) => h('div', { key }, h('label', { htmlFor: controlId+'-'+key }, t(label)), h(key === 'title' || key === 'kicker' ? 'input' : 'textarea', { id: controlId+'-'+key, ref: el => { fieldRefs.current[key] = el; }, disabled: busy || dataDirty, value: draft[key] || '', rows: key === 'bullets' ? 4 : 2, maxLength: 8000, onChange: e => { setDraft({ ...draft, [key]: e.target.value }); setDirty(true); } })))),slide.layout !== 'scene' && h('details',{className:'ppt-image-section',open:!!image},h('summary',null,pptText('图片','Image')),h('label', { htmlFor: controlId+'-image' }, slide.image ? t("替换图片（PNG / JPEG）") : t("添加图片（会改为图文布局）")),
 h('input', { id: controlId+'-image', type: 'file', accept: 'image/png,image/jpeg', disabled: busy || dataDirty, onChange: upload }),
 currentImage && h('img', { className: 'image-preview', src: currentImage, alt: image?.alt || slide.image?.alt || t("当前图片") }),
 image && h(React.Fragment, null, h('p', { className: 'muted' }, t("已选择：") + image.name), h('label', { htmlFor: controlId+'-alt' }, t("图片说明")), h('input', { id: controlId+'-alt', value: image.alt, disabled: busy || dataDirty, onChange: e => setImage({ ...image, alt: e.target.value }) }), h('label', { htmlFor: controlId+'-fit' }, t("图片适应方式")), h('select', { id: controlId+'-fit', value: image.fit, disabled: busy || dataDirty, onChange: e => setImage({ ...image, fit: e.target.value }) }, h('option', { value: 'contain' }, t("完整显示")), h('option', { value: 'cover' }, t("填满并裁切"))))),h('div',{className:'tools'},h('button', { 'aria-keyshortcuts': 'Control+Shift+S Meta+Shift+S', disabled: busy || dataDirty || imagePending, onClick: () => save(true) }, t("另存副本")),
-h('button', { 'aria-keyshortcuts': 'Escape', disabled: busy || (!dirty && !imagePending), onClick: () => { imageLoader.current.cancel(); setDraft(draftFor(slide)); setImage(null); setDirty(false); setError(''); setMessage(''); setConflict(false); setOverlaps([]); } }, t("取消修改")),
+h('button', { 'aria-keyshortcuts': 'Escape', disabled: busy || (!dirty && !imagePending), onClick: () => { sceneUploadGeneration.current++;setSceneImagePending(false);imageLoader.current.cancel(); setDraft(draftFor(slide)); setImage(null); setDirty(false); setError(''); setMessage(''); setConflict(false); setOverlaps([]); } }, t("取消修改")),
 h('button', { disabled: busy || dirty || imagePending || dataDirty || !project.undoAvailable, onClick: undo }, t("撤销上次修改")),
 h('button', { disabled: busy || dirty || imagePending || dataDirty, onClick: async () => { setRestyleOpen(true); setRestyleList(null); try { const v = await action({ operation: 'template-list' }); setRestyleList(v.templates ?? []); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } } }, pptText('Редизайн шаблоном','Restyle with template')))),h('div',{className:'w-toolbar ppt-structure'},h(W.Button,{disabled:busy || dirty || imagePending || dataDirty || index===0,onClick:()=>move(-1)},t('上移')),h(W.Button,{disabled:busy || dirty || imagePending || dataDirty || index===project.slides.length-1,onClick:()=>move(1)},t('下移')),h(W.Button,{icon:'trash',variant:'danger',disabled:busy || dirty || imagePending || dataDirty || project.slides.length<=1,onClick:()=>{setError('');setDeleteOpen(true);}},t('删除本页')))),
  h('section',{className:'ppt-inspector-panel',hidden:activeTab!=='visual'},h(VisualPanel, { key: 'visual:' + project.id, project, selected, blocked: busy || dirty || imagePending || dataDirty,

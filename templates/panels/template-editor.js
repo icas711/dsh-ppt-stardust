@@ -142,7 +142,7 @@ function tplCleanSlide(slide) {
 
 // Черновик формы → манифест schemaVersion 1 (пустые поля не попадают в файл).
 function tplBuild(draft, base) {
-    if (draft.schemaVersion === 3) return DshDeckModel.normalizeSceneTemplate({schemaVersion:3,id:draft.id,name:draft.name.trim(),description:draft.description,revision:base?.revision??1,...(base?.author?{author:base.author}:{}),...(base?.createdAt?{createdAt:base.createdAt}:{}),assetMap:draft.assetMap,style:{theme:draft.theme,pageSize:draft.pageSize,layouts:tplClone(draft.layouts)}});
+    if (draft.schemaVersion === 3) return DshDeckModel.normalizeSceneTemplate({schemaVersion:3,id:draft.id,name:draft.name.trim(),description:draft.description,revision:base?.revision??1,...(base?.author?{author:base.author}:{}),...(base?.createdAt?{createdAt:base.createdAt}:{}),assetMap:draft.assetMap,style:{theme:draft.theme,pageSize:draft.pageSize,...(draft.themeFonts?{themeFonts:tplClone(draft.themeFonts)}:{}),...(draft.fonts?.length?{fonts:tplClone(draft.fonts)}:{}),...(Object.keys(draft.textStyles??{}).length?{textStyles:tplClone(draft.textStyles)}:{}),...(base?.style?.brand?{brand:tplClone(base.style.brand)}:{}),layouts:tplClone(draft.layouts)}});
     const brand = {};
     for (const key of ['primaryColor', 'backgroundColor', 'textColor']) if (draft[key]) brand[key] = draft[key];
     if (draft.fontFamily.trim()) brand.fontFamily = draft.fontFamily.trim();
@@ -276,6 +276,7 @@ function TplLayoutsEditor({ draft, images, disabled, set, pickImage, error }) {
       h('select',{value:at,disabled,onChange:e=>setIndex(Number(e.target.value))},layouts.map((layout,i)=>h('option',{key:layout.id,value:i},(layout.familyId??'')+' / '+layout.name))),
       current?h(PptSceneObjects,{key:current.id,elements:current.elements,assets:Object.fromEntries(Object.entries(draft.assetMap??{}).map(([id,a])=>[id,a])),disabled,onChange:elements=>{
         const slots=elements.filter(e=>e.role!=='decor'&&['text','image','chart','table'].includes(e.type)).map(e=>current.slots.find(s=>s.elementId===e.id)??{id:'slot-'+e.id,elementId:e.id,type:e.type,name:e.name??e.id,required:true});
+        elements=elements.map(e=>{const copy={...e},slot=slots.find(s=>s.elementId===e.id);if(slot)copy.slotId=slot.id;else delete copy.slotId;return copy});
         patch({elements,slots});
       }}):null);
     const patchImage = (i, change) => patch({ images: current.images.map((image, k) => k === i ? { ...image, ...change } : image) });
@@ -465,7 +466,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
     }
 
     const disabled = busy || !canEdit;
-    const sections = [['main', tplTr('Основное', 'General')], ['style', tplTr('Стиль', 'Style')], ['layouts', tplTr('Макеты', 'Layouts') + ' (' + draft.layouts.length + ')'], ['outline', tplTr('Каркас', 'Outline') + ' (' + draft.outline.length + ')'], ['samples', tplTr('Образцы', 'Samples') + ' (' + draft.samples.length + ')']];
+    const sections = [['main', tplTr('Основное', 'General')], ['style', draft.schemaVersion===3?tplTr('Шрифты','Fonts'):tplTr('Стиль', 'Style')], ['layouts', tplTr('Макеты', 'Layouts') + ' (' + draft.layouts.length + ')'], ['outline', tplTr('Каркас', 'Outline') + ' (' + draft.outline.length + ')'], ['samples', tplTr('Образцы', 'Samples') + ' (' + draft.samples.length + ')']].filter(([id])=>draft.schemaVersion!==3||!['outline','samples'].includes(id));
     const baseScope = base?.key?.split(':')[0];
     const scopeText = !existing ? '' : baseScope === 'builtin' ? tplTr('Встроенный', 'Built-in') : baseScope === 'public' ? tplTr('Общий', 'Public') : tplTr('Личный', 'Private');
 
@@ -529,7 +530,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
             h('div', { className: 'tpe-form' },
                 h('div', { className: 'tpe-nav', role: 'group', 'aria-label': tplTr('Разделы шаблона', 'Template sections') },
                     sections.map(([id, label]) => h(W.Button, { key: id, 'aria-pressed': section === id, onClick: () => setSection(id) }, label))),
-                section === 'main' ? main : section === 'style' ? style
+                section === 'main' ? main : section === 'style' ? (draft.schemaVersion===3?h('div',null,h('p',null,tplTr('Оформление объектов изменяйте в разделе «Макеты».','Edit object formatting under Layouts.')),h(TplFontUploads,{draft,disabled,onPick:pickFont})):style)
                     : section === 'layouts' ? h(TplLayoutsEditor, { draft, images, disabled, set, pickImage })
                     : section === 'outline' ? h(TplSlideList, { designLayouts: draft.layouts, slides: draft.outline, limit: 120, disabled, hint: tplTr('Каркас — страницы-заготовки нового дека. {{deck.title}} подставит название презентации; строки «Заполнить: …» помечают места для ввода, дек остаётся черновиком, пока они не заполнены.', 'The outline is the skeleton of a new deck. {{deck.title}} is replaced with the deck title; “To fill: …” lines mark spots to complete and keep the deck a draft until they are replaced.'), onChange: outline => set({ outline }) })
                         : h(TplSlideList, { designLayouts: draft.layouts, slides: draft.samples, limit: 5, disabled, hint: tplTr('Образцы — до 5 готовых страниц с реальным содержанием: показывают, как должен выглядеть заполненный дек.', 'Samples are up to 5 finished slides with real content that show what a completed deck should look like.'), onChange: samples => set({ samples }) })),

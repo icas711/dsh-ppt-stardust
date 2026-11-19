@@ -1,3 +1,4 @@
+import {templateFromSceneManifest,buildTemplateBundle,readTemplateZip,templateCreateOptions} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {fixtures as nativeFixtures} from '../test/fixtures/pptx/generate.mjs'
 import {importPptxScenes} from '../skills/dsh-ppt/scripts/deck-pptx-scenes.mjs'
 import assert from 'node:assert/strict'
@@ -19,7 +20,11 @@ export async function goldenScenes(out = resolve('.test-output/pptx-synthetic-re
     const cases = sceneFixtures()
     for (const f of nativeFixtures().filter(f => f.id !== 'objects')) {
       const imported = await importPptxScenes(f.bytes,{strict:true})
-      cases.push({id:'import-'+f.id,source:f.bytes,manifest:{title:'Imported fixture',theme:'data',language:'en',style:{pageSize:imported.pageSize},assets:imported.assets,slides:imported.slides}})
+      const extracted=templateFromSceneManifest({...imported,style:{pageSize:imported.pageSize}},{templateId:'golden-'+f.id,name:'Imported fixture'})
+      const bundle=readTemplateZip(buildTemplateBundle(extracted.manifest,extracted.assets))
+      const selections=bundle.manifest.style.layouts.map((layout,i)=>({layoutId:layout.id,values:Object.fromEntries(layout.slots.map(slot=>{const e=imported.slides[i].elements.find(e=>e.id===slot.elementId);return [slot.id,e.type==='text'?e.paragraphs:e.type==='image'?e.assetId:e[e.type]]}))}))
+      const {create}=templateCreateOptions(bundle.manifest,bundle.assets,{title:'Imported fixture',selections,assets:imported.assets})
+      cases.push({id:'import-'+f.id,source:f.bytes,manifest:{...create,language:'en'}})
     }
     for (const legacy of legacyFixtureStates()) {
       const adapted = await legacySlidesToScenes(legacy.manifest,{theme:sceneFixtureTheme()})

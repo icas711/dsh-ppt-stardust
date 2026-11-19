@@ -1,12 +1,7 @@
 import {posix} from 'node:path'
 import {normalizeSceneChart} from './deck-structured.mjs'
 function failure(message){throw new Error('dsh-ppt: '+message)}
-export function readNativeChart(lib,shape,{pres,onDiagnostic}={}){
- const spec=lib.getShapeChartSpec(shape)
- if(!spec)failure('Chart type cannot be represented natively')
- if(spec.series.some(s=>s.values.length!==spec.categories.length)&&pres){
-  const n=spec.series[0].values.length
-  if(spec.series.some(s=>s.values.length!==n))failure('Chart series caches have different lengths')
+function chartXml(lib,pres,shape){
   const part=lib.getSlidePartName(lib.getShapeSlide(shape)),relId=/<c:chart\b[^>]*r:id="([^"]+)"/.exec(lib.getShapeXmlString(shape))?.[1]
   const rels=Buffer.from(lib.readPackagePart(pres,posix.join(posix.dirname(part),'_rels',posix.basename(part)+'.rels'))??[]).toString('utf8')
   let xml=''
@@ -15,6 +10,17 @@ export function readNativeChart(lib,shape,{pres,onDiagnostic}={}){
    const target=/Target="([^"]+)"/.exec(rel)?.[1],resolved=target?.startsWith('/')?target:target&&posix.normalize(posix.join(posix.dirname(part),target))
    if(resolved&&/^\/ppt\/charts\/[^/]+\.xml$/.test(resolved))xml=Buffer.from(lib.readPackagePart(pres,resolved)??[]).toString('utf8')
   }
+ return xml
+}
+export function readNativeChart(lib,shape,{pres,onDiagnostic}={}){
+ const spec=lib.getShapeChartSpec(shape)
+ if(!spec)failure('Chart type cannot be represented natively')
+ const xml=pres?chartXml(lib,pres,shape):''
+ const rawSeries=[...xml.matchAll(/<c:ser\b[^>]*>([\s\S]*?)<\/c:ser>/g)]
+ for(const [i,series]of spec.series.entries())if(!series.name){const tx=/<c:tx\b[^>]*>([\s\S]*?)<\/c:tx>/.exec(rawSeries[i]?.[1]??'')?.[1],literal=tx&&/<c:v>([\s\S]*?)<\/c:v>/.exec(tx)?.[1];if(literal)series.name=literal.replaceAll('&amp;','&').replaceAll('&lt;','<').replaceAll('&gt;','>').replaceAll('&quot;','"').replaceAll('&apos;',"'")}
+ if(spec.series.some(s=>s.values.length!==spec.categories.length)&&pres){
+  const n=spec.series[0].values.length
+  if(spec.series.some(s=>s.values.length!==n))failure('Chart series caches have different lengths')
   const cache=/<c:multiLvlStrCache\b[^>]*>([\s\S]*?)<\/c:multiLvlStrCache>/.exec(xml)?.[1],leaf=cache&&/<c:lvl\b[^>]*>([\s\S]*?)<\/c:lvl>/.exec(cache)?.[1],points=new Map()
   for(const m of leaf?.matchAll(/<c:pt\b[^>]*idx="(\d+)"[^>]*>[\s\S]*?<c:v>([\s\S]*?)<\/c:v>[\s\S]*?<\/c:pt>/g)??[])points.set(Number(m[1]),m[2].replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/gi,(_,v)=>v[0]==='#'?String.fromCodePoint(v[1].toLowerCase()==='x'?parseInt(v.slice(2),16):Number(v.slice(1))):({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"})[v]))
   if(points.size!==n||Array.from({length:n},(_,i)=>!points.has(i)).some(Boolean))failure('Chart categories and values caches disagree; no complete leaf category cache')

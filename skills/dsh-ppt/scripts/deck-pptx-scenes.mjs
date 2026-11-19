@@ -1,3 +1,4 @@
+import {scenePptxPlacement} from './deck-scene-pptx.mjs'
 import {extractTypography,embedFontAssets,fontInfo} from './deck-fonts.mjs'
 import {readNativeChart,readNativeTable} from './deck-native-objects.mjs'
 import {posix} from 'node:path'
@@ -5,13 +6,14 @@ import {createHash} from 'node:crypto'
 import {unzipSync} from 'fflate'
 import {nativeShapeElement} from './deck-legacy-scene.mjs'
 import {normalizeSceneSlide,normalizeSceneSlides} from './deck-model.mjs'
-import {IDENTITY_TRANSFORM,composeTransforms,groupTransform,frameTransform} from './deck-geometry.mjs'
+import {IDENTITY_TRANSFORM,composeTransforms,groupTransform,frameTransform,transformedBounds} from './deck-geometry.mjs'
 import {imageInfo} from './deck-image.mjs'
 const hash=b=>createHash('sha256').update(b).digest('hex')
 const frame=b=>Object.fromEntries(['x','y','w','h'].map(k=>[k,Number(b[k])]))
 function failure(message){throw new Error('dsh-ppt: '+message)}
 /** Import actual slides, retaining every object or an explicit per-object diagnostic. Never copies OLE binaries. */
 export async function importPptxScenes(bytes,{signal,strict=false}={}){
+ signal?.throwIfAborted()
  if(!(bytes instanceof Uint8Array)||bytes.length>64*1024*1024)failure('PPTX must be bytes up to 64 MiB')
  let total=0,count=0
  const safeParts=unzipSync(bytes,{filter:e=>{total+=e.originalSize;if(++count>20000||total>64*1024*1024)failure('PPTX unpacked limit exceeded');return /^ppt\/media\/[^/]+\.(png|jpe?g)$/i.test(e.name)&&e.originalSize<=5*1024*1024 || /\.rels$/.test(e.name)&&e.originalSize<=1024*1024}})
@@ -63,7 +65,7 @@ export async function importPptxScenes(bytes,{signal,strict=false}={}){
       }
       previewAssetId=storeImage(raw,name)
     }catch{}
-    elements.push({...common,...(common.frame.w<=0||common.frame.h<=0?{hidden:true}:{}),frame:{...common.frame,w:Math.max(1,common.frame.w),h:Math.max(1,common.frame.h)},type:'unsupported',sourceKind:kind,reason:error.message,...(previewAssetId?{previewAssetId}:{}),support:{mode:previewAssetId?'preview':'unsupported',reason:error.message}})
+    elements.push({...common,...(common.frame.w<=0||common.frame.h<=0?{hidden:true}:{}),...(error.code==='scene-transform-unsupported'?{transform:IDENTITY_TRANSFORM}:{}),frame:error.code==='scene-transform-unsupported'?Object.fromEntries(Object.entries(transformedBounds(common.frame,common.transform)).map(([k,v])=>[k,Math.round(v)])):{...common.frame,w:Math.max(1,common.frame.w),h:Math.max(1,common.frame.h)},type:'unsupported',sourceKind:kind,reason:error.message,...(previewAssetId?{previewAssetId}:{}),support:{mode:previewAssetId?'preview':'unsupported',reason:error.message}})
     report.objects.push({slide:index+1,elementId:id,shapeId,name,kind,mode:previewAssetId?'preview':'unsupported',reason:error.message})
    }
    return [id]

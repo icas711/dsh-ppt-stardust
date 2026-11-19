@@ -990,6 +990,8 @@ export function templateFromSceneManifest(project,options={}){
   return {manifest:validateTemplateManifest(manifest,{templateAssets:assets}),assets}
 }
 export async function templateFromPptxScene(source,options={}){
+  options.signal?.throwIfAborted()
+  if(!(source instanceof Uint8Array)&&statSync(source).size>64*1024*1024)fail('PPTX exceeds 64 MiB')
   const bytes=source instanceof Uint8Array?source:readFileSync(source)
   const imported=await importPptxScenes(bytes,{signal:options.signal})
   const result=templateFromSceneManifest({...imported,theme:'data',style:{pageSize:imported.pageSize}},options)
