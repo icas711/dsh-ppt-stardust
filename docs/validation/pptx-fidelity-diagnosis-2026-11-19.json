@@ -102,7 +102,7 @@
   "notes": [
     "Ablations are independent and do not restore all content.",
     "Text patch intentionally changes content on slide 2.",
-    "OLE preservation is a diagnostic observation, not an approved product policy.",
+    "OLE preservation was observed in diagnostics. A subsequent user decision permits opaque unchanged OLE only in the planned patch mode; see docs/PPTX-PATCH-CONTRACT.md. Implementation remains pending agreement.",
     "Product full test suite before diagnostic-only changes: 411 passed, 0 skipped."
   ]
 }
