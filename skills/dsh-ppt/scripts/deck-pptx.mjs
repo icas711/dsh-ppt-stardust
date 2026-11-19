@@ -297,7 +297,7 @@ function bulletTimingXml(spid, clicks) {
 }
 
 function slideXml(slide, index, total, theme, langId, motion) {
-  const p = theme.palette
+  const p = {...theme.palette,...(slide.backgroundColor ? {bg:slide.backgroundColor} : {})}
   let motionXml = ''
   if (motion) {
     motionXml = '<p:transition spd="med"><p:fade/></p:transition>'

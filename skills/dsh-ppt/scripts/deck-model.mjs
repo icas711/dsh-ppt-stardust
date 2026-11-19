@@ -118,6 +118,7 @@ export function normalizeTextZones(input, path = 'textZones') {
 // Scene contract primitives. These do not enable a new on-disk project version.
 export const LEGACY_CONTENT_FIELDS = Object.freeze(['title', 'subtitle', 'text', 'bullets', 'image', 'table', 'chart', 'rows', 'kicker'])
 export const SCENE_ELEMENT_TYPES = Object.freeze(['text', 'image', 'shape', 'line', 'group', 'table', 'chart', 'unsupported'])
+export const SCENE_ELEMENT_FIELDS = Object.freeze({text:['paragraphs', 'textFrame', 'textStyle'], image:['assetId', 'alt', 'fit', 'crop'], shape:['preset', 'fill', 'stroke'], line:['stroke'], group:['children'], table:['table'], chart:['chart'], unsupported:['sourceKind', 'reason', 'previewAssetId']})
 export const SCENE_LIMITS = Object.freeze({ elements: 256, images: 128, depth: 16, projectElements: 8192, slides: 120, emu: 51206400, paragraphs: 1024, runs: 4096, text: 262144 })
 export function mergeSceneTextStyles(...styles) {
   const out = {}
@@ -187,9 +188,12 @@ function sceneTransform(value, frame, path) {
   return matrix
 }
 function sceneTextStyle(value, path) {
-  record(value, path, ['fontFamily', 'size', 'bold', 'italic', 'color', 'scriptFonts'])
+  record(value, path, ['fontFamily', 'sourceTypeface', 'size', 'bold', 'italic', 'underline', 'kerning', 'color', 'scriptFonts'])
   let style
   try { style = normalizeTextStyles({body:value}).body } catch (error) { sceneError('invalid-text-style', path, error.message) }
+  if (value.sourceTypeface !== undefined) {try {fontFamily(value.sourceTypeface);style.sourceTypeface=value.sourceTypeface} catch(error) {sceneError('invalid-text-style',path+'.sourceTypeface',error.message)}}
+  if (value.underline !== undefined) style.underline = choice(value.underline, path+'.underline', [true,false,'none','sng','dbl','heavy','dotted','dash','wavy'])
+  if (value.kerning !== undefined) style.kerning = sceneNumber(value.kerning,path+'.kerning',0,400000,true)
   if (value.scriptFonts !== undefined) {
     record(value.scriptFonts, `${path}.scriptFonts`, ['eastAsian','complexScript'])
     style.scriptFonts = {}
@@ -255,7 +259,7 @@ function sceneAsset(value, path, assets) {
 }
 function sceneElement(value, path, assets, budget) {
   const common = ['id', 'type', 'role', 'frame', 'name', 'slotId', 'transform', 'source', 'support']
-  const fields = {text:['paragraphs', 'textFrame', 'textStyle'], image:['assetId', 'alt', 'fit', 'crop'], shape:['preset', 'fill', 'stroke'], line:['stroke'], group:['children'], table:['table'], chart:['chart'], unsupported:['sourceKind', 'reason', 'previewAssetId']}
+  const fields = SCENE_ELEMENT_FIELDS
   if (!value || !SCENE_ELEMENT_TYPES.includes(value.type)) sceneError('unsupported-element-type', `${path}.type`, 'This contract revision supports ' + SCENE_ELEMENT_TYPES.join(', '))
   record(value, path, [...common, ...fields[value.type]])
   const out = {id:identifier(value.id, `${path}.id`),type:value.type,role:choice(value.role ?? 'content', `${path}.role`, ['content','decor']),frame:sceneFrame(value.frame, `${path}.frame`, value.type === 'line')}
@@ -352,13 +356,14 @@ function sceneGroups(elements, path) {
 }
 export function normalizeSceneSlide(input, { assets = {}, path = 'slide' } = {}) {
   validateSlideRepresentation(input, path)
-  record(input, path, ['id','layout','purpose','label','notes','designLayout','elements'])
+  record(input, path, ['id','layout','purpose','label','notes','designLayout','backgroundColor','elements'])
   if (input.layout !== 'scene') sceneError('invalid-scene-layout', `${path}.layout`, 'Expected scene')
   if (!Array.isArray(input.elements) || input.elements.length > SCENE_LIMITS.elements) sceneError('element-limit', `${path}.elements`, 'Expected at most 256 objects')
   const budget = {images:0,runs:0,text:0}
   const out = {layout:'scene',purpose:choice(input.purpose ?? 'content', `${path}.purpose`, ['cover','section','content','closing']),elements:input.elements.map((value,index) => sceneElement(value, `${path}.elements[${index}]`, assets, budget))}
   for (const key of ['id','designLayout']) if (input[key] !== undefined) out[key] = identifier(input[key], `${path}.${key}`)
   for (const key of ['label','notes']) if (input[key] !== undefined) out[key] = sceneString(input[key], `${path}.${key}`, key === 'notes' ? 65536 : 1024, true)
+  if (input.backgroundColor !== undefined) out.backgroundColor = sceneColor(input.backgroundColor, `${path}.backgroundColor`)
   sceneGroups(out.elements, `${path}.elements`)
   return out
 }
@@ -376,4 +381,13 @@ export function normalizeSceneSlides(input, {assets = {}, path = 'slides'} = {})
     if (elements > SCENE_LIMITS.projectElements) sceneError('project-element-limit', path, 'Document exceeds 8192 objects')
   }
   return slides
+}
+
+/** Tool schemas share the object inventory and limits with runtime validation. */
+export function sceneInputProperties(){
+ const frame={type:'object',properties:Object.fromEntries(['x','y','w','h'].map(k=>[k,{type:'integer',...(k==='w'||k==='h'?{minimum:1}:{})}])),required:['x','y','w','h'],additionalProperties:false}
+ const common={id:{type:'string'},type:{type:'string',enum:[...SCENE_ELEMENT_TYPES]},frame,role:{type:'string',enum:['decor','content']},name:{type:'string'},slotId:{type:'string'},transform:{type:'array',items:{type:'number'},minItems:6,maxItems:6},source:{type:'object'},support:{type:'object'}}
+ const arrays=new Set(['paragraphs','children']),strings=new Set(['assetId','alt','fit','preset','sourceKind','reason','previewAssetId'])
+ const variants=Object.entries(SCENE_ELEMENT_FIELDS).map(([type,fields])=>({type:'object',properties:{...common,type:{type:'string',enum:[type]},...Object.fromEntries(fields.map(k=>[k,{type:arrays.has(k)?'array':strings.has(k)?'string':'object',...(k==='paragraphs'?{items:{type:'object',properties:{runs:{type:'array',items:{type:'object',properties:{text:{type:'string'},break:{type:'boolean'},style:{type:'object'}}}},style:{type:'object'}},required:['runs']}}:k==='children'?{items:{type:'string'}}:{})}]))},required:['id','type','frame',...(type==='text'?['paragraphs']:type==='chart'?['chart']:type==='table'?['table']:[])],additionalProperties:false}))
+ return {layout:{type:'string',enum:['scene']},label:{type:'string'},purpose:{type:'string',enum:['cover','section','content','closing']},backgroundColor:{type:'string',pattern:'^#[a-fA-F0-9]{6}$'},elements:{type:'array',maxItems:SCENE_LIMITS.elements,items:{oneOf:variants},description:'Drawing order in original EMU. Text: paragraphs:[{runs:[{text,style:{fontFamily,size,bold,italic,color}}],style:{align}}]. Charts: chart:{kind,categories,series:[{name,values}],...}. Tables: table:{columns:[EMU],rows:[EMU],cells:[{row,col,rowSpan,colSpan,paragraphs}]}. Groups reference child IDs; child transforms are already final.'}}
 }

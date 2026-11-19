@@ -1,3 +1,5 @@
+import {fixtures as nativeFixtures} from '../test/fixtures/pptx/generate.mjs'
+import {importPptxScenes} from '../skills/dsh-ppt/scripts/deck-pptx-scenes.mjs'
 import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync, copyFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
@@ -15,6 +17,10 @@ export async function goldenScenes(out = resolve('.test-output/pptx-synthetic-re
   const run = {renderer:{backend:converter.backend,version},cases:[]}
   try {
     const cases = sceneFixtures()
+    for (const f of nativeFixtures().filter(f => f.id !== 'objects')) {
+      const imported = await importPptxScenes(f.bytes,{strict:true})
+      cases.push({id:'import-'+f.id,source:f.bytes,manifest:{title:'Imported fixture',theme:'data',language:'en',style:{pageSize:imported.pageSize},assets:imported.assets,slides:imported.slides}})
+    }
     for (const legacy of legacyFixtureStates()) {
       const adapted = await legacySlidesToScenes(legacy.manifest,{theme:sceneFixtureTheme()})
       cases.push({id:legacy.id,source:buildPptx(legacy.manifest,sceneFixtureTheme(),resolveLanguage('en')),manifest:{...legacy.manifest,assets:adapted.assets,slides:adapted.slides},allowMatchingFontSubstitutions:true})

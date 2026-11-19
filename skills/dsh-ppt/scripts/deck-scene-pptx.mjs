@@ -26,7 +26,7 @@ function stroke(value) {
   return `<a:ln w="${Math.round(value.width*12700)}">${color(value.color,value.opacity)}<a:prstDash val="${({solid:'solid',dash:'dash',dot:'sysDot'})[value.dash ?? 'solid']}"/>${['head','tail'].map(key=>value[key] ? `<a:${key}End type="${value[key]}"/>` : '').join('')}</a:ln>`
 }
 function runProperties(style, frame, lang) {
-  return `<a:rPr lang="${xml(lang)}" sz="${Math.round(style.size*100)}" b="${style.bold ? 1 : 0}" i="${style.italic ? 1 : 0}"${frame.kerning !== undefined ? ` kern="${frame.kerning}"` : ''}>${color(style.color)}<a:latin typeface="${xml(style.fontFamily)}"/><a:ea typeface="${xml(style.scriptFonts?.eastAsian ?? style.fontFamily)}"/><a:cs typeface="${xml(style.scriptFonts?.complexScript ?? style.fontFamily)}"/></a:rPr>`
+  return `<a:rPr lang="${xml(lang)}" sz="${Math.round(style.size*100)}" b="${style.bold ? 1 : 0}" i="${style.italic ? 1 : 0}"${(style.kerning??frame.kerning) !== undefined ? ` kern="${style.kerning??frame.kerning}"` : ''}${style.underline !== undefined ? ` u="${style.underline===true?'sng':style.underline===false?'none':style.underline}"` : ''}>${color(style.color)}<a:latin typeface="${xml(style.sourceTypeface??style.fontFamily)}"/><a:ea typeface="${xml(style.scriptFonts?.eastAsian ?? style.fontFamily)}"/><a:cs typeface="${xml(style.scriptFonts?.complexScript ?? style.fontFamily)}"/></a:rPr>`
 }
 function paragraphProperties(style) {
   const attributes = ['marL','marR','indent'].filter(key=>style[key] !== undefined).map(key=>` ${key}="${Math.round(style[key])}"`).join('')

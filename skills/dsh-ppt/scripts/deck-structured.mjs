@@ -9,7 +9,7 @@ const choice=(v,p,values)=>{if(!values.includes(v))fail('invalid-choice',p,'Expe
 export const SCENE_CHART_KINDS=Object.freeze(['column','bar','line','pie','doughnut','area'])
 function textStyle(v,p){object(v,p,['font','sizePt','color','bold','italic']);const o={};if(v.font!==undefined)o.font=string(v.font,p+'.font');if(v.sizePt!==undefined)o.sizePt=number(v.sizePt,p+'.sizePt',1,400);if(v.color!==undefined)o.color=color(v.color,p+'.color');for(const k of ['bold','italic'])if(v[k]!==undefined){if(typeof v[k]!=='boolean')fail('invalid-boolean',p+'.'+k,k);o[k]=v[k]}return o}
 export function normalizeSceneChart(v,p='chart') {
- object(v,p,['kind','categories','series','title','titleStyle','chartAreaFill','plotAreaFill','legend','dataLabels','valueAxis','categoryAxisLabelStyle','valueAxisLabelStyle','grouping','holeSizePct','firstSliceAngleDeg'])
+ object(v,p,['kind','categories','series','title','titleStyle','chartAreaFill','plotAreaFill','legend','dataLabels','valueAxis','categoryAxisLabelStyle','valueAxisLabelStyle','grouping','holeSizePct','firstSliceAngleDeg','valueAxisMajorGridlines','valueAxisMinorGridlines','categoryAxisOrientation','valueAxisOrientation','valueAxisCrosses'])
  const out={kind:choice(v.kind,p+'.kind',SCENE_CHART_KINDS)}
  if(!Array.isArray(v.categories)||!v.categories.length||v.categories.length>256)fail('chart-categories',p+'.categories','Expected 1–256 categories')
  out.categories=v.categories.map((s,i)=>string(s,`${p}.categories[${i}]`))
@@ -26,6 +26,9 @@ export function normalizeSceneChart(v,p='chart') {
  if(v.legend!==undefined){object(v.legend,p+'.legend',['position','textStyle']);out.legend={position:choice(v.legend.position,p+'.legend.position',['b','t','l','r','tr','none'])};if(v.legend.textStyle!==undefined)out.legend.textStyle=textStyle(v.legend.textStyle,p+'.legend.textStyle')}
  if(v.dataLabels!==undefined){object(v.dataLabels,p+'.dataLabels',['showValue','showCategory','showSeriesName','showPercent','numberFormat','textStyle']);out.dataLabels={};for(const [k,x]of Object.entries(v.dataLabels)){if(k==='textStyle')out.dataLabels[k]=textStyle(x,p+'.dataLabels.textStyle');else if(k==='numberFormat')out.dataLabels[k]=string(x,p+'.dataLabels.numberFormat');else{if(typeof x!=='boolean')fail('invalid-boolean',p+'.dataLabels.'+k,k);out.dataLabels[k]=x}}}
  if(v.valueAxis!==undefined){if(circular)fail('chart-axis',p,'Circular charts have no value axis');object(v.valueAxis,p+'.valueAxis',['min','max','majorUnit','numberFormat']);out.valueAxis={};for(const [k,x]of Object.entries(v.valueAxis))out.valueAxis[k]=k==='numberFormat'?string(x,p+'.valueAxis.'+k):number(x,p+'.valueAxis.'+k,k==='majorUnit'?Number.MIN_VALUE:-1e100,1e100);if(out.valueAxis.min!==undefined&&out.valueAxis.max!==undefined&&out.valueAxis.min>=out.valueAxis.max)fail('chart-axis',p,'min must be less than max')}
+ for(const k of ['valueAxisMajorGridlines','valueAxisMinorGridlines'])if(v[k]!==undefined){if(typeof v[k]!=='boolean')fail('invalid-boolean',p+'.'+k,k);out[k]=v[k]}
+ for(const k of ['categoryAxisOrientation','valueAxisOrientation'])if(v[k]!==undefined)out[k]=choice(v[k],p+'.'+k,['minMax','maxMin'])
+ if(v.valueAxisCrosses!==undefined)out.valueAxisCrosses=choice(v.valueAxisCrosses,p+'.valueAxisCrosses',['autoZero','min','max'])
  return out
 }
 export function normalizeSceneTable(v,p,normalizeText) {

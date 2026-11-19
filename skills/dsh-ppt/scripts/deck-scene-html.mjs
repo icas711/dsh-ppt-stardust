@@ -5,7 +5,7 @@ import { pageSize } from './deck-page.mjs'
 import { sceneImageGeometry, sceneImageBytes, scenePptxPlacement } from './deck-scene-pptx.mjs'
 
 const px = emu => emu/9525
-const fontCss = style => `font-family:${style.fontFamily.includes(',') ? style.fontFamily : JSON.stringify(style.fontFamily)};font-size:${style.size*4/3}px;color:${style.color};font-weight:${style.bold ? 700 : 400};font-style:${style.italic ? 'italic' : 'normal'}`
+const fontCss = style => `font-family:${style.fontFamily.includes(',') ? style.fontFamily : JSON.stringify(style.fontFamily)};font-size:${style.size*4/3}px;color:${style.color};font-weight:${style.bold ? 700 : 400};font-style:${style.italic ? 'italic' : 'normal'};text-decoration:${style.underline&&style.underline!=='none'?'underline':'none'}`
 function textMarkup(element, theme) {
   const frame = element.textFrame ?? {}, base = mergeSceneTextStyles({fontFamily:theme.fonts.body,size:18,color:theme.palette.fg},element.textStyle)
   const margins = {left:91440,right:91440,top:45720,bottom:45720,...frame.margins}
@@ -70,5 +70,5 @@ export function renderSceneHtml(slide, manifest, theme, prefix = 'scene') {
     const transform = placement.rotation || placement.flipV ? `translate(${cx} ${cy}) rotate(${placement.rotation/60000}) scale(1 ${placement.flipV ? -1 : 1}) translate(${-cx} ${-cy})` : ''
     return `<g data-element-id="${html(e.id)}"${transform ? ` transform="${transform}"` : ''}>${markup}</g>`
   }).join('')
-  return `<svg class="scene-canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${px(size.width)} ${px(size.height)}" style="position:absolute;inset:0;width:100%;height:100%;overflow:hidden" role="img" aria-label="${html(slide.label ?? '')}"><rect width="100%" height="100%" fill="${theme.palette.bg}"/>${elements}</svg>`
+  return `<svg class="scene-canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${px(size.width)} ${px(size.height)}" style="position:absolute;inset:0;width:100%;height:100%;overflow:hidden" role="img" aria-label="${html(slide.label ?? '')}"><rect width="100%" height="100%" fill="${slide.backgroundColor??theme.palette.bg}"/>${elements}</svg>`
 }

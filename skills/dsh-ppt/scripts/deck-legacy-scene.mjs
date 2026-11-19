@@ -1,3 +1,4 @@
+import {readNativeChart,readNativeTable} from './deck-native-objects.mjs'
 // Adapt the existing generator's normalized content using its actual native
 // geometry. No second copy of cover/bullets/quote layout coordinates.
 import { createHash } from 'node:crypto'
@@ -15,14 +16,17 @@ const numericFrame = value => Object.fromEntries(['x','y','w','h'].map(key=>[key
 function textStyle(format, fonts, defaults, path) {
   const resolve = (value, suffix) => value?.startsWith('+mj') ? fonts['major'+suffix] : value?.startsWith('+mn') ? fonts['minor'+suffix] : value
   const font = resolve(format.font,'Latin') || defaults.font
-  if (font !== font.trim()) unsupported(path,'Raw typeface aliases require a sourceTypeface field before migration')
+  if (font !== font.trim() && !defaults.allowTypeface) unsupported(path,'Raw typeface aliases require a sourceTypeface field before migration')
   const style = {fontFamily:font.trim(),size:format.size ?? 18,color:format.color ?? defaults.color,bold:format.bold ?? false,italic:format.italic ?? false}
+  if (font !== font.trim()) style.sourceTypeface=font
+  if (format.underline !== undefined) style.underline=format.underline
+  if (format.kern !== undefined) style.kerning=format.kern
   const scriptFonts = {}
   for (const [key,field,suffix] of [['eastAsian','fontEastAsian','EastAsian'],['complexScript','fontComplexScript','ComplexScript']]) if (format[field] !== undefined) scriptFonts[key] = resolve(format[field],suffix) ?? ''
   if (Object.keys(scriptFonts).length) style.scriptFonts = scriptFonts
   return style
 }
-function textElement(lib, pres, shape, common, defaults, path) {
+export function textElement(lib, pres, shape, common, defaults, path) {
   const body = lib.getShapeBodyPrEffective(pres,shape), fonts = lib.getPresentationFonts(pres)
   if (body.vert && body.vert !== 'horz') unsupported(path,'Vertical text is not supported by this adapter')
   const autoFit = lib.getShapeTextAutoFitParams(shape)
@@ -44,7 +48,7 @@ function textElement(lib, pres, shape, common, defaults, path) {
       if (item.kind === 'br') return {break:true}
       if (item.kind !== 'r') unsupported(path,'Dynamic text fields cannot be flattened silently')
       const format = lib.getShapeRunFormatEffective(pres,shape,p,index++)
-      if (format.kern != null) unsupported(path,'Per-run kerning is not yet supported by the adapter')
+      if (format.kern != null && !defaults.allowTypeface) unsupported(path,'Per-run kerning is not yet supported by the adapter')
       return {text:item.text,style:textStyle(format,fonts,defaults,path)}
     })
     paragraphs.push({style,runs:runs.length ? runs : [{text:'',style:textStyle(lib.getParagraphEndFormat(shape,p) ?? {},fonts,defaults,path)}]})
@@ -61,9 +65,8 @@ export async function legacySlidesToScenes(manifest, {theme,language,renderPptx,
   if (manifest.dataModel !== undefined || manifest.slides.some(s=>s?.dataTemplate !== undefined)) unsupported('dataModel','Bound content requires a data-binding migration; it must not become static text')
   for (const [i,slide] of manifest.slides.entries()) {
     assertLegacySlideInput(slide,`slides[${i}]`)
-    if (slide.layout === 'table' || slide.layout === 'chart' || slide.chart) unsupported(`slides[${i}]`,'Table/chart migration waits for their native scene contracts')
   }
-  if (!renderPptx && (manifest.brand || manifest.slides.some(s=>s.image) || manifest.style?.layouts?.length || manifest.style?.backgrounds?.length)) unsupported('renderPptx','Branded, image and template states require the full existing project renderer')
+  if (!renderPptx && (manifest.brand || manifest.slides.some(s=>s.image || s.chart || s.layout === 'table') || manifest.style?.layouts?.length || manifest.style?.backgrounds?.length)) unsupported('renderPptx','Branded, image and template states require the full existing project renderer')
   theme ??= resolveTheme(manifest.theme)
   language ??= resolveLanguage(manifest.language)
   const bytes = renderPptx ? await renderPptx(manifest,theme,language,signal) : buildPptx(manifest,theme,language)
@@ -103,17 +106,28 @@ export async function legacySlidesToScenes(manifest, {theme,language,renderPptx,
       const frame = numericFrame(bounds), rotation = lib.getShapeRotation(shape), flip = lib.getShapeFlip(shape)
       const transform = rotation || flip?.horizontal || flip?.vertical ? frameTransform(frame,{rotation,flipH:flip?.horizontal ?? false,flipV:flip?.vertical ?? false}) : undefined
       const common = {id,name,role,frame,...(transform ? {transform} : {}),source:{part:`ppt/slides/slide${index+1}.xml`,shapeId:String(lib.getShapeId(shape)),slide:index+1,kind}}
+      elements.push(nativeShapeElement(lib,pres,shape,common,defaults,path,storeImage))
+    }
+    return {id:slideId,layout:'scene',purpose:({cover:'cover',section:'section',closing:'closing'})[input.layout] ?? 'content',label:input.title || input.kicker || '',...(input.notes !== undefined ? {notes:input.notes} : {}),elements}
+  })
+  return {slides:normalizeSceneSlides(slides,{assets}),assets,pageSize:{width:Number(lib.getSlideSize(pres).width),height:Number(lib.getSlideSize(pres).height)}}
+}
+
+export function nativeShapeElement(lib,pres,shape,common,defaults,path,storeImage) {
+  const kind=lib.getShapeKind(shape),name=lib.getShapeName(shape) || kind
+      if (lib.isChartShape(shape)) return {...common,type:'chart',chart:readNativeChart(lib,shape)}
+      if (lib.isTableShape(shape)) return {...common,type:'table',table:readNativeTable(lib,pres,shape)}
       if (kind === 'picture') {
         const raw = lib.getShapeImageBytes(shape)
         if (lib.getShapeImageOpacity(shape) != null && lib.getShapeImageOpacity(shape) !== 1) unsupported(path,'Image opacity is not supported by the scene contract')
         const assetId = storeImage(raw,path)
         const crop = lib.getShapeImageCrop(shape)
-        elements.push({...common,type:'image',assetId,fit:'fill',alt:lib.getShapeDescription(shape) ?? name,...(crop ? {crop} : {})})
+        return ({...common,type:'image',assetId,fit:'fill',alt:lib.getShapeDescription(shape) ?? name,...(crop ? {crop} : {})})
       } else if (kind === 'shape' || kind === 'connector') {
         const hasText = lib.isShapeTextBox(shape) || lib.getShapeText(shape) !== ''
         const fill = lib.getShapeFillEffective(pres,shape), stroke = lib.getShapeStrokeEffective(pres,shape)
         if (hasText && (fill.kind === 'solid' || stroke.kind === 'solid')) unsupported(path,'Text with a visible shape fill/outline needs a compound scene object')
-        if (hasText) elements.push(textElement(lib,pres,shape,common,defaults,path))
+        if (hasText) return (textElement(lib,pres,shape,common,defaults,path))
         else {
           if (!['solid','none','inherit'].includes(fill.kind) || !['solid','none','inherit'].includes(stroke.kind)) unsupported(path,'Complex fill/stroke is not supported')
           const line = kind === 'connector', preset = lib.getShapePreset(shape)
@@ -129,11 +143,8 @@ export async function legacySlidesToScenes(manifest, {theme,language,renderPptx,
               if (arrow?.type) element.stroke[end] = arrow.type
             }
           } else if (line) unsupported(path,'Connector without a resolved solid stroke')
-          elements.push(element)
+          return (element)
         }
-      } else unsupported(path,'Native '+kind+' is outside this legacy adapter revision')
-    }
-    return {id:slideId,layout:'scene',purpose:({cover:'cover',section:'section',closing:'closing'})[input.layout] ?? 'content',label:input.title || input.kicker || '',...(input.notes !== undefined ? {notes:input.notes} : {}),elements}
-  })
-  return {slides:normalizeSceneSlides(slides,{assets}),assets,pageSize:{width:Number(lib.getSlideSize(pres).width),height:Number(lib.getSlideSize(pres).height)}}
+      } else unsupported(path,'Native '+kind+' is outside this adapter revision')
+
 }
