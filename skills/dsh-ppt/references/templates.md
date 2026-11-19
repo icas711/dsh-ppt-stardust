@@ -2,6 +2,8 @@
 
 Before every new deck, use `ask_user_question` and keep asking until the task is clear. Always confirm the template, even when supplied, and clarify content. With no installed templates, confirm visual style and use `brand` plus scene `slides`. If the question tool is unavailable or unanswered, stop before generation.
 
+Before template choice, call `ppt_template list` and offer every returned template with its actual name and exact key, including all personal templates. Recommendations may reorder the complete list, never remove entries. Do not replace an installed template with a custom-style option. If option limits apply, split the list into questions or ask for a group followed by the complete list in that group. Ask only about style when the library is empty. Use current list results rather than remembered template availability.
+
 ## Template keys
 
 | Prefix | Source | Notes |
@@ -50,7 +52,7 @@ Slots and variant descriptions remain compatibility metadata. Use `deckPlan` →
 
 ## Workflow
 
-1. List installed templates if needed, then call `ask_user_question` to confirm template/style and clarify content. Wait for answers, including when a template was already specified.
+1. List installed templates, then call `ask_user_question` with the complete returned template choice and clarify content. Wait for answers, including when a template was already specified. If none are installed, ask about style instead.
 2. Inspect the selected template with `get`; compose substantive content in its style. For schema 3 pass `templateId` + scene `slides`; do not generate placeholders or append sample pages.
 3. Check and render the result; inspect actual pages and correct layout issues. Report unresolved rendering limitations.
 4. Existing fixed-slot filling and `apply-to-project` remain available for compatible editing workflows.
