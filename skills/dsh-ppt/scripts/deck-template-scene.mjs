@@ -1,5 +1,6 @@
 // Shared schema 3 template contract and addressable slot filling.
 import {normalizeSceneSlide,SCENE_LIMITS} from './deck-model.mjs'
+import {normalizeVariantDescription} from './deck-generation.mjs'
 const clone=value=>JSON.parse(JSON.stringify(value))
 function fail(code,path,message){const e=new Error(`dsh-ppt: ${code} at ${path}: ${message}`);e.code=code;e.path=path;throw e}
 const id=(x,p)=>{if(typeof x!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(x))fail('invalid-id',p,'Expected stable ID');return x}
@@ -14,7 +15,7 @@ export function normalizeSceneTemplate(input,{assets}={}){
  let total=0;const seen=new Set()
  out.style.layouts=out.style.layouts.map((l,i)=>{
   const path=`style.layouts[${i}]`;id(l.id,path+'.id');if(seen.has(l.id))fail('duplicate-layout',path,l.id);seen.add(l.id)
-  if(Object.keys(l).some(k=>!['id','name','familyId','purpose','backgroundColor','backgroundAssetId','elements','slots'].includes(k)))fail('unknown-field',path,'Unknown layout field')
+  if(Object.keys(l).some(k=>!['id','name','familyId','purpose','backgroundColor','backgroundAssetId','elements','slots','description'].includes(k)))fail('unknown-field',path,'Unknown layout field')
   const normalized=normalizeSceneSlide({layout:'scene',purpose:l.purpose??'content',elements:l.elements,...(l.backgroundColor?{backgroundColor:l.backgroundColor}:{}),...(l.backgroundAssetId?{backgroundAssetId:l.backgroundAssetId}:{})},{assets:bag,path})
   total+=normalized.elements.length;if(total>SCENE_LIMITS.projectElements)fail('project-element-limit',path,'Template exceeds 8192 objects')
   if(!Array.isArray(l.slots)||l.slots.length>256)fail('slot-limit',path+'.slots','Expected 0–256 slots')
@@ -30,7 +31,9 @@ export function normalizeSceneTemplate(input,{assets}={}){
    if(slot.name!==undefined&&(typeof slot.name!=='string'||slot.name.length>1024))fail('invalid-slot',at,'Invalid slot name')
    return {...slot}
   })
-  return {id:l.id,name:l.name??l.id,...(l.familyId?{familyId:id(l.familyId,path+'.familyId')}:{}),purpose:normalized.purpose,...(normalized.backgroundColor?{backgroundColor:normalized.backgroundColor}:{}),...(normalized.backgroundAssetId?{backgroundAssetId:normalized.backgroundAssetId}:{}),elements:normalized.elements,slots:clean}
+  const layout={id:l.id,name:l.name??l.id,...(l.familyId?{familyId:id(l.familyId,path+'.familyId')}:{}),purpose:normalized.purpose,...(normalized.backgroundColor?{backgroundColor:normalized.backgroundColor}:{}),...(normalized.backgroundAssetId?{backgroundAssetId:normalized.backgroundAssetId}:{}),elements:normalized.elements,slots:clean}
+  layout.description=normalizeVariantDescription(l.description,layout,out.style.pageSize)
+  return layout
  })
  for(const [key,a]of Object.entries(out.assetMap??{})){
   id(key,'assetMap');if(!a||Object.keys(a).some(k=>!['file','mime','width','height'].includes(k))||!/^[-a-zA-Z0-9_.]+\.(png|jpe?g)$/.test(a.file)||!['image/png','image/jpeg'].includes(a.mime)||!Number.isInteger(a.width)||a.width<1||!Number.isInteger(a.height)||a.height<1)fail('template-asset','assetMap.'+key,'Only safe raster references are allowed')

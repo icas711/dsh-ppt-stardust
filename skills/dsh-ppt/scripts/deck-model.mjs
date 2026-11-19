@@ -1,4 +1,5 @@
 import {normalizeSceneChart, normalizeSceneTable} from './deck-structured.mjs'
+export * from './deck-generation.mjs'
 // Shared browser/server model primitives. No Node, DOM or external imports.
 import { transformedBounds } from './deck-geometry.mjs'
 // Existing schema 1/2 semantics remain until scene migration is implemented.
