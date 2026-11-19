@@ -1,4 +1,5 @@
-import {normalizeSceneSlide} from './deck-model.mjs'
+import {typographicDiagram} from './deck-diagram-typography.mjs'
+import {normalizeSceneSlide,normalizeTextStyles} from './deck-model.mjs'
 import {normalizeSceneChart} from './deck-structured.mjs'
 import {semanticChartDesign} from './deck-chart-design.mjs'
 import {normalizePageSize} from './deck-page.mjs'
@@ -6,13 +7,14 @@ import {validateSemanticDiagram,semanticListLines} from './deck-semantic.mjs'
 import {transformedBounds} from './deck-geometry.mjs'
 function fail(message){throw new Error('dsh-ppt: diagram-input: '+message)}
 /** Explicit semantics only: never invent relationships, chronology or numeric values from bullets. */
-export function diagramToScene(input,{pageSize,accent='#2864B4',color='#202020',background='#F3F5F8',fontFamily,textStyle,region}={}){
+export function diagramToScene(input,{pageSize,accent='#2864B4',color='#202020',background='#F3F5F8',fontFamily,textStyle,textStyles,region}={}){
  const size=normalizePageSize(pageSize)??{width:12192000,height:6858000},d=input.diagram
  validateSemanticDiagram(d)
+ textStyles=normalizeTextStyles(textStyles)
  const source=d.version===2||['cards','cycle','kpi','quote','number'].includes(d.kind)?{...d,version:2}:undefined
  const elements=[],margin=region?.x??Math.round(size.width*.055),top=region?.y??Math.round(size.height*.22),w=region?.w??size.width-2*margin,h=region?.h??Math.round(size.height*.65)
  const text=(id,label,x,y,width,height,bold=false)=>({id,type:'text',frame:{x:Math.round(x),y:Math.round(y),w:Math.round(width),h:Math.round(height)},textStyle:{size:bold?24:18,bold,color,...(fontFamily?{fontFamily}:{}),...textStyle},textFrame:{anchor:'center',align:'center',margins:{left:40000,right:40000,top:40000,bottom:40000}},paragraphs:String(label).split('\n').map(s=>({runs:[{text:s}]}))})
- const finish=()=>normalizeSceneSlide({layout:'scene',label:input.title??'',notes:input.notes??'',elements,...(source?{semanticSource:{diagram:JSON.parse(JSON.stringify(source)),elementIds:elements.filter(e=>e.id!=='diagram-title').map(e=>e.id)}}:{})})
+ const finish=()=>normalizeSceneSlide({layout:'scene',label:input.title??'',notes:input.notes??'',elements,...(source?{semanticSource:{diagram:JSON.parse(JSON.stringify(source)),...(textStyles?{textStyles,region:{x:margin,y:top,w,h}}:{}),elementIds:elements.filter(e=>e.id!=='diagram-title').map(e=>e.id)}}:{})})
  if(input.title)elements.push(text('diagram-title',input.title,margin,margin,w,size.height*.12,true))
  if(d.kind==='chart'){
   const chart=d.version===2?semanticChartDesign(d.chart,{accent,background,color:textStyle?.color??color,fontFamily:textStyle?.fontFamily??fontFamily,size:textStyle?.size??18}):d.chart
@@ -22,6 +24,8 @@ export function diagramToScene(input,{pageSize,accent='#2864B4',color='#202020',
  if(!Array.isArray(d.items)||!d.items.length||d.items.length>12)fail('Expected 1–12 items; split larger diagrams into several slides')
  const ids=new Set()
  const items=d.items.map((item,i)=>{if(!item||typeof item.label!=='string'||!item.label.trim()||item.label.length>8000)fail('Each item needs a non-empty label up to 8000 characters');const id=item.id??'item-'+(i+1);if(typeof id!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,80}$/.test(id)||ids.has(id))fail('Item IDs must be unique');ids.add(id);if(item.detail!==undefined&&typeof item.detail!=='string')fail('Item detail must be text');if(item.date!==undefined&&typeof item.date!=='string')fail('Dates must be explicit text');return {...item,id}})
+ const typography=d.version===2?typographicDiagram(d,items,{region:{x:margin,y:top,w,h},text,textStyle,textStyles,accent}):undefined
+ if(typography){elements.push(...typography);return finish()}
  const positions=new Map(),links=[]
  if(['quote','number'].includes(d.kind)){
   const item=items[0],label=[item.date,d.kind==='number'?item.value+' '+item.unit+'\n'+item.label:item.label,item.delta!==undefined?item.delta+' '+item.deltaUnit:undefined].filter(v=>v!==undefined).join('\n')
@@ -64,8 +68,8 @@ export function expandDiagramSlides(slides,options){return slides?.map(s=>s?.lay
 export function restoreSemanticRepresentation(slide,representation,{pageSize,assets={},accent,background}={}){
  background=slide.backgroundColor??background
  const source=slide.semanticSource;if(!source||!['list','visual'].includes(representation))fail('No semantic source or unknown representation')
- const selected=slide.elements.filter(e=>source.elementIds.includes(e.id)),boxes=selected.map(e=>transformedBounds(e.frame,e.transform)),left=Math.min(...boxes.map(b=>b.x)),top=Math.min(...boxes.map(b=>b.y)),right=Math.max(...boxes.map(b=>b.x+b.w)),bottom=Math.max(...boxes.map(b=>b.y+b.h)),region={x:left,y:top,w:right-left,h:bottom-top}
- const style=selected.find(e=>e.type==='text')?.textStyle??{},prefix=(selected[0].id.slice(0,70))+'-restored-',elements=representation==='list'?[{id:prefix+'list',type:'text',role:'content',frame:region,textStyle:style,textFrame:{anchor:'top'},paragraphs:(source.originalText!==undefined?source.originalText.split('\n'):semanticListLines(source.diagram)).map(text=>({style:{align:'left',bullet:{kind:'bullet',character:'•'}},runs:[{text}]}))}]:diagramToScene({diagram:source.diagram},{pageSize,region,textStyle:style,accent,background}).elements.map((e,i)=>({...e,id:prefix+i}))
+ const selected=slide.elements.filter(e=>source.elementIds.includes(e.id)),boxes=selected.map(e=>transformedBounds(e.frame,e.transform)),left=Math.min(...boxes.map(b=>b.x)),top=Math.min(...boxes.map(b=>b.y)),right=Math.max(...boxes.map(b=>b.x+b.w)),bottom=Math.max(...boxes.map(b=>b.y+b.h)),region=source.region??{x:left,y:top,w:right-left,h:bottom-top}
+ const style=source.originalTextObject?.textStyle??selected.find(e=>e.type==='text'&&e.id.endsWith('-list'))?.textStyle??selected.find(e=>e.type==='text')?.textStyle??{},prefix=(selected[0].id.slice(0,70))+'-restored-',elements=representation==='list'?[{id:prefix+'list',type:'text',role:'content',frame:region,textStyle:style,textFrame:{anchor:'top'},paragraphs:(source.originalText!==undefined?source.originalText.split('\n'):semanticListLines(source.diagram)).map(text=>({style:{align:'left',bullet:{kind:'bullet',character:'•'}},runs:[{text}]}))}]:diagramToScene({diagram:source.diagram},{pageSize,region,textStyle:style,textStyles:source.textStyles,accent,background}).elements.map((e,i)=>({...e,id:prefix+i}))
  const remaining=slide.elements.filter(e=>!source.elementIds.includes(e.id)),at=slide.elements.findIndex(e=>source.elementIds.includes(e.id));remaining.splice(at,0,...elements)
  if(representation==='list'&&source.originalTextObject)Object.assign(elements[0],JSON.parse(JSON.stringify(source.originalTextObject)))
  return normalizeSceneSlide({...slide,elements:remaining,semanticSource:{...source,elementIds:elements.map(e=>e.id)}},{assets})

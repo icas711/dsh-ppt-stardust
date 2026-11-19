@@ -219,6 +219,20 @@ function TplColorField({ label, value, fallback, disabled, onChange }) {
             value ? h(W.IconButton, { icon: 'close', label: tplTr('Вернуть цвет темы', 'Reset to the theme colour'), disabled, onClick: () => onChange('') }) : null));
 }
 
+function TplSemanticTypography({draft,disabled,set}) {
+    const labels={title:tplTr('Числа KPI','KPI values'),subtitle:tplTr('Заголовки вариантов сравнения','Comparison headings'),body:tplTr('Показатели и значения','Labels and values'),caption:tplTr('Критерии и примечания','Criteria and notes')};
+    const update=(role,key,value)=>{const textStyles=tplClone(draft.textStyles??{}),style={...textStyles[role]};if(value===undefined)delete style[key];else style[key]=value;if(Object.keys(style).length)textStyles[role]=style;else delete textStyles[role];set({textStyles});};
+    return h('fieldset',null,h('legend',null,tplTr('Оформление KPI и сравнений','KPI and comparison typography')),
+      h('p',null,tplTr('Стили применяются к новым представлениям. Оформление заголовков слайдов меняется отдельно в «Макетах». Проверяйте результат на созданной презентации.','Styles apply to newly generated representations. Edit slide headings separately under Layouts. Review the generated presentation.')),
+      ...Object.entries(labels).map(([role,label])=>{const style=draft.textStyles?.[role]??{};return h('fieldset',{key:role},h('legend',null,label),
+        h('label',null,tplTr('Шрифт','Font'),h('input',{value:style.fontFamily??'',disabled,placeholder:tplTr('Из области шаблона','From template region'),onChange:e=>update(role,'fontFamily',e.target.value||undefined)})),
+        h('label',null,tplTr('Размер, пт','Size, pt'),h('input',{type:'number',min:1,max:400,disabled,value:style.size??'',onChange:e=>update(role,'size',e.target.value===''?undefined:Number(e.target.value))})),
+        h(TplColorField,{label:tplTr('Цвет','Colour'),value:style.color??'',disabled,onChange:v=>update(role,'color',v||undefined)}),
+        h('label',null,tplTr('Начертание','Weight'),h('select',{value:style.bold===undefined?'inherit':String(style.bold),disabled,onChange:e=>update(role,'bold',e.target.value==='inherit'?undefined:e.target.value==='true')},h('option',{value:'inherit'},tplTr('Из области шаблона','From template region')),h('option',{value:'true'},tplTr('Жирный','Bold')),h('option',{value:'false'},tplTr('Обычный','Regular')))),
+        h(W.Button,{disabled,onClick:()=>{const textStyles={...draft.textStyles};delete textStyles[role];set({textStyles});}},tplTr('Сбросить роль','Reset role')));})
+    );
+}
+
 function TplImageField({ label, name, images, disabled, onPick, onClear, children }) {
     return h('div', { className: 'tpe-image' }, h('span', null, label),
         name && images[name] ? h('img', { className: 'tpe-thumb', src: images[name], alt: label })
@@ -506,7 +520,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
     }
 
     const disabled = busy || !canEdit;
-    const sections = [['main', tplTr('Основное', 'General')], ['style', draft.schemaVersion===3?tplTr('Шрифты','Fonts'):tplTr('Стиль', 'Style')], ['layouts', tplTr('Макеты', 'Layouts') + ' (' + draft.layouts.length + ')'], ['outline', tplTr('Каркас', 'Outline') + ' (' + draft.outline.length + ')'], ['samples', tplTr('Образцы', 'Samples') + ' (' + draft.samples.length + ')']].filter(([id])=>draft.schemaVersion!==3||!['outline','samples'].includes(id));
+    const sections = [['main', tplTr('Основное', 'General')], ['style', draft.schemaVersion===3?tplTr('Типографика','Typography'):tplTr('Стиль', 'Style')], ['layouts', tplTr('Макеты', 'Layouts') + ' (' + draft.layouts.length + ')'], ['outline', tplTr('Каркас', 'Outline') + ' (' + draft.outline.length + ')'], ['samples', tplTr('Образцы', 'Samples') + ' (' + draft.samples.length + ')']].filter(([id])=>draft.schemaVersion!==3||!['outline','samples'].includes(id));
     const baseScope = base?.key?.split(':')[0];
     const scopeText = !existing ? '' : baseScope === 'builtin' ? tplTr('Встроенный', 'Built-in') : baseScope === 'public' ? tplTr('Общий', 'Public') : tplTr('Личный', 'Private');
 
@@ -570,7 +584,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
             h('div', { className: 'tpe-form' },
                 h('div', { className: 'tpe-nav', role: 'group', 'aria-label': tplTr('Разделы шаблона', 'Template sections') },
                     sections.map(([id, label]) => h(W.Button, { key: id, 'aria-pressed': section === id, onClick: () => setSection(id) }, label))),
-                section === 'main' ? main : section === 'style' ? (draft.schemaVersion===3?h('div',null,h('p',null,tplTr('Оформление объектов изменяйте в разделе «Макеты».','Edit object formatting under Layouts.')),h(TplFontUploads,{draft,disabled,onPick:pickFont})):style)
+                section === 'main' ? main : section === 'style' ? (draft.schemaVersion===3?h('div',null,h('p',null,tplTr('Оформление объектов изменяйте в разделе «Макеты».','Edit object formatting under Layouts.')),h(TplFontUploads,{draft,disabled,onPick:pickFont}),h(TplSemanticTypography,{draft,disabled,set})):style)
                     : section === 'layouts' ? h(TplLayoutsEditor, { draft, images, disabled, set, pickImage,sampleLength,onSampleLength:setSampleLength,onSceneAsset:attachSceneAsset,onImagePending:setBusy })
                     : section === 'outline' ? h(TplSlideList, { designLayouts: draft.layouts, slides: draft.outline, limit: 120, disabled, hint: tplTr('Каркас — страницы-заготовки нового дека. {{deck.title}} подставит название презентации; строки «Заполнить: …» помечают места для ввода, дек остаётся черновиком, пока они не заполнены.', 'The outline is the skeleton of a new deck. {{deck.title}} is replaced with the deck title; “To fill: …” lines mark spots to complete and keep the deck a draft until they are replaced.'), onChange: outline => set({ outline }) })
                         : h(TplSlideList, { designLayouts: draft.layouts, slides: draft.samples, limit: 5, disabled, hint: tplTr('Образцы — до 5 готовых страниц с реальным содержанием: показывают, как должен выглядеть заполненный дек.', 'Samples are up to 5 finished slides with real content that show what a completed deck should look like.'), onChange: samples => set({ samples }) })),

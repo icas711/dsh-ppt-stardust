@@ -52,6 +52,7 @@ test('semantic conversion keeps supplied rich runs on matching labels and restor
  plan[0].structure='cycle';plan[0].values.body=[{style:{align:'right'},runs:[{text:'Measure',style:{bold:true,color:'#AA0000'}}]},{runs:[{text:'Learn',style:{italic:true}}]}];plan[0].visual={slotId:'body',diagram:{version:2,kind:'cycle',repeats:true,items:[{label:'Measure'},{label:'Learn'}]}}
  const slide=templateCreateOptions(t,{}, {title:'Rich source',deckPlan:plan}).create.slides[0],label=slide.elements.find(e=>e.type==='text'&&e.paragraphs[0].runs[0].text==='Measure')
  assert.equal(label.paragraphs[0].runs[0].style.color,'#AA0000');assert.equal(label.paragraphs[0].style.align,'right')
+ assert.equal(slide.elements.find(e=>e.type==='text'&&e.paragraphs[0].runs[0].text==='Learn').textStyle.color,'#242424')
  const list=restoreSemanticRepresentation(slide,'list');assert.deepEqual(list.elements[0].paragraphs,slide.semanticSource.originalTextObject.paragraphs)
 })
 test('planned native visual stays in the template region, keeps artwork/font/color, and toggles with undo',async t=>{

@@ -1,5 +1,6 @@
+import {diagramToScene} from './deck-diagrams.mjs'
 // Shared schema 3 template contract and addressable slot filling.
-import {normalizeSceneSlide,SCENE_LIMITS} from './deck-model.mjs'
+import {normalizeSceneSlide,normalizeTextStyles,SCENE_LIMITS} from './deck-model.mjs'
 import {normalizeVariantDescription,validateDeckPlan} from './deck-generation.mjs'
 const clone=value=>JSON.parse(JSON.stringify(value))
 function fail(code,path,message){const e=new Error(`dsh-ppt: ${code} at ${path}: ${message}`);e.code=code;e.path=path;throw e}
@@ -7,6 +8,7 @@ const id=(x,p)=>{if(typeof x!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.
 export function normalizeSceneTemplate(input,{assets}={}){
  if(!input||input.schemaVersion!==3)fail('template-schema','schemaVersion','Expected schema 3')
  const out=clone(input)
+ if(out.style?.textStyles!==undefined)out.style.textStyles=normalizeTextStyles(out.style.textStyles)
  for(const key of Object.keys(out))if(!['schemaVersion','id','name','description','author','revision','createdAt','updatedAt','style','assetMap'].includes(key))fail('unknown-field',key,'Unknown scene template field')
  for(const key of Object.keys(out.style??{}))if(!['theme','pageSize','themeFonts','fonts','textStyles','brand','layouts'].includes(key))fail('unknown-field','style.'+key,'Unknown scene style field')
  if(out.style?.backgrounds||out.style?.layouts?.some(l=>Object.hasOwn(l,'textZones')||Object.hasOwn(l,'images')||Object.hasOwn(l,'background')))fail('mixed-template-layout','style.layouts','Scene templates cannot carry legacy layout fields')
@@ -63,13 +65,36 @@ export function fillSceneLayout(layout,values={}, {assets={},slideId='scene',lab
  }
  return {slide:normalizeSceneSlide({id:slideId,layout:'scene',designLayout:layout.id,label:label??layout.name,purpose:layout.purpose,...(layout.backgroundColor?{backgroundColor:layout.backgroundColor}:{}),...(layout.backgroundAssetId?{backgroundAssetId:layout.backgroundAssetId}:{}),elements},{assets}),diagnostics}
 }
+/** Replace exactly one addressed region; title, source and fixed artwork stay intact. */
+export function applySceneVisual(filled,layout,visual,{pageSize,textStyles,accent,background}={}){
+ const slot=layout.slots.find(s=>s.id===visual.slotId),target=filled.slide.elements.find(e=>e.id===slot?.elementId)
+ if(!target||target.type!=='text'||target.transform?.some((v,i)=>v!==[1,0,0,1,0,0][i])||layout.elements.some(e=>e.type==='group'&&e.children.includes(target.id)))fail('plan-visual-slot','visual.slotId','Visual representation requires an independent unrotated text slot')
+ const prototype=layout.elements.find(e=>e.id===slot.elementId)
+ const style={...prototype.textStyle,...prototype.paragraphs[0]?.runs.find(r=>r.style)?.style}
+ const generated=diagramToScene({diagram:visual.diagram},{pageSize,region:target.frame,textStyle:style,textStyles,accent,background})
+ const ids=new Map(generated.elements.map((e,n)=>[e.id,slot.elementId.slice(0,70)+'.visual.'+n]))
+ const elements=generated.elements.map(e=>({...e,id:ids.get(e.id),role:'content'}))
+ const original=filled.values?.[slot.id],hierarchy=(visual.diagram.kind==='kpi'&&textStyles?.title)||(visual.diagram.kind==='comparison'&&textStyles?.subtitle)
+ for(const e of elements)if(e.type==='text'&&(!hierarchy||Array.isArray(original)))e.paragraphs=e.paragraphs.map(p=>{const label=p.runs.map(r=>r.text??'').join(''),supplied=target.paragraphs.find(q=>q.runs.map(r=>r.text??'').join('')===label);return supplied?clone(supplied):p})
+ const at=filled.slide.elements.indexOf(target);filled.slide.elements.splice(at,1,...elements)
+ const originalText=target.paragraphs.map(p=>p.runs.map(r=>r.text??'').join('')).join('\n')
+ filled.slide.semanticSource={...generated.semanticSource,slotId:slot.id,elementIds:elements.map(e=>e.id),originalText,originalTextObject:Object.fromEntries(['paragraphs','textStyle','textFrame'].filter(k=>target[k]!==undefined).map(k=>[k,clone(target[k])]))}
+ return filled
+}
 /** Match stable slots only; preserve unmatched old content and report it. */
-export function remapSceneLayout(slide,from,to,{assets={}}={}){
- const values={},unmatched=[]
- for(const old of from.slots){const e=slide.elements.find(e=>e.slotId===old.id||e.id===old.elementId);if(!e)continue;const target=to.slots.find(s=>s.id===old.id&&s.type===old.type);if(target)values[target.id]=e.type==='text'?e.paragraphs:e.type==='image'?e.assetId:e[e.type];else unmatched.push(e)}
+export function remapSceneLayout(slide,from,to,{assets={},pageSize,textStyles,accent,background}={}){
+ const values={},unmatched=[],source=slide.semanticSource
+ const sourceSlot=source&&(from.slots.find(s=>s.id===source.slotId)??from.slots.find(s=>s.type==='text'&&source.elementIds.every(id=>id.startsWith(s.elementId.slice(0,70)+'.visual.'))))
+ const targetSlot=sourceSlot&&to.slots.find(s=>s.id===sourceSlot.id&&s.type==='text')
+ if(sourceSlot&&targetSlot)values[targetSlot.id]=source.originalTextObject?.paragraphs??source.originalText
+ else if(source)unmatched.push(...slide.elements.filter(e=>source.elementIds.includes(e.id)))
+ for(const old of from.slots){const e=slide.elements.find(e=>e.slotId===old.id||e.id===old.elementId);if(!e||old.id===sourceSlot?.id)continue;const target=to.slots.find(s=>s.id===old.id&&s.type===old.type);if(target)values[target.id]=e.type==='text'?e.paragraphs:e.type==='image'?e.assetId:e[e.type];else unmatched.push(e)}
  const filled=fillSceneLayout(to,values,{assets,slideId:slide.id,label:slide.label})
- const ids=new Set(filled.slide.elements.map(e=>e.id))
- for(const e of unmatched){const copy=clone(e);let suffix=1;while(ids.has(copy.id))copy.id=e.id+'-preserved-'+suffix++;ids.add(copy.id);delete copy.slotId;copy.support={mode:'lossy',reason:'Content preserved outside matched slots; review its placement'};filled.slide.elements.push(copy);filled.diagnostics.push({code:'unmapped-content-preserved',elementId:copy.id})}
+ if(sourceSlot&&targetSlot)applySceneVisual(Object.assign(filled,{values}),to,{slotId:targetSlot.id,diagram:source.diagram},{pageSize,textStyles:textStyles??source.textStyles,accent,background:to.backgroundColor??background})
+ if(slide.notes!==undefined)filled.slide.notes=slide.notes
+ const preserved=new Map(),ids=new Set(filled.slide.elements.map(e=>e.id))
+ for(const e of unmatched){const copy=clone(e);let suffix=1;while(ids.has(copy.id))copy.id=e.id+'-preserved-'+suffix++;ids.add(copy.id);preserved.set(e.id,copy.id);delete copy.slotId;copy.support={mode:'lossy',reason:'Content preserved outside matched slots; review its placement'};filled.slide.elements.push(copy);filled.diagnostics.push({code:'unmapped-content-preserved',elementId:copy.id})}
+ if(source&&!targetSlot)filled.slide.semanticSource={...clone(source),elementIds:source.elementIds.map(id=>preserved.get(id))}
  filled.slide=normalizeSceneSlide(filled.slide,{assets})
  return filled
 }

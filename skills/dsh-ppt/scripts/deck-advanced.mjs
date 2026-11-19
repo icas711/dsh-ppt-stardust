@@ -30,7 +30,7 @@ const clone = value => structuredClone(value)
 function abort(signal) { signal?.throwIfAborted() }
 function semanticRenderOptions(options){
   const theme=resolveTheme(options.theme||scenarios.find(s=>s.id===options.template)?.theme),body=options.style?.textStyles?.body??{},font=body.fontFamily||options.brand?.fontFamily||options.style?.themeFonts?.minorLatin||pptxFontName(theme.fonts.body)
-  return {pageSize:options.style?.pageSize,accent:options.brand?.primaryColor??theme.palette.accent,color:options.brand?.textColor??theme.palette.fg,background:options.brand?.backgroundColor??theme.palette.bg,textStyle:{fontFamily:font.trim(),...(font!==font.trim()?{sourceTypeface:font}:{}),...(body.size?{size:body.size}:{})}}
+  return {pageSize:options.style?.pageSize,textStyles:options.style?.textStyles,accent:options.brand?.primaryColor??theme.palette.accent,color:options.brand?.textColor??theme.palette.fg,background:options.brand?.backgroundColor??theme.palette.bg,textStyle:{fontFamily:font.trim(),...(font!==font.trim()?{sourceTypeface:font}:{}),...(body.size?{size:body.size}:{})}}
 }
 function fail(message) { throw new Error('dsh-ppt：' + message) }
 
@@ -943,7 +943,7 @@ export async function editDeck(options = {}) {
         const from=existing??{slots:slide.elements.filter(e=>e.role!=='decor'&&['text','image','table','chart'].includes(e.type)).map(e=>({id:e.slotId??'slot-'+e.id,elementId:e.id,type:e.type}))}
         const target=next.style.sceneLayouts.find(l=>l.id===(options.layoutMap?.[slide.id]??slide.designLayout))??(next.style.sceneLayouts.length===1?next.style.sceneLayouts[0]:undefined)
         if(!target)fail('Choose a target variant in layoutMap for slide '+slide.id)
-        return remapSceneLayout(slide,from,target,{assets:next.assets}).slide
+        return remapSceneLayout(slide,from,target,{...semanticRenderOptions(next),assets:next.assets}).slide
       })
     }
   }
