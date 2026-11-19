@@ -1,0 +1,239 @@
+{
+  "date": "2026-11-19",
+  "reviewCommit": "f7a7007",
+  "scope": "User-supplied DSH results; assessment only; no source code fixes or response rewriting",
+  "input": {
+    "archiveCount": 9,
+    "archiveMembers": 92,
+    "uniqueFiles": 50,
+    "caseCount": 10,
+    "installedPluginCommit": null,
+    "modelId": null,
+    "rawToolTraceAvailable": false,
+    "logs": "Model-authored markdown narratives, not raw host event traces",
+    "independence": "Limited: logs refer to shared memory and earlier case outputs"
+  },
+  "checks": {
+    "rawOfflinePassed": 8,
+    "rawOfflineTotal": 10,
+    "planNormalizationPassed": 10,
+    "manualSemanticReview": "Supplied facts, order, labels, dates, KPI values/units and chart associations retained; source ID metadata absent in two responses",
+    "nativeRenderer": "Microsoft PowerPoint",
+    "nativeVersion": "16.0",
+    "nativeOpenedDecks": 10,
+    "nativeReviewedSlides": 18,
+    "reviewedSuppliedPdfPages": 18,
+    "pageSizeEmu": {
+      "width": 9906000,
+      "height": 6858000
+    },
+    "lowContrastTextSlides": 16,
+    "affectedDecks": 9,
+    "textColor": "#242424",
+    "backgroundColor": "#070B14",
+    "contrastRatio": 1.2678852060512527,
+    "nativeChartsWithEmbeddedWorkbook": 2,
+    "chartTitleLegendAndDataLabelsPresent": false,
+    "chartDataPreserved": true,
+    "chartSeriesColor": "#4472C4",
+    "diagramAccentColor": "#7C3AED"
+  },
+  "evaluatorFalsePositive": {
+    "caseId": "cycle",
+    "code": "changed-semantics",
+    "reason": "Additional ordered:true is redundant for explicitly repeating cycle; does not change supplied stages or direction",
+    "rawResultPreserved": true
+  },
+  "localReproductions": {
+    "lowContrastQualityWarningCount": 0,
+    "templateGetRenderedText": "Title and empty outline; no variant/slot descriptions",
+    "validatePlanBranchExistsInCurrentCode": true,
+    "reportedValidatePlanUnavailableReproduced": false
+  },
+  "productAcceptance": "FAIL: low readability and incomplete tool-visible descriptions/diagnostics",
+  "cases": [
+    {
+      "caseId": "unordered",
+      "rawOfflinePassed": true,
+      "rawIssues": [],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": true,
+      "pptx": "unordered.pptx",
+      "sha256": "599435487b67712d5b726cdcf33dcbbec376b8fa04d14596da6b69cd236be7ac",
+      "slides": 1,
+      "nativeCharts": 0,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 1,
+      "structures": [
+        "cards"
+      ]
+    },
+    {
+      "caseId": "process",
+      "rawOfflinePassed": true,
+      "rawIssues": [],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": true,
+      "pptx": "process.pptx",
+      "sha256": "d62e134150ded4d2dccd40fa71dc4a433fb275c6ea136bdc92e0c49cea5fbd2b",
+      "slides": 1,
+      "nativeCharts": 0,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 1,
+      "structures": [
+        "process"
+      ]
+    },
+    {
+      "caseId": "timeline",
+      "rawOfflinePassed": true,
+      "rawIssues": [],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": true,
+      "pptx": "timeline.pptx",
+      "sha256": "afc3967fa7b06d7209e1982aa99d2ed11e163814da3329f01200435f5997a164",
+      "slides": 1,
+      "nativeCharts": 0,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 1,
+      "structures": [
+        "timeline"
+      ]
+    },
+    {
+      "caseId": "cycle",
+      "rawOfflinePassed": false,
+      "rawIssues": [
+        {
+          "code": "source-reference",
+          "message": "Use the supplied material ID and section order, without invented provenance"
+        },
+        {
+          "code": "changed-semantics",
+          "message": "Preserve supplied order, labels, dates, values, units, criteria and attribution"
+        }
+      ],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": false,
+      "pptx": "cycle.pptx",
+      "sha256": "8e7e88b013e69b196364371f7209b5bcc80d3711f88811fb386ee50dc4a419ee",
+      "slides": 1,
+      "nativeCharts": 0,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 1,
+      "structures": [
+        "cycle"
+      ]
+    },
+    {
+      "caseId": "comparison",
+      "rawOfflinePassed": true,
+      "rawIssues": [],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": true,
+      "pptx": "comparison.pptx",
+      "sha256": "83888d588a7857bfb8fde111a90d1a465763c53dc4cd10177186c1bc92d0f1e3",
+      "slides": 1,
+      "nativeCharts": 0,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 1,
+      "structures": [
+        "comparison"
+      ]
+    },
+    {
+      "caseId": "kpi",
+      "rawOfflinePassed": false,
+      "rawIssues": [
+        {
+          "code": "source-reference",
+          "message": "Use the supplied material ID and section order, without invented provenance"
+        }
+      ],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": false,
+      "pptx": "evaluation-kpi.pptx",
+      "sha256": "e2fa9c4d6f1837c31f4c8c8b9c0cdb708f12f0b1044edf3936f495a5706f6807",
+      "slides": 1,
+      "nativeCharts": 0,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 1,
+      "structures": [
+        "kpi"
+      ]
+    },
+    {
+      "caseId": "categories",
+      "rawOfflinePassed": true,
+      "rawIssues": [],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": true,
+      "pptx": "categories.pptx",
+      "sha256": "d72bdd20a2550631ff049053006a016aecef6523c847a71d2ae55db00ba15458",
+      "slides": 1,
+      "nativeCharts": 1,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 0,
+      "structures": [
+        "chart"
+      ]
+    },
+    {
+      "caseId": "quote",
+      "rawOfflinePassed": true,
+      "rawIssues": [],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": true,
+      "pptx": "quote.pptx",
+      "sha256": "5461519dc9164153ab0410f9b91d9f233496d5633c188607aa4a47d705c2ab80",
+      "slides": 1,
+      "nativeCharts": 0,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 1,
+      "structures": [
+        "quote"
+      ]
+    },
+    {
+      "caseId": "identifiers",
+      "rawOfflinePassed": true,
+      "rawIssues": [],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": true,
+      "pptx": "identifiers.pptx",
+      "sha256": "b1a48b07e7869b559aeb8946c11138382c2792ddac78372197aad7010aa15f17",
+      "slides": 1,
+      "nativeCharts": 0,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 1,
+      "structures": [
+        "list"
+      ]
+    },
+    {
+      "caseId": "mixed-deck",
+      "rawOfflinePassed": true,
+      "rawIssues": [],
+      "manualSemanticReview": "preserved",
+      "sourceIdPresent": true,
+      "pptx": "mixed-deck.pptx",
+      "sha256": "e75ee78251fb5456850f58b3fa63c34922df619ced3fb77a40a9192ade5e9e66",
+      "slides": 9,
+      "nativeCharts": 1,
+      "rasterPictures": 0,
+      "lowContrastTextSlides": 8,
+      "structures": [
+        "list",
+        "process",
+        "timeline",
+        "cycle",
+        "comparison",
+        "kpi",
+        "chart",
+        "quote",
+        "list"
+      ]
+    }
+  ],
+  "artifacts": "Local .test-output/dsh-live-evaluation-2026-11-19; user originals unchanged"
+}
