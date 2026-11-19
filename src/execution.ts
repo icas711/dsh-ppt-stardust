@@ -1,4 +1,5 @@
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
 import type { ResolvedPptConfig } from './config.js'
 import type { DeckEngine, PptCreateArgs, PptThemesResult } from './types.js'
 import { PptTemplateStore } from './templates.js'
@@ -7,7 +8,7 @@ import { resolveToolIdentity, type CallerIdentity, type WebAuthLike } from './id
 /** The Harness execution fields used by this plugin; optional for direct callers. */
 export interface PptExecution {
   readonly signal?: AbortSignal
-  readonly agent?: { readonly session: { readonly header: { readonly cwd?: string }; requestContext?(): any; requestHeader?(): any } }
+  readonly agent?: { readonly session: { readonly header: { readonly cwd?: string; readonly id?: string; readonly owner?: string }; requestContext?(): any; requestHeader?(): any } }
 }
 
 export interface ExecutorOptions {
@@ -32,6 +33,20 @@ export function getEngine(): Promise<DeckEngine> {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+}
+
+/** Trusted host metadata only; arguments cannot select another session's namespace. */
+export function executionScope(exec?: PptExecution): string | undefined {
+  const header = exec?.agent?.session.header
+  if (typeof header?.id !== 'string' || !header.id.trim()) return undefined
+  return createHash('sha256').update(JSON.stringify([header.owner ?? null, header.id])).digest('hex')
+}
+
+function deliveryDirectory(cwd: string, requested: string | undefined, exec?: PptExecution): string {
+  const base = resolve(cwd, requested || '.')
+  const scope = executionScope(exec)
+  // An explicitly selected folder remains an intentional export destination.
+  return scope && base === resolve(cwd) ? join(base, 'dsh-ppt', 'session-' + scope) : base
 }
 
 /** Admins may pass scope: 'public'; everyone else lands in their own space. */
@@ -72,7 +87,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         const cwd = exec?.agent?.session.header.cwd ?? process.cwd()
         const requested = typeof args.outputDir === 'string' && args.outputDir.trim() !== '' ? args.outputDir.trim() : config.outputDir || '.'
         const preview = engine.buildThemePreview({
-          outputDir: resolve(cwd, requested),
+          outputDir: deliveryDirectory(cwd, requested, exec),
           lang,
           overwrite: args.overwrite === true,
         })
@@ -128,7 +143,8 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         theme: templateApply.theme ?? (typeof args.theme === 'string' && args.theme.trim() !== '' ? args.theme.trim() : (config.defaultTheme || undefined)),
         lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || undefined),
         motion: args.motion,
-        outputDir: resolve(cwd, outputDir || '.'),
+        outputDir: deliveryDirectory(cwd, outputDir, exec),
+        cacheScope: executionScope(exec),
         fileName: typeof args.fileName === 'string' && args.fileName.trim() !== '' ? args.fileName.trim() : undefined,
         overwrite: args.overwrite === true,
         internalProject: true,
@@ -226,7 +242,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         case 'export': {
           if (!key) throw new Error('dsh-ppt：нужен templateId')
           const outDir = typeof args.outputDir === 'string' && args.outputDir.trim() !== '' ? args.outputDir.trim() : '.'
-          const written = await needStore().export(key, resolve(cwd, outDir), identity)
+          const written = await needStore().export(key, deliveryDirectory(cwd, outDir, exec), identity)
           return { ok: true, path: written.path, bytes: written.bytes }
         }
         case 'import': {
@@ -294,7 +310,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       exec?.signal?.throwIfAborted()
       const engine = await loadEngine()
       exec?.signal?.throwIfAborted()
-      return engine.renderDeck({ ...asRecord(rawArgs), outputDir: undefined, cwd: exec?.agent?.session.header.cwd ?? process.cwd(), signal: exec?.signal })
+      return engine.renderDeck({ ...asRecord(rawArgs), outputDir: undefined, cacheScope: executionScope(exec), cwd: exec?.agent?.session.header.cwd ?? process.cwd(), signal: exec?.signal })
     },
     async data(rawArgs: unknown, exec?: PptExecution) {
       exec?.signal?.throwIfAborted()

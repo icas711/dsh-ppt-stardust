@@ -595,7 +595,7 @@ async function finishDelivery(manifest, paths, signal, render = renderDeck) {
   if (!manifest.delivery) return value
   delete value.pdfWarning
   try {
-    const rendered = await render({ pptxPath: paths.pptx, format: 'pdf', signal })
+    const rendered = await render({ pptxPath: paths.pptx, format: 'pdf', signal, cacheScope: manifest.delivery.cacheScope })
     abort(signal)
     if (!rendered.ok || !rendered.pdfPath) throw new Error([rendered.message, rendered.installationHint].filter(Boolean).join('\n') || 'PDF renderer unavailable')
     withLock(paths.json, () => {
@@ -727,7 +727,7 @@ export async function buildDeckAsync(options = {}) {
   if (options.internalProject === true) {
     const directory = join(pluginStorageDir(), 'projects', manifest.deckId)
     mkdirSync(directory, { recursive: true, mode: 0o700 })
-    manifest.delivery = { base: resolve(normalized.outputDir, file) }
+    manifest.delivery = { base: resolve(normalized.outputDir, file), ...(options.cacheScope ? {cacheScope: options.cacheScope} : {}) }
     paths = projectPaths(join(directory, file + '.json'), manifest)
   }
   withLock(paths.json, () => { abort(options.signal); commit(paths, data) })
@@ -799,7 +799,7 @@ async function saveRevision(state, next, signal, saveAs = false, preserveUndo = 
       const directory = next.delivery ? dirname(paths.html) : dirname(state.path)
       const file = resolveDeckFileName(directory, basename(paths.html, '.html') + '-dsh', false)
       if (next.delivery) {
-        next.delivery = { base: resolve(directory, file) }
+        next.delivery = { ...next.delivery, base: resolve(directory, file) }
         const projectDir = dirname(state.path)
         mkdirSync(projectDir, { recursive: true, mode: 0o700 })
         paths = projectPaths(join(projectDir, file + '.json'), next)

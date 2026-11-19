@@ -9,6 +9,8 @@ export interface PptExecution {
         readonly session: {
             readonly header: {
                 readonly cwd?: string;
+                readonly id?: string;
+                readonly owner?: string;
             };
             requestContext?(): any;
             requestHeader?(): any;
@@ -22,6 +24,8 @@ export interface ExecutorOptions {
     webAuth?: WebAuthLike;
 }
 export declare function getEngine(): Promise<DeckEngine>;
+/** Trusted host metadata only; arguments cannot select another session's namespace. */
+export declare function executionScope(exec?: PptExecution): string | undefined;
 /** Shared template implementation from the skill scripts. */
 export declare function loadTemplatesModule(): Promise<Record<string, any>>;
 /** Build executors with a shared engine loader; resolve paths separately for each call. */

@@ -378,7 +378,7 @@ export class PptWorkbench {
       return { ...await this.view(digest(result.jsonPath), identity), originalId: entry.id }
     }
     if (body.operation === 'render') {
-      const result = await engine.renderDeck({ pptxPath: files.pptx, format: 'png', signal })
+      const result = await engine.renderDeck({ pptxPath: files.pptx, format: 'png', signal, cacheScope: manifest.delivery?.cacheScope })
       if (result.ok) this.renders.set(entry.id, { revision: manifest.revision, pngPaths: result.pngPaths ?? [], pngHashes: (result.pngPaths ?? []).map(path => digest(ordinaryFile(path))), missingFonts: result.missingFonts, sourceSha256: result.sourceSha256! })
       const view = await this.view(entry.id, identity)
       if (result.ok && !view.project.render) throw new Error('项目已被修改，请重新渲染')

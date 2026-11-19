@@ -264,7 +264,7 @@ export function buildPptTools(config: ResolvedPptConfig, options: ExecutorOption
       parameters: compileParameters({
         lang: { type: 'string', description: 'Theme description language: zh (default), en, or bilingual.' },
         preview: { type: 'boolean', description: 'Write a theme gallery HTML and one SVG palette card per theme into outputDir. Default false (list only).' },
-        outputDir: { type: 'string', description: 'Directory for preview files when preview is true. Default: session working directory (or the plugin outputDir config).' },
+        outputDir: { type: 'string', description: 'Directory for preview files when preview is true. Default: a session-specific subdirectory of the working directory. An explicit separate directory or plugin outputDir config is preserved.' },
         overwrite: { type: 'boolean', description: 'Overwrite existing preview files instead of adding a numeric suffix. Default false.' },
       }),
       output: {
@@ -292,7 +292,7 @@ export function buildPptTools(config: ResolvedPptConfig, options: ExecutorOption
         style: {type:'object',properties:{pageSize:{type:'object',properties:{width:{type:'integer'},height:{type:'integer'}},required:['width','height']}},additionalProperties:false,description:'Original physical slide size in EMU. Preserve print and screen formats.'},
         brand: { type: 'object', properties: brandProperties, additionalProperties: false, description: 'Shared brand: #RRGGBB primary/background/text colors, fontFamily, logo and footer. Applied to HTML and PPTX. A templateId brand is applied on top unless overridden here.' },
         dataModel: {type:'object',properties:{schemaVersion:{type:'integer',enum:[1]},sources:{type:'array',items:{type:'object',properties:sourceProperties,required:['id']}},metrics:{type:'array',items:{type:'object',properties:metricProperties,required:['id','kind']}}},additionalProperties:false,description:'Optional explicit lineage and what-if model. Use with structured slides containing {{metricId}} in text/tables or an exact token as chart values. Source facts reference a real cell or text line; assumptions require value/min/max/step. Formulas compute derived metrics. HTML offers live sliders; PPTX includes confirmed static values, formulas and assumptions in speaker notes. Leave absent for ordinary finished decks.'},
-        outputDir: { type: 'string', description: 'Directory to write the files into. Default: session working directory (or the plugin outputDir config).' },
+        outputDir: { type: 'string', description: 'Directory to write the files into. Default: a session-specific subdirectory of the working directory. An explicit separate directory or plugin outputDir config is preserved.' },
         fileName: { type: 'string', description: 'Base file name for HTML/PDF/PPTX deliverables. Default: sanitized deck title.' },
         overwrite: { type: 'boolean', description: 'Replace an existing same-name HTML/PPTX/JSON trio. Default false: choose a unique numeric suffix instead.' },
       }),
@@ -328,7 +328,7 @@ export function buildPptTools(config: ResolvedPptConfig, options: ExecutorOption
         assets: { type: 'object', additionalProperties: true, description: 'Assets for save: name → local path / data URI.' },
         scope: { type: 'string', enum: ['user', 'public'], description: 'Target scope for save/import; public requires admin.' },
         owner: { type: 'string', description: 'Admin only: publish a named user\'s own template (their login).' },
-        outputDir: { type: 'string', description: 'Directory for export (default: session cwd).' },
+        outputDir: { type: 'string', description: 'Directory for export (default: session-specific subdirectory).' },
         samples: { type: 'boolean', description: 'create-from-project: include up to 3 sample slides; default true.' },
         expectedRevision: { type: 'integer', description: 'apply-to-project: expected deck revision.' },
         layoutMap:{type:'object',additionalProperties:true,description:'Schema 3 restyle: source slide ID → chosen target layout ID. Required when multiple target variants cannot be matched by ID.'},

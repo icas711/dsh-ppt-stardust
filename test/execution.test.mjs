@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { createPptExecutors } from '../lib/execution.js'
+import { executionScope, createPptExecutors } from '../lib/execution.js'
 import { resolvePptConfig } from '../lib/config.js'
 
 const args = { title: 'Session deck', content: '# Session deck\n- one' }
@@ -78,4 +78,21 @@ test('注册工具将 Harness execution 原样传给执行层', async () => {
   for (const definition of definitions) {
     await assert.rejects(definition.execute(args, { signal: controller.signal }), /registered cancellation/)
   }
+})
+
+
+test('same workspace sessions have distinct stable default delivery and trusted render scopes', async () => {
+  const cwd = resolve('.test-output/shared-session-workspace')
+  const tools = createPptExecutors(resolvePptConfig({}), async () => ({ buildDeck: o => o, renderDeck: o => o }))
+  const session = (id, owner = 'alice') => ({agent:{session:{header:{cwd,id,owner}}}})
+  const a = session('one'), b = session('two')
+  const [one,two] = await Promise.all([tools.create(args,a), tools.create({...args,outputDir:cwd},b)])
+  assert.notEqual(one.outputDir,two.outputDir)
+  assert.equal(one.outputDir,join(cwd,'dsh-ppt','session-'+executionScope(a)))
+  assert.equal((await tools.create(args,session('one'))).outputDir,one.outputDir)
+  assert.notEqual(executionScope(session('one','bob')),executionScope(a))
+  assert.equal((await tools.create({...args,outputDir:'chosen'},a)).outputDir,join(cwd,'chosen'))
+  assert.equal((await tools.render({pptxPath:'a.pptx',cacheScope:executionScope(b),outputDir:cwd},a)).cacheScope,executionScope(a))
+  assert.equal((await tools.render({pptxPath:'b.pptx'},b)).cacheScope,two.cacheScope)
+  assert.match(executionScope(session('../../outside')),/^[a-f0-9]{64}$/)
 })

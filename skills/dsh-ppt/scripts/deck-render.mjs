@@ -179,7 +179,7 @@ export async function renderDeck(options = {}, loadKit = loadRenderer) {
   const operationSignal = options.signal ? AbortSignal.any([options.signal, deadline.signal]) : deadline.signal
   try {
     abort(operationSignal)
-    root = reserveDirectory(requestedOutput ?? reserveRenderCache())
+    root = reserveDirectory(requestedOutput ?? reserveRenderCache(options.cacheScope))
     staging = join(root, `.partial-${randomUUID()}`)
     mkdirSync(staging)
     const snapshot = join(staging, 'source.pptx')

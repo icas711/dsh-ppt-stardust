@@ -134,3 +134,44 @@ test('receipt validation and preview access refresh cache use, and starting a re
   assert.equal(existsSync(created.jsonPath), true)
   assert.equal(existsSync(created.pptxPath), true)
 })
+
+
+test('two sessions in the same cwd keep final files, auto-PDF caches and ZIPs separate', async t => {
+  const f=fixture(t)
+  const {createPptExecutors,executionScope}=await import('../lib/execution.js')
+  const {resolvePptConfig}=await import('../lib/config.js')
+  const tools=createPptExecutors(resolvePptConfig({}),async()=>({...engine,
+    buildDeckAsync: o=>buildDeckAsync({...o,renderPdf:r=>renderDeck(r,fakeKit)}),
+    renderDeck:o=>renderDeck(o,fakeKit)}))
+  const session=id=>({agent:{session:{header:{cwd:f.outputDir,id,owner:'alice'}}}})
+  const sessions=[session('a'),session('b')]
+  const results=await Promise.all(sessions.map(exec=>tools.create({title:'Same',content:'# Same',fileName:'same'},exec)))
+  for(let i=0;i<results.length;i++) {
+    const r=results[i],scope=executionScope(sessions[i])
+    assert.equal(r.pdfWarning,undefined)
+    assert.equal(r.outputDir,join(f.outputDir,'dsh-ppt','session-'+scope))
+    assert.deepEqual(readdirSync(r.outputDir).sort(),['same.html','same.pdf','same.pptx'])
+    const manifest=JSON.parse(readFileSync(r.jsonPath,'utf8'))
+    assert.equal(manifest.delivery.cacheScope,scope)
+    assert.equal(readdirSync(renderCacheDir(scope)).length,1)
+    const rendered=await tools.render({pptxPath:r.pptxPath,format:'both'},sessions[i])
+    assert.ok(rendered.receiptPath.startsWith(renderCacheDir(scope)))
+    assert.equal(readRenderReceipt(r.pptxPath,rendered.receiptPath).ok,true)
+    const wb=new PptWorkbench({catalogPath:join(f.root,'catalog-'+i+'.jsonl')})
+    await wb.remember(r,{})
+    const id=(await wb.action({operation:'list'})).projects[0].id
+    const zip=await wb.fetchDownload(new Request('http://local'+PPT_DOWNLOAD_ROUTE+'?id='+id+'&kind=bundle&revision=0'))
+    const entries=unzipSync(new Uint8Array(await zip.arrayBuffer()))
+    assert.deepEqual(Object.keys(entries).sort(),['same.html','same.pdf','same.pptx'])
+    assert.deepEqual(Buffer.from(entries['same.pptx']),readFileSync(r.pptxPath))
+  }
+  assert.notEqual(results[0].pptxPath,results[1].pptxPath)
+  const a=dirname(reserveRenderCache(executionScope(sessions[0])))
+  const b=dirname(reserveRenderCache(executionScope(sessions[1])))
+  const old=new Date(Date.now()-RENDER_RETENTION_MS-1000)
+  utimesSync(join(a,'.last-used'),old,old)
+  cleanupRenderCache()
+  assert.equal(existsSync(a),false)
+  assert.equal(existsSync(b),true)
+  assert.throws(()=>reserveRenderCache('../../escape'),/Invalid render cache scope/)
+})
