@@ -2,6 +2,12 @@
   "date": "2026-11-19",
   "scope": "Scene implementation and visual acceptance; private source content is excluded",
   "threshold": 0.999,
+  "releasePolicy": {
+    "workingSourceExactCopyIsReleaseGate": false,
+    "supportedSyntheticStrictSSIMGate": true,
+    "productAcceptance": "Separate scenario-based checks of content, data, readability, overflow, template styling, slots and editability; not established by this historical benchmark",
+    "historicalMeasurementsUnchanged": true
+  },
   "localPlatform": "Windows; native Microsoft PowerPoint and pinned LibreOffice WASM",
   "checks": {
     "unitTests": 411,
