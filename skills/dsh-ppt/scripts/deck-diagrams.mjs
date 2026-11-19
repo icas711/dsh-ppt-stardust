@@ -1,5 +1,6 @@
 import {normalizeSceneSlide} from './deck-model.mjs'
 import {normalizeSceneChart} from './deck-structured.mjs'
+import {semanticChartDesign} from './deck-chart-design.mjs'
 import {normalizePageSize} from './deck-page.mjs'
 import {validateSemanticDiagram,semanticListLines} from './deck-semantic.mjs'
 import {transformedBounds} from './deck-geometry.mjs'
@@ -14,7 +15,8 @@ export function diagramToScene(input,{pageSize,accent='#2864B4',color='#202020',
  const finish=()=>normalizeSceneSlide({layout:'scene',label:input.title??'',notes:input.notes??'',elements,...(source?{semanticSource:{diagram:JSON.parse(JSON.stringify(source)),elementIds:elements.filter(e=>e.id!=='diagram-title').map(e=>e.id)}}:{})})
  if(input.title)elements.push(text('diagram-title',input.title,margin,margin,w,size.height*.12,true))
  if(d.kind==='chart'){
-  elements.push({id:'diagram-chart',type:'chart',frame:{x:margin,y:top,w,h},chart:normalizeSceneChart(d.chart)})
+  const chart=d.version===2?semanticChartDesign(d.chart,{accent,background,color:textStyle?.color??color,fontFamily:textStyle?.fontFamily??fontFamily,size:textStyle?.size??18}):d.chart
+  elements.push({id:'diagram-chart',type:'chart',frame:{x:margin,y:top,w,h},chart:normalizeSceneChart(chart)})
   return finish()
  }
  if(!Array.isArray(d.items)||!d.items.length||d.items.length>12)fail('Expected 1–12 items; split larger diagrams into several slides')
