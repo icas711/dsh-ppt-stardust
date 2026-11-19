@@ -99,6 +99,7 @@ function tplDraftFrom(manifest) {
     const style = manifest?.style ?? {}, brand = style.brand ?? {}, backgrounds = {};
     for (const item of style.backgrounds ?? []) backgrounds[item.layoutType] = { image: item.image, fit: item.fit || 'cover' };
     return {
+        schemaVersion:manifest?.schemaVersion,assetMap:tplClone(manifest?.assetMap??{}),
         id: manifest?.id ?? '', name: manifest?.name ?? '', description: manifest?.description ?? '', theme: style.theme ?? '',
         primaryColor: brand.primaryColor ?? '', backgroundColor: brand.backgroundColor ?? '', textColor: brand.textColor ?? '',
         fontFamily: brand.fontFamily ?? '', brandName: brand.name ?? '', footer: brand.footer ?? '', logo: brand.logo ?? '',
@@ -141,6 +142,7 @@ function tplCleanSlide(slide) {
 
 // Черновик формы → манифест schemaVersion 1 (пустые поля не попадают в файл).
 function tplBuild(draft, base) {
+    if (draft.schemaVersion === 3) return DshDeckModel.normalizeSceneTemplate({schemaVersion:3,id:draft.id,name:draft.name.trim(),description:draft.description,revision:base?.revision??1,...(base?.author?{author:base.author}:{}),...(base?.createdAt?{createdAt:base.createdAt}:{}),assetMap:draft.assetMap,style:{theme:draft.theme,pageSize:draft.pageSize,layouts:tplClone(draft.layouts)}});
     const brand = {};
     for (const key of ['primaryColor', 'backgroundColor', 'textColor']) if (draft[key]) brand[key] = draft[key];
     if (draft.fontFamily.trim()) brand.fontFamily = draft.fontFamily.trim();
@@ -174,6 +176,7 @@ function tplBuild(draft, base) {
 // Поля, без которых превью не строится (id и название сервер для превью подставит сам).
 function tplStyleProblem(draft) {
     try {
+        if (draft.schemaVersion === 3) {tplBuild(draft);return '';}
         for (const [index, layout] of (draft.layouts ?? []).entries()) {
             if (layout.textZones !== undefined) DshDeckModel.normalizeTextZones(layout.textZones, `style.layouts[${index}].textZones`);
         }
@@ -269,6 +272,12 @@ function TplLayoutsEditor({ draft, images, disabled, set, pickImage, error }) {
     const layouts = draft.layouts, current = layouts[Math.min(index, layouts.length - 1)];
     const at = Math.min(index, Math.max(0, layouts.length - 1));
     const patch = (change) => set({ layouts: layouts.map((layout, i) => i === at ? { ...layout, ...change } : layout) });
+    if (draft.schemaVersion === 3) return h('div',null,
+      h('select',{value:at,disabled,onChange:e=>setIndex(Number(e.target.value))},layouts.map((layout,i)=>h('option',{key:layout.id,value:i},(layout.familyId??'')+' / '+layout.name))),
+      current?h(PptSceneObjects,{key:current.id,elements:current.elements,assets:Object.fromEntries(Object.entries(draft.assetMap??{}).map(([id,a])=>[id,a])),disabled,onChange:elements=>{
+        const slots=elements.filter(e=>e.role!=='decor'&&['text','image','chart','table'].includes(e.type)).map(e=>current.slots.find(s=>s.elementId===e.id)??{id:'slot-'+e.id,elementId:e.id,type:e.type,name:e.name??e.id,required:true});
+        patch({elements,slots});
+      }}):null);
     const patchImage = (i, change) => patch({ images: current.images.map((image, k) => k === i ? { ...image, ...change } : image) });
     const uid = () => Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
     const add = () => {

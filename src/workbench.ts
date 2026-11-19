@@ -499,7 +499,7 @@ export class PptWorkbench {
         name: String(query.get('name') ?? '').trim(),
         description: query.get('description') ?? undefined,
         lang: query.get('lang') ?? 'ru',
-        author: identity.login ?? 'local',
+        author: identity.login ?? 'local',model:'scene',
       })
       request.signal.throwIfAborted()
       const bound = await store.withLibraryFonts(extracted.manifest, extracted.assets, identity)

@@ -13,6 +13,7 @@ export type VisualContext = {
 };
 type Action = {
     slideId: string;
+    elementId?: string;
     type: string;
     value?: number;
 };

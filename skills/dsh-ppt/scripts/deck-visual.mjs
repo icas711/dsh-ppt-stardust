@@ -44,13 +44,29 @@ export function applyVisualActions(manifest, actions) {
   if (!Array.isArray(actions) || !actions.length || actions.length > 48) throw new Error('请选择有效的排版修改 / Invalid formatting actions')
   const next = structuredClone(manifest), seen = new Set()
   for (const a of actions) {
-    if (!a || typeof a !== 'object' || Object.keys(a).some(k => !['slideId', 'type', 'value'].includes(k))) throw new Error('排版操作包含无效字段 / Invalid formatting action fields')
+    if (!a || typeof a !== 'object' || Object.keys(a).some(k => !['slideId', 'elementId', 'type', 'value'].includes(k))) throw new Error('排版操作包含无效字段 / Invalid formatting action fields')
     const index = next.slides.findIndex(s => s.id === a.slideId), original = manifest.slides.find(s => s.id === a.slideId)
     if (index < 0 || !original) throw new Error('排版操作关联的页面不存在 / Unknown slide')
-    const key = a.slideId + ':' + (a.type?.startsWith('split-') ? 'split' : a.type)
+    const key = a.slideId + ':' + (a.elementId??'') + ':' + (a.type?.startsWith('split-') ? 'split' : a.type)
     if (seen.has(key)) throw new Error('同一页的排版操作重复 / Duplicate formatting action')
     seen.add(key)
     const slide = next.slides[index]
+    if(slide.layout==='scene'){
+      const e=slide.elements.find(e=>e.id===a.elementId)
+      if(!e)throw new Error('Scene repair requires a valid elementId')
+      if(a.type==='element-text-size'&&e.type==='text'){
+        if(!Number.isInteger(a.value)||a.value<16||a.value>60)throw new Error('Scene text size must be 16–60 pt')
+        e.textStyle={...e.textStyle,size:a.value}
+        for(const p of e.paragraphs)for(const r of p.runs)if(!r.break)r.style={...r.style,size:a.value}
+      }else if(a.type==='chart-label-size'&&e.type==='chart'){
+        if(!Number.isInteger(a.value)||a.value<14||a.value>24)throw new Error('Chart labels must be 14–24 pt')
+        for(const key of ['categoryAxisLabelStyle','valueAxisLabelStyle'])e.chart[key]={...e.chart[key],sizePt:a.value}
+        e.chart.dataLabels={...e.chart.dataLabels,textStyle:{...e.chart.dataLabels?.textStyle,sizePt:a.value}}
+      }else if(a.type==='chart-horizontal'&&e.type==='chart'&&e.chart.kind==='column'&&a.value===undefined)e.chart.kind='bar'
+      else if(a.type==='image-contain'&&e.type==='image'&&a.value===undefined){e.fit='contain';delete e.crop}
+      else throw new Error('Unsupported repair for this scene object')
+      continue
+    }
     const field = { 'title-size': 'titleSize', 'body-size': 'bodySize', 'chart-label-size': 'chartLabelSize' }[a.type]
     if (field) {
       if (field === 'chartLabelSize' && !slide.chart) throw new Error('本页没有图表 / Slide has no chart')

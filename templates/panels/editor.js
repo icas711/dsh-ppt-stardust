@@ -8,7 +8,7 @@ function PptPages({ project, selected, busy, imagePending, onChoose, onDuplicate
     h('h3', null, pptText('幻灯片', 'Slides')),
     h('div', { className: 'ppt-page-buttons' }, project.slides.map((row, index) => h('button', {
       type: 'button', key: row.id, 'aria-current': row.id === selected ? 'true' : undefined, disabled: busy || imagePending, onClick: () => onChoose(row),
-    }, h('span', { className: 'ppt-page-number' }, String(index + 1).padStart(2, '0')), h('span', null, row.title || t('未命名页'))))),
+    }, h('span', { className: 'ppt-page-number' }, String(index + 1).padStart(2, '0')), h('span', null, row.label || row.title || t('未命名页'))))),
     h(W.Button, { icon: 'copy', className: 'ppt-duplicate', disabled: busy || dirty || imagePending || dataDirty || project.slides.length >= 120, onClick: onDuplicate }, t('复制本页')));
 }
 

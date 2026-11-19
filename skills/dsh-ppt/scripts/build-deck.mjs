@@ -177,7 +177,7 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   if (templateOps > 1) throw new Error('dsh-ppt CLI：--create-template-from-pptx / --create-template-from-deck / --restyle / --export-template 只能选择一项')
   if (args.fromPptx || args.fromDeck) {
     if (!args.saveTemplate) throw new Error('dsh-ppt CLI：--save-template 需要一个输出目录')
-    const base = { templateId: args.templateId ?? '', name: args.templateName ?? '', lang: args.lang, author: 'cli' }
+    const base = { templateId: args.templateId ?? '', name: args.templateName ?? '', lang: args.lang, author: 'cli',model:'scene' }
     const extracted = args.fromPptx
       ? await deckTemplates.templateFromPptx(resolvePath(args.fromPptx), base)
       : deckTemplates.templateFromDeckManifest(JSON.parse(readFileSync(resolvePath(args.fromDeck), 'utf8')), { ...base, lang: args.lang })

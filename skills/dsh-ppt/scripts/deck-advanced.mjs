@@ -673,7 +673,7 @@ export async function buildDeckAsync(options = {}) {
     title: normalized.title, theme: normalized.theme.id, language: normalized.language.id, motion: normalized.motion,
     ...(scenario ? { template: scenario.id } : {}), ...(lineage ? { template: { id: lineage.id, revision: lineage.revision } } : {}),
     ...(brand ? { brand } : {}), ...(style ? { style } : {}), ...(dataModel ? {dataModel} : {}), assets, history: [],
-    slides: embedSlides(normalized.deck.slides, assets, cwd).map(s => ({ ...s, id: randomUUID() })) }
+    slides: embedSlides(normalized.deck.slides, assets, cwd).map(s => ({ ...s, id: s.layout==='scene' ? s.id??randomUUID() : randomUUID() })) }
   const data = await generate(manifest, options.signal)
   mkdirSync(normalized.outputDir, { recursive: true })
   // Resolve collisions after asynchronous rendering; an earlier call may have committed meanwhile.
@@ -864,8 +864,18 @@ export async function editDeck(options = {}) {
     duplicate.has(slide.id) ? [slide, { ...clone(slide), id: randomUUID() }] : [slide])
   if (options.append !== undefined) {
     if (!Array.isArray(options.append) || options.append.length < 1 || options.append.length > 5) fail('append 需为 1-5 页')
-    validateRawSlides(options.append)
-    const added = next.slides[0].layout === 'scene' ? normalizeSceneSlides(options.append, {assets:next.assets}) : next.dataModel ? prepareDataSlides(options.append, next.dataModel, normalizeSlides, next.language) : normalizeSlides(options.append, 120, next.language)
+    validateRawSlides(expandDiagramSlides(options.append,{pageSize:next.style?.pageSize}))
+    let added
+    if(next.slides[0].layout==='scene'){
+      const expanded=expandDiagramSlides(options.append,{pageSize:next.style?.pageSize})
+      if(expanded.every(s=>s.layout==='scene'))added=normalizeSceneSlides(expanded,{assets:next.assets})
+      else{
+        if(expanded.some(s=>s.layout==='scene'))fail('Append cannot mix legacy slides and scenes')
+        const {legacySlidesToScenes}=await import('./deck-legacy-scene.mjs')
+        const adapted=await legacySlidesToScenes({...next,slides:normalizeSlides(expanded,120,next.language)},{theme:brandedTheme(next),language:resolveLanguage(next.language),renderPptx:exportPptx,signal:options.signal})
+        Object.assign(next.assets,adapted.assets);added=adapted.slides
+      }
+    }else added=next.dataModel?prepareDataSlides(options.append,next.dataModel,normalizeSlides,next.language):normalizeSlides(options.append,120,next.language)
     if (next.slides.length + added.length > 120) fail('工程页数超过 120')
     next.slides.push(...embedSlides(added, next.assets, resolve(options.cwd || '.')).map(slide => ({ ...slide, id: randomUUID() })))
   }

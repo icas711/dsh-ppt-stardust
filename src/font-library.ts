@@ -13,11 +13,17 @@ const hash = (text: string | Buffer): string => createHash('sha256').update(text
 export const fontKey = (face: { family: string; variant?: string }): string => face.family.toLowerCase() + ':' + (face.variant ?? 'regular')
 export function templateFontFamilies(manifest: Record<string, any>): Set<string> {
   const style = manifest.style ?? {}, families = new Set<string>()
-  const add = (name: unknown) => { if (typeof name === 'string' && name.trim()) families.add(name.trim().toLowerCase()) }
+  const add = (name: unknown) => { if (typeof name === 'string' && name.trim() && !name.startsWith('+')) families.add(name.trim().toLowerCase()) }
   add(style.brand?.fontFamily)
   for (const face of style.fonts ?? []) add(face.family)
   for (const styles of [style.textStyles, ...(style.layouts ?? []).map((layout: any) => layout.textStyles)]) {
     for (const value of Object.values(styles ?? {}) as any[]) add(value.fontFamily)
+  }
+  for(const name of Object.values(style.themeFonts??{})) add(name)
+  for(const layout of [...(style.layouts??[]),...(style.sceneLayouts??[])]) for(const e of layout.elements??[]) {
+    const texts=[e,...(e.table?.cells??[])]
+    for(const text of texts) {add(text.textStyle?.fontFamily);for(const p of text.paragraphs??[])for(const r of p.runs??[])add(r.style?.fontFamily)}
+    for(const value of [e.chart?.titleStyle,e.chart?.categoryAxisLabelStyle,e.chart?.valueAxisLabelStyle,e.chart?.legend?.textStyle,e.chart?.dataLabels?.textStyle])add(value?.font)
   }
   return families
 }

@@ -1,4 +1,4 @@
-function PptSceneObjects({elements,onChange,disabled,assets={}}){
+function PptSceneObjects({elements,onChange,disabled,assets={},label,notes,onMeta}){
  const [selected,setSelected]=React.useState(elements[0]?.id??'');
  const e=elements.find(e=>e.id===selected)??elements[0];
  const ru=languageOf()==='ru',L=(a,b)=>ru?a:b;
@@ -17,6 +17,7 @@ function PptSceneObjects({elements,onChange,disabled,assets={}}){
   return h('div',{key:pi},...runs,align);
  });
  return h('section',{className:'ppt-scene-objects'},h('h3',null,L('Объекты слайда','Slide objects')),
+  onMeta?h('div',null,input(L('Название слайда','Slide label'),label,value=>onMeta({label:value})),h('label',null,L('Заметки докладчика','Speaker notes'),h('textarea',{value:notes??'',disabled,onChange:event=>onMeta({notes:event.target.value})}))):null,
   h('select',{'aria-label':L('Объект','Object'),value:e?.id??'',disabled,onChange:event=>setSelected(event.target.value)},elements.map(item=>h('option',{key:item.id,value:item.id},(item.name??item.id)+' · '+item.type))),
   !e?null:h(React.Fragment,null,
    h('label',null,L('Назначение','Role'),h('select',{value:e.role??'content',disabled,onChange:event=>change({role:event.target.value})},h('option',{value:'content'},L('Контент','Content')),h('option',{value:'decor'},L('Оформление / логотип','Decoration / logo')))),

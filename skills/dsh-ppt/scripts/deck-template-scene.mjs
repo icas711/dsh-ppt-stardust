@@ -64,7 +64,7 @@ export function remapSceneLayout(slide,from,to,{assets={}}={}){
  for(const old of from.slots){const e=slide.elements.find(e=>e.slotId===old.id||e.id===old.elementId);if(!e)continue;const target=to.slots.find(s=>s.id===old.id&&s.type===old.type);if(target)values[target.id]=e.type==='text'?e.paragraphs:e.type==='image'?e.assetId:e[e.type];else unmatched.push(e)}
  const filled=fillSceneLayout(to,values,{assets,slideId:slide.id,label:slide.label})
  const ids=new Set(filled.slide.elements.map(e=>e.id))
- for(const e of unmatched){const copy=clone(e);let suffix=1;while(ids.has(copy.id))copy.id=e.id+'-preserved-'+suffix++;ids.add(copy.id);delete copy.slotId;filled.slide.elements.push(copy);filled.diagnostics.push({code:'unmapped-content-preserved',elementId:copy.id})}
+ for(const e of unmatched){const copy=clone(e);let suffix=1;while(ids.has(copy.id))copy.id=e.id+'-preserved-'+suffix++;ids.add(copy.id);delete copy.slotId;copy.support={mode:'lossy',reason:'Content preserved outside matched slots; review its placement'};filled.slide.elements.push(copy);filled.diagnostics.push({code:'unmapped-content-preserved',elementId:copy.id})}
  filled.slide=normalizeSceneSlide(filled.slide,{assets})
  return filled
 }

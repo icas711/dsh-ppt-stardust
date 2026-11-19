@@ -266,14 +266,14 @@ function layoutAssetNames(manifest) {
 export function summarizeTemplate(manifest) {
   const style = manifest.style ?? {}
   return {
-    id: manifest.id, name: manifest.name, description: manifest.description ?? '',
+    schemaVersion:manifest.schemaVersion,id: manifest.id, name: manifest.name, description: manifest.description ?? '',
     author: manifest.author ?? '', revision: manifest.revision,
     createdAt: manifest.createdAt, updatedAt: manifest.updatedAt,
     theme: style.theme ?? null,
     brand: style.brand ? Object.fromEntries(Object.entries(style.brand).filter(([k]) => k !== 'logo')) : null,
     hasLogo: Boolean(style.brand?.logo),
     backgrounds: (style.backgrounds ?? []).map(bg => ({ layoutType: bg.layoutType, fit: bg.fit })),
-    layouts: (style.layouts ?? []).map(layout => ({ id: layout.id, name: layout.name ?? layout.id, layoutType: layout.layoutType, imageCount: layout.images?.length ?? layout.elements?.filter(e => e.type === 'image').length ?? 0, hasBackground: Boolean(layout.background) })),
+    layouts: (style.layouts ?? []).map(layout => ({ id: layout.id, name: layout.name ?? layout.id, layoutType: layout.layoutType??layout.purpose, imageCount: layout.images?.length ?? layout.elements?.filter(e => e.type === 'image').length ?? 0, hasBackground: Boolean(layout.background) })),
     outlineCount: manifest.schemaVersion === 3 ? manifest.style.layouts.length : manifest.outline?.length ?? 0,
     sampleCount: manifest.samples?.length ?? 0,
     outlineTitles: (manifest.outline ?? []).map(s => s.title ?? '').slice(0, 12),
