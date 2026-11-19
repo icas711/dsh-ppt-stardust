@@ -1,8 +1,6 @@
 # Templates (Layouts)
 
-Templates are the only sanctioned visual source for a deck. The five built-in
-themes (swiss / velvet / data / soft / bold) are an engine fallback — never
-offer them, never pass `theme` to `ppt_create` when a `templateId` is used.
+Before every new deck, use `ask_user_question` and keep asking until the task is clear. Always confirm the template, even when supplied, and clarify content. With no installed templates, confirm visual style and use `brand` plus scene `slides`. If the question tool is unavailable or unanswered, stop before generation.
 
 ## Template keys
 
@@ -14,7 +12,9 @@ offer them, never pass `theme` to `ppt_create` when a `templateId` is used.
 
 ## Scene templates (schema 3)
 
-`get` returns variant descriptions and addressable slot IDs, roles, types, required flags, supported structures, hard capacity and heuristic estimates. Preserve page size, fonts, brand and fixed artwork. Compose `deckPlan`, call `validate-plan`, fix errors and review warnings, then pass the same plan to `ppt_create`. Use actual typed chart/table/image data and explicit version 2 semantics for visual structures. `generationPolicy.minSlides` only enables rhythm checks from that many content slides; one-slide decks need no override. Warnings about plan rhythm and layout quality are separate.
+Inspect `get` for page size, artwork, palette and typography. Normally pass `templateId` + scene `slides` with freely composed text, shapes, tables and charts. Set `purpose` to select a matching reference, or explicitly set an existing `designLayout`. The engine preserves fixed decor/backgrounds and discards sample content. The first text element inherits title defaults, later elements body defaults; explicit styles override defaults. Content slides use a content reference, not a cover reference. Two reference pages are enough for a complete deck.
+
+Slots and variant descriptions remain compatibility metadata. Use `deckPlan` → `validate-plan` or `templateSelections` only when the task explicitly requires fixed-slot filling. These are mutually exclusive with free scene slides. No additional variants or rhythm quotas are required for normal generation.
 
 ## Legacy templates (schema 1/2)
 
@@ -50,18 +50,10 @@ offer them, never pass `theme` to `ppt_create` when a `templateId` is used.
 
 ## Workflow
 
-1. `ppt_template { operation: "list" }` — enumerate installed templates.
-   Skip the choice if the user already selected a template. Otherwise ask which one to use; when the choice is delegated or the question tool is unavailable, choose from the actual returned list and state the choice. Never assume a particular builtin key exists. With an empty library, import a reference/bundle first.
-2. `ppt_create { title, templateId, content | slides }` — build with real
-   content in the template style. A `templateId` without content/slides
-   produces an **unfilled draft** (quality issue `template-unfilled`) — never
-   deliver it as final. Pass `templateSamples: false` to drop the sample
-   slides when you supply your own content.
-3. Fine-tuning: outline slides may set `layoutId` to pick a specific layout;
-   edit later with `ppt_edit` (`patch.layout`, `patch.layoutId`).
-4. Restyling an existing project (keeps content, swaps style, undoable):
-   `ppt_template { operation: "apply-to-project", deckPath, templateId }`;
-   add `saveAs: true` for a copy.
+1. List installed templates if needed, then call `ask_user_question` to confirm template/style and clarify content. Wait for answers, including when a template was already specified.
+2. Inspect the selected template with `get`; compose substantive content in its style. For schema 3 pass `templateId` + scene `slides`; do not generate placeholders or append sample pages.
+3. Check and render the result; inspect actual pages and correct layout issues. Report unresolved rendering limitations.
+4. Existing fixed-slot filling and `apply-to-project` remain available for compatible editing workflows.
 
 ## Cross-harness (no library)
 

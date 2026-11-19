@@ -121,6 +121,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
           deckPlan: args.deckPlan,
           generationPolicy:args.generationPolicy,
           assets:args.assets,
+          slides:hasSlides&&args.slides!.every(s=>s.layout==='scene')?args.slides:undefined,
           lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || 'zh'),
         })
         templateApply = {
@@ -134,12 +135,17 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         }
       }
       const explicitSlides = hasSlides ? args.slides : undefined
+      const sceneComposition = explicitSlides?.every(s => s.layout === 'scene')
+      const suppliedVisuals = explicitSlides?.some(s => s.layout === 'scene' || s.layout === 'diagram')
+      const resolvedSlides = sceneComposition
+        ? (templateApply.slides as typeof args.slides) ?? explicitSlides
+        : suppliedVisuals ? explicitSlides : (templateApply.slides as typeof args.slides) ?? explicitSlides
       const explicitContent = hasContent ? (typeof args.content === 'string' ? args.content : '') : ''
       return (engine.buildDeckAsync ?? engine.buildDeck)({
         title: args.title.trim(),
         content: explicitContent,
-        // Шаблонные страницы (каркас + образцы) приоритетнее пользовательских slides
-        slides: explicitSlides?.some(s => s.layout === 'scene' || s.layout === 'diagram') ? explicitSlides : (templateApply.slides as typeof args.slides) ?? explicitSlides,
+        // Composed scene slides already include the selected template's fixed artwork.
+        slides: resolvedSlides,
         theme: templateApply.theme ?? (typeof args.theme === 'string' && args.theme.trim() !== '' ? args.theme.trim() : (config.defaultTheme || undefined)),
         lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || undefined),
         motion: args.motion,

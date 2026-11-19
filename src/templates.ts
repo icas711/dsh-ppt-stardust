@@ -355,7 +355,7 @@ export class PptTemplateStore {
   }
 
   /** Create options for buildDeckAsync + lineage. */
-  async createOptions(key: string, identity: CallerIdentity, options: { title: string; includeSamples?: boolean; lang?: string; selections?: Array<{layoutId:string;values?:Record<string,unknown>}>;deckPlan?:Record<string,unknown>[];generationPolicy?:Record<string,number>;assets?:Record<string,unknown> }): Promise<{ create: Record<string, any>; lineage: { id: string; revision: number } }> {
+  async createOptions(key: string, identity: CallerIdentity, options: { title: string; includeSamples?: boolean; lang?: string; slides?: import('./types.js').PptSlideSpec[]; selections?: Array<{layoutId:string;values?:Record<string,unknown>}>;deckPlan?:Record<string,unknown>[];generationPolicy?:Record<string,number>;assets?:Record<string,unknown> }): Promise<{ create: Record<string, any>; lineage: { id: string; revision: number } }> {
     const m = await this.mod()
     const record = await this.get(key, identity)
     return m.templateCreateOptions(record.manifest, record.assets, options)

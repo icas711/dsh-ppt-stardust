@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto'
-import {normalizeSceneTemplate,applySceneVisual,fillSceneLayout,validateSceneTemplatePlan} from './deck-template-scene.mjs'
+import {normalizeSceneTemplate,applySceneVisual,fillSceneLayout,validateSceneTemplatePlan,composeSceneTemplateSlides} from './deck-template-scene.mjs'
 import {GENERATION_POLICY} from './deck-generation.mjs'
 import {variantSampleValues} from './deck-variant-editor.mjs'
 export function templatePlanReport(template,plan,policy){const manifest=validateTemplateManifest(template);if(manifest.schemaVersion!==3)fail('Plan validation requires schema 3');return validateSceneTemplatePlan(plan,manifest.style.layouts,{pageSize:manifest.style.pageSize,assets:Object.fromEntries(Object.entries(manifest.assetMap??{}).map(([id,a])=>[id,a])),policy:{...GENERATION_POLICY,...policy}})}
@@ -579,7 +579,7 @@ export function templateCreateOptions(template, assets, options = {}) {
   const samples = options.includeSamples === false ? [] : (manifest.samples ?? []).map(slide => withDesignLayout(applyVars(slide, vars)))
   const slides = [...outline, ...samples]
   if (!slides.length) fail('模板没有页面骨架（outline）也没有示例页（samples），无法创建演示文稿')
-  const create = { title, slides, ...(manifest.style?.theme ? { theme: manifest.style.theme } : {}) }
+  const create = { title, slides:options.slides??slides, ...(manifest.style?.theme ? { theme: manifest.style.theme } : {}) }
   const brandSource = manifest.style?.brand
   if (brandSource) {
     const brand = {}
@@ -952,12 +952,13 @@ function sceneTemplateAssets(manifest,assets){
 function sceneTemplateCreate(manifest,assets,options){
   const title=String(options.title??'').trim();if(!title)fail('Title is required')
   const bag={...sceneTemplateAssets(manifest,assets),...(options.assets??{})}
+  if(options.slides&&(options.deckPlan||options.selections))fail('slides, deckPlan and selections are mutually exclusive')
   if(options.deckPlan&&options.selections)fail('deckPlan and selections are mutually exclusive')
   const generationReport=options.deckPlan?validateSceneTemplatePlan(options.deckPlan,manifest.style.layouts,{assets:bag,pageSize:manifest.style.pageSize,policy:{...GENERATION_POLICY,...options.generationPolicy}}):undefined
   if(generationReport&&!generationReport.valid){const error=new Error('dsh-ppt: generation-plan-invalid: '+generationReport.diagnostics.filter(d=>d.severity==='error').map(d=>d.slideId+': '+d.message).join('; '));error.code='generation-plan-invalid';error.diagnostics=generationReport.diagnostics;throw error}
   const selections=options.deckPlan?.map(p=>({layoutId:p.variantId,values:p.values,id:p.id,label:p.intent.slice(0,1024),visual:p.visual}))??options.selections??manifest.style.layouts.map(l=>({layoutId:l.id,values:{}}))
   const diagnostics=[]
-  const slides=selections.map((selection,i)=>{
+  const slides=options.slides?composeSceneTemplateSlides(options.slides,manifest,bag):selections.map((selection,i)=>{
     const layout=manifest.style.layouts.find(l=>l.id===selection.layoutId);if(!layout)fail('Unknown layout '+selection.layoutId)
     const filled=fillSceneLayout(layout,selection.values??{},{assets:bag,slideId:selection.id??'slide-'+(i+1),label:selection.label})
     if(selection.visual){

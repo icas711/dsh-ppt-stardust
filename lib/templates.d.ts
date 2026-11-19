@@ -145,6 +145,7 @@ export declare class PptTemplateStore {
         title: string;
         includeSamples?: boolean;
         lang?: string;
+        slides?: import('./types.js').PptSlideSpec[];
         selections?: Array<{
             layoutId: string;
             values?: Record<string, unknown>;

@@ -5,6 +5,32 @@ import {normalizeVariantDescription,validateDeckPlan} from './deck-generation.mj
 const clone=value=>JSON.parse(JSON.stringify(value))
 function fail(code,path,message){const e=new Error(`dsh-ppt: ${code} at ${path}: ${message}`);e.code=code;e.path=path;throw e}
 const id=(x,p)=>{if(typeof x!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(x))fail('invalid-id',p,'Expected stable ID');return x}
+/** New content is composed freely; only artwork and typography come from the reference. */
+export function composeSceneTemplateSlides(slides,manifest,assets){
+ return slides.map((input,index)=>{
+  if(input.layout!=='scene')fail('composition-layout','slides['+index+']','Template composition expects scene slides')
+  const layouts=manifest.style.layouts,purpose=input.purpose??'content'
+  const layout=input.designLayout?layouts.find(l=>l.id===input.designLayout):layouts.find(l=>l.purpose===purpose)??(purpose!=='cover'?layouts.find(l=>l.purpose==='content'):undefined)
+  if(!layout)fail('composition-reference','slides['+index+']','No reference for this purpose; specify an existing designLayout')
+  if(!Array.isArray(input.elements))fail('composition-elements','slides['+index+']','Expected elements')
+  const slots=new Set(layout.slots.map(s=>s.elementId)),used=new Set(input.elements.map(e=>e.id))
+  const decor=clone(layout.elements.filter(e=>e.role==='decor'&&!slots.has(e.id))),ids=new Map()
+  for(const e of decor){let next=e.id,n=0;while(used.has(next))next='decor-'+index+'-'+(++n)+'-'+e.id.slice(0,80);used.add(next);ids.set(e.id,next)}
+  for(const e of decor){e.id=ids.get(e.id);if(e.type==='group')e.children=e.children.filter(id=>ids.has(id)).map(id=>ids.get(id))}
+  const texts=layout.elements.filter(e=>e.type==='text'&&e.role!=='decor')
+  const heading=[...texts].sort((a,b)=>a.frame.y-b.frame.y)[0]
+  const body=[...texts].sort((a,b)=>b.frame.w*b.frame.h-a.frame.w*a.frame.h)[0]
+  let textIndex=0
+  const content=clone(input.elements).map(e=>{
+   if(e.type!=='text')return e
+   const role=textIndex++===0?'title':'body',prototype=role==='title'?heading:body
+   const defaults={...prototype?.textStyle,...prototype?.paragraphs[0]?.runs.find(r=>!r.break)?.style,...manifest.style.textStyles?.[role]}
+   return {...e,textStyle:{...defaults,...e.textStyle}}
+  })
+  return normalizeSceneSlide({...input,id:input.id??'slide-'+(index+1),purpose,designLayout:layout.id,
+   ...(layout.backgroundColor?{backgroundColor:layout.backgroundColor}:{}),...(layout.backgroundAssetId?{backgroundAssetId:layout.backgroundAssetId}:{}),elements:[...decor,...content]},{assets})
+ })
+}
 export function normalizeSceneTemplate(input,{assets}={}){
  if(!input||input.schemaVersion!==3)fail('template-schema','schemaVersion','Expected schema 3')
  const out=clone(input)

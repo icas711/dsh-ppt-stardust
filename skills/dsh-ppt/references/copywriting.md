@@ -2,7 +2,7 @@
 
 ## Structural Template
 
-Every deck follows the same narrative skeleton:
+After clarifying the task through `ask_user_question`, choose a narrative suited to the audience and objective. The following is an optional reference:
 
 1. **Cover**: Title (declarative statement or noun phrase + value proposition) + Subtitle (one-sentence positioning).
 2. **Background / Problem**: Current state → Pain points → Why now.
@@ -11,16 +11,16 @@ Every deck follows the same narrative skeleton:
 5. **Call to Action (CTA)**: What you want the audience to do next.
 6. **Closing Slide**: Thank you + contact details or restated CTA.
 
-Minimum complete structure for a single-sentence input: Cover → Core Statement Slide → Closing Slide.
+A short input still requires questions. Preserve the agreed scope and slide count; do not automatically add cover or closing pages.
 
 
 ## Single-Slide Rules
 
-- Present only one idea per slide.
+- Give each slide a main idea with supporting facts, explanations and evidence. Several text or visual blocks may be useful; do not reduce each slide to one phrase.
 - Titles must be complete declarative statements—for example, *"AI Customer Support Cuts First Response Time to 8 Seconds"*, rather than *"About Customer Support"*.
-- Include 1–8 bullets per slide, keeping each bullet to ≤ 20 characters in Chinese or ≤ 12 words in English.
+- Use enough text to convey the material clearly. Edit for readability without dropping facts to fit arbitrary word limits.
 - Prioritize numbers, comparisons, and strong verbs; avoid empty corporate buzzwords (such as *"empower"*, *"leverage point"*, or *"closed-loop"*).
-- The final slide must include an actionable Call to Action (CTA), not just a generic *"Thank You"*.
+- Use an actionable CTA when the presentation purpose calls for one.
 
 ## Bilingual Rules
 
