@@ -1,7 +1,7 @@
 /** dsh-ppt 的公共类型。 */
 export type PptThemeId = 'swiss' | 'velvet' | 'data' | 'soft' | 'bold';
 export type PptLanguage = 'zh' | 'en' | 'bilingual' | 'ru';
-export type PptSlideLayout = 'cover' | 'section' | 'bullets' | 'statement' | 'quote' | 'table' | 'closing' | 'image' | 'image-left' | 'image-right' | 'chart';
+export type PptSlideLayout = 'cover' | 'section' | 'bullets' | 'statement' | 'quote' | 'table' | 'closing' | 'image' | 'image-left' | 'image-right' | 'chart' | 'scene' | 'diagram';
 export type PptTemplateId = 'weekly' | 'defense' | 'project' | 'pitch';
 export interface PptImageSpec {
     src?: string;
@@ -139,6 +139,35 @@ export interface PptDataModel {
 }
 export interface PptSlideSpec {
     id?: string;
+    label?: string;
+    purpose?: 'cover' | 'section' | 'content' | 'closing';
+    backgroundColor?: string;
+    diagram?: {
+        kind: 'process' | 'timeline' | 'comparison' | 'hierarchy' | 'relationship' | 'chart';
+        items?: Array<{
+            id?: string;
+            label: string;
+            detail?: string;
+            date?: string;
+            parentId?: string;
+        }>;
+        links?: Array<{
+            from: string;
+            to: string;
+        }>;
+        chart?: Record<string, unknown>;
+    };
+    elements?: Array<{
+        id: string;
+        type: 'text' | 'image' | 'shape' | 'line' | 'group' | 'chart' | 'table' | 'unsupported';
+        frame: {
+            x: number;
+            y: number;
+            w: number;
+            h: number;
+        };
+        [key: string]: unknown;
+    }>;
     layout?: PptSlideLayout;
     title?: string;
     subtitle?: string;
@@ -172,6 +201,18 @@ export interface PptConfig {
 }
 export interface PptCreateArgs {
     title: string;
+    assets?: Record<string, {
+        mime: string;
+        width: number;
+        height: number;
+        data: string;
+    }>;
+    style?: {
+        pageSize?: {
+            width: number;
+            height: number;
+        };
+    };
     /** Markdown 正文：一句话、一段文字或整篇文档（与 slides 二选一，推荐）。 */
     content?: string;
     /** 结构化幻灯片（高级用法，与 content 二选一）。 */
@@ -188,6 +229,10 @@ export interface PptCreateArgs {
     /** Library template key (builtin:<id> / public:<id> / user:<id>) applied on top of content/slides. */
     templateId?: string;
     /** Apply template sample slides in addition to the outline skeleton; default true. */
+    templateSelections?: Array<{
+        layoutId: string;
+        values?: Record<string, unknown>;
+    }>;
     templateSamples?: boolean;
     brand?: PptBrand;
     /** Optional explicit source facts, assumptions and safe arithmetic; bind slides with {{metricId}}. */

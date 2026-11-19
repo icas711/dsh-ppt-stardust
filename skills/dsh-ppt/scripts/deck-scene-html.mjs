@@ -24,7 +24,7 @@ export function renderSceneHtml(slide, manifest, theme, prefix = 'scene') {
   slide = normalizeSceneSlide(slide,{assets:manifest.assets ?? {}})
   const size = pageSize(manifest)
   const elements = slide.elements.map((source,index)=>{
-    if (source.type === 'group') return ''
+    if (source.type === 'group' || source.hidden) return ''
     let e = source, markup
     if (e.type === 'unsupported' && !e.previewAssetId) e = {...e,type:'text',textStyle:{size:12,color:'#B00020'},paragraphs:[{runs:[{text:`Unsupported object: ${e.sourceKind}\n${e.reason}`}]}]}
     if (e.type === 'image' || e.previewAssetId) {
@@ -70,5 +70,5 @@ export function renderSceneHtml(slide, manifest, theme, prefix = 'scene') {
     const transform = placement.rotation || placement.flipV ? `translate(${cx} ${cy}) rotate(${placement.rotation/60000}) scale(1 ${placement.flipV ? -1 : 1}) translate(${-cx} ${-cy})` : ''
     return `<g data-element-id="${html(e.id)}"${transform ? ` transform="${transform}"` : ''}>${markup}</g>`
   }).join('')
-  return `<svg class="scene-canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${px(size.width)} ${px(size.height)}" style="position:absolute;inset:0;width:100%;height:100%;overflow:hidden" role="img" aria-label="${html(slide.label ?? '')}"><rect width="100%" height="100%" fill="${slide.backgroundColor??theme.palette.bg}"/>${elements}</svg>`
+  return `<svg class="scene-canvas" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${px(size.width)} ${px(size.height)}" style="position:absolute;inset:0;width:100%;height:100%;overflow:hidden" role="img" aria-label="${html(slide.label ?? '')}"><rect width="100%" height="100%" fill="${slide.backgroundColor??theme.palette.bg}"/>${slide.backgroundAssetId?`<image href="${html(manifest.assets[slide.backgroundAssetId].data)}" width="${px(size.width)}" height="${px(size.height)}" preserveAspectRatio="none"/>`:''}${elements}</svg>`
 }

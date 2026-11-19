@@ -100,6 +100,8 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         const { create, lineage } = await store.createOptions(args.templateId.trim(), identityOf(exec), {
           title: args.title.trim(),
           includeSamples: args.templateSamples !== false,
+          selections: args.templateSelections,
+          assets:args.assets,
           lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || 'zh'),
         })
         templateApply = {
@@ -107,6 +109,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
           theme: create.theme,
           brand: create.brand,
           style: create.style,
+          assets: create.assets,
           templateLineage: lineage,
         }
       }
@@ -116,7 +119,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         title: args.title.trim(),
         content: explicitContent,
         // Шаблонные страницы (каркас + образцы) приоритетнее пользовательских slides
-        slides: (templateApply.slides as typeof args.slides) ?? explicitSlides,
+        slides: explicitSlides?.some(s => s.layout === 'scene' || s.layout === 'diagram') ? explicitSlides : (templateApply.slides as typeof args.slides) ?? explicitSlides,
         theme: templateApply.theme ?? (typeof args.theme === 'string' && args.theme.trim() !== '' ? args.theme.trim() : (config.defaultTheme || undefined)),
         lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || undefined),
         motion: args.motion,
@@ -127,7 +130,8 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         maxSlides: config.maxSlides,
         template: args.template,
         brand: templateApply.brand ?? args.brand,
-        style: templateApply.style,
+        style: templateApply.style ?? args.style,
+        assets: {...(templateApply.assets as object ?? {}),...args.assets},
         templateLineage: templateApply.templateLineage,
         dataModel: args.dataModel,
         cwd,
@@ -177,7 +181,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
             templateId: typeof args.newTemplateId === 'string' ? args.newTemplateId.trim() : '',
             name: typeof args.name === 'string' ? args.name.trim() : '',
             description: typeof args.description === 'string' ? args.description : undefined,
-            lang,
+            lang, model:'scene',
           })
           const saved = await needStore().save({ manifest: extracted.manifest, assets: extracted.assets, scope: publicScope(args, identity), identity })
           return { ok: true, key: saved.key, template: summarize(saved), report: extracted.report }
@@ -246,6 +250,9 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
             theme: restyle.theme,
             brand: restyle.brand,
             style: restyle.style,
+            assets: restyle.assets,
+            convertToScene: restyle.convertToScene,
+            layoutMap: args.layoutMap,
             templateLineage: lineage,
           })
           return { ok: true, template: lineage, changed: result.changed, revision: result.revision, files: result.files }

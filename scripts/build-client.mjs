@@ -11,7 +11,7 @@ const ru = normalize(readFileSync(join(root, 'templates/client-ru.js'), 'utf8'))
 // client scope with its export keywords stripped.
 const catalog = normalize(readFileSync(join(root, 'lib/model-catalog.js'), 'utf8')).replace(/^export (?=(?:async )?(?:function|class|const|let|var))/gm, '')
 // Compile the same pure ES module graph used by Node, including shared geometry.
-const model = bundleClientModel(join(root, 'skills/dsh-ppt/scripts'))
+const model = bundleClientModel(join(root, 'skills/dsh-ppt/scripts'), 'deck-client-model.mjs')
 let client = normalize(readFileSync(join(root, 'templates/client.js'), 'utf8'))
 if (client.includes('__ENGINE__')) {
   const name = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).name

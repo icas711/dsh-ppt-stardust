@@ -1,3 +1,5 @@
+import {normalizeSceneTemplate,remapSceneLayout} from './deck-template-scene.mjs'
+import {expandDiagramSlides,diagramToScene} from './deck-diagrams.mjs'
 import {scenePptxPlacement} from './deck-scene-pptx.mjs'
 import { normalizePageSize, pageSize } from './deck-page.mjs'
 import { assertLegacySlideInput, validateSlideRepresentation, normalizeSceneSlides, normalizeSceneSlide } from './deck-model.mjs'
@@ -110,6 +112,8 @@ function normalizeStyle(input, assets, cwd) {
   if (input === undefined || input === null) return undefined
   if (typeof input !== 'object' || Array.isArray(input)) fail('style 必须是对象')
   const pageSize = normalizePageSize(input.pageSize)
+  const sceneLayouts = input.sceneLayouts === undefined ? undefined : normalizeSceneTemplate({schemaVersion:3,style:{layouts:input.sceneLayouts}}, {assets}).style.layouts
+  if (sceneLayouts && input.layouts) fail('mixed-template-layout: legacy layouts and scene layouts')
   const themeFonts = normalizeThemeFonts(input.themeFonts)
   const backgrounds = input.backgrounds ?? []
   const layouts = normalizeDesignLayouts(input.layouts, assets, (image, page) => addAsset(image, assets, cwd, page), fail)
@@ -131,8 +135,8 @@ function normalizeStyle(input, assets, cwd) {
       : addAsset({ src: bg.src }, assets, cwd, `背景 ${type}`)
     normalized.push({ layoutType: type, assetId, fit: bg.fit ?? 'cover' })
   }
-  if (!normalized.length && !layouts && !fonts?.length && !textStyles && !pageSize && !themeFonts) return undefined
-  return { ...(themeFonts ? { themeFonts } : {}), ...(pageSize ? { pageSize } : {}), ...(normalized.length ? { backgrounds: normalized } : {}), ...(layouts ? { layouts } : {}), ...(fonts?.length ? { fonts } : {}), ...(textStyles ? { textStyles } : {}) }
+  if (!normalized.length && !layouts && !sceneLayouts && !fonts?.length && !textStyles && !pageSize && !themeFonts) return undefined
+  return { ...(sceneLayouts ? {sceneLayouts} : {}), ...(themeFonts ? { themeFonts } : {}), ...(pageSize ? { pageSize } : {}), ...(normalized.length ? { backgrounds: normalized } : {}), ...(layouts ? { layouts } : {}), ...(fonts?.length ? { fonts } : {}), ...(textStyles ? { textStyles } : {}) }
 }
 function embedSlides(slides, assets, cwd) {
   return slides.map((slide, index) => {
@@ -166,8 +170,10 @@ function collectAssets(manifest) {
     if (state.brand?.logoAssetId) ids.add(state.brand.logoAssetId)
     for (const face of state.style?.fonts ?? []) ids.add(face.assetId)
     for (const bg of state.style?.backgrounds ?? []) ids.add(bg.assetId)
+    for (const layout of state.style?.sceneLayouts ?? []) for (const e of layout.elements) {if(e.assetId)ids.add(e.assetId);if(e.previewAssetId)ids.add(e.previewAssetId)}
     for (const layout of state.style?.layouts ?? []) for (const id of layoutAssetIds(layout)) ids.add(id)
     for (const slide of state.slides) {
+      if(slide.backgroundAssetId)ids.add(slide.backgroundAssetId)
       if (slide.image?.assetId) ids.add(slide.image.assetId)
       for (const e of slide.elements ?? []) { if (e.assetId) ids.add(e.assetId); if (e.previewAssetId) ids.add(e.previewAssetId) }
     }
@@ -362,6 +368,8 @@ export function checkManifest(manifest) {
       for (const e of slide.elements) {
         const id = e.assetId ?? e.previewAssetId
         if (id && assetError(id)) issue(i, 'invalid-image', {severity:'error', detail:assetError(id), suggestionCode:'invalid-image-suggestion'})
+        if (e.slotId && /待填写|To fill:|Заполнить:/i.test(JSON.stringify(e.paragraphs ?? e.table ?? e.chart?.categories ?? e.alt ?? ''))) issue(i,'template-unfilled')
+        if (e.support?.mode === 'lossy') issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'lossy-object',severity:'warning',message:e.support.reason,messageRu:e.support.reason,messageEn:e.support.reason})
         if (e.type === 'unsupported') issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'unsupported-object',severity:'warning',message:e.reason,messageRu:e.reason,messageEn:e.reason})
         if (e.frame.x < 0 || e.frame.y < 0 || e.frame.x+e.frame.w > size.width || e.frame.y+e.frame.h > size.height) issues.push({slide:i+1,slideId:slide.id,elementId:e.id,code:'outside-slide',severity:'warning',message:'Object extends beyond slide',messageRu:'Объект выходит за границы слайда',messageEn:'Object extends beyond slide'})
       }
@@ -425,6 +433,7 @@ async function exportPptx(manifest, theme, language, signal) {
         lib.removeShape(marker)
         const chart = lib.addSlideChart(slide,{name:e.name ?? e.id,x:placement.x,y:placement.y,w:placement.w,h:placement.h,spec:e.chart})
         lib.setShapeRotation(chart,placement.rotation/60000)
+        if(e.hidden)lib.setShapeHidden(chart,true)
         if (placement.flipV) lib.setShapeFlip(chart,{vertical:true})
         lib.setShapeZIndex(chart,at)
       }
@@ -641,6 +650,7 @@ function artifactProblem(manifest, paths) {
 }
 
 export async function buildDeckAsync(options = {}) {
+  options = {...options,slides:expandDiagramSlides(options.slides,{pageSize:options.style?.pageSize})}
   abort(options.signal)
   validateRawSlides(options.slides)
   const scenario = options.template ? scenarios.find(s => s.id === options.template) : undefined
@@ -685,6 +695,7 @@ export async function buildDeckAsync(options = {}) {
  * on every edit. Accepts the same theme / brand / style / slides arguments as buildDeckAsync.
  */
 export function previewDeckHtml(options = {}) {
+  options = {...options,slides:expandDiagramSlides(options.slides,{pageSize:options.style?.pageSize})}
   validateRawSlides(options.slides)
   const normalized = normalizeBuildOptions({ ...options, outputDir: '.' })
   const cwd = resolve('.'), assets = clone(options.assets ?? {})
@@ -756,13 +767,35 @@ async function saveRevision(state, next, signal, saveAs = false, preserveUndo = 
   return finishDelivery(next, paths, signal)
 }
 
+/** Convert every historical state before committing a schema 2 project. Failure leaves all files untouched. */
+async function migrateLegacyContent(manifest,signal){
+  if(manifest.schemaVersion===2)return clone(manifest)
+  const {legacySlidesToScenes}=await import('./deck-legacy-scene.mjs')
+  const document=clone(manifest)
+  for(const value of [document,...document.history]){
+    const adapted=await legacySlidesToScenes({...value,assets:document.assets},{theme:brandedTheme(value),language:resolveLanguage(value.language),renderPptx:exportPptx,signal})
+    Object.assign(document.assets,adapted.assets)
+    value.slides=adapted.slides
+    value.style={...value.style,pageSize:adapted.pageSize}
+    delete value.schemaVersion
+  }
+  document.schemaVersion=2
+  return document
+}
+export async function migrateDeckToScenes(options={}) { return editDeck({...options,convertToScene:true}) }
+
 export async function editDeck(options = {}) {
   abort(options.signal)
-  const state = readDocument(options.deckPath, options.cwd), current = state.manifest
-  expected(current, options.expectedRevision)
+  const state = readDocument(options.deckPath, options.cwd)
+  expected(state.manifest, options.expectedRevision)
+  const current = options.convertToScene === true || options.edits?.some(e=>e.patch?.layout==='diagram') ? await migrateLegacyContent(state.manifest,options.signal) : state.manifest
   const next = clone(current)
+  if (options.assets !== undefined) {
+    if (!options.assets || typeof options.assets !== 'object' || Array.isArray(options.assets)) fail('Invalid scene asset bag')
+    Object.assign(next.assets,clone(options.assets))
+  }
   if (!Array.isArray(options.edits) || !options.edits.length) {
-    if (options.brand === undefined && options.theme === undefined && options.style === undefined && options.templateLineage === undefined && options.order === undefined && options.duplicate === undefined && options.remove === undefined && options.append === undefined && options.saveAs !== true) fail('请提供 edits、order、duplicate、remove、append、brand、theme 或 style')
+    if (options.brand === undefined && options.theme === undefined && options.style === undefined && options.templateLineage === undefined && options.order === undefined && options.duplicate === undefined && options.remove === undefined && options.append === undefined && options.saveAs !== true && options.convertToScene !== true) fail('请提供 edits、order、duplicate、remove、append、brand、theme 或 style')
   }
   const used = new Set(), allowed = new Set(['layout', 'title', 'subtitle', 'kicker', 'text', 'bullets', 'rows', 'notes', 'image', 'chart', 'visual'])
   for (const edit of options.edits ?? []) {
@@ -771,9 +804,21 @@ export async function editDeck(options = {}) {
     if (used.has(index)) fail('一次修改不能重复指定同一页：' + (index + 1))
     used.add(index)
     if (!edit.patch || typeof edit.patch !== 'object' || Array.isArray(edit.patch)) fail('第 ' + (index + 1) + ' 页 patch 需为对象')
+    if (edit.patch.layout === 'diagram') {
+      if(Object.keys(edit.patch).some(k=>!['layout','diagram','title','notes'].includes(k)))fail('Diagram patches only accept layout, diagram, title and notes')
+      const original=state.manifest.slides.find(s=>s.id===next.slides[index].id)
+      const title=edit.patch.title??original.title??original.label??''
+      const source=original.layout==='scene'?original.elements.filter(e=>e.type==='text'&&e.role!=='decor').flatMap(e=>e.paragraphs.map(p=>p.runs.map(r=>r.text??'').join(''))).filter(t=>t&&t!==title):[original.subtitle,original.kicker,original.text,...(original.bullets??[])].filter(Boolean)
+      const labels=(edit.patch.diagram?.items??[]).flatMap(item=>[item.label,item.detail,item.date].filter(Boolean)).join('\n')
+      if(edit.patch.diagram?.kind!=='chart'&&source.some(text=>!labels.includes(text)))fail('diagram-content-unmapped: include every source text in diagram labels/details')
+      if(edit.patch.diagram?.kind==='chart'&&source.length)fail('diagram-content-unmapped: create a separate numeric chart from explicit categories and values; retain the source list')
+      const converted=diagramToScene({layout:'diagram',title,notes:edit.patch.notes??original.notes,diagram:edit.patch.diagram},{pageSize:next.style?.pageSize})
+      next.slides[index]={...converted,id:next.slides[index].id}
+      continue
+    }
     validateSlideRepresentation({ ...next.slides[index], ...edit.patch }, `slides[${index}]`)
     if (next.slides[index].layout === 'scene') {
-      for (const key of Object.keys(edit.patch)) if (!['elements','notes','label','purpose','designLayout'].includes(key)) fail('Unsupported scene patch: '+key)
+      for (const key of Object.keys(edit.patch)) if (!['elements','notes','label','purpose','designLayout','backgroundColor'].includes(key)) fail('Unsupported scene patch: '+key)
       next.slides[index] = normalizeSceneSlide({...next.slides[index],...edit.patch}, {assets:next.assets})
       continue
     }
@@ -834,7 +879,18 @@ export async function editDeck(options = {}) {
       next.theme = resolveTheme(options.theme).id
     }
   }
-  if (options.style !== undefined) next.style = normalizeStyle(options.style, next.assets, resolve(options.cwd || '.'))
+  if (options.style !== undefined) {
+    next.style = normalizeStyle(options.style, next.assets, resolve(options.cwd || '.'))
+    if (next.style?.sceneLayouts && next.slides.every(s=>s.layout==='scene')) {
+      next.slides = next.slides.map(slide=>{
+        const existing=current.style?.sceneLayouts?.find(l=>l.id===slide.designLayout)
+        const from=existing??{slots:slide.elements.filter(e=>e.role!=='decor'&&['text','image','table','chart'].includes(e.type)).map(e=>({id:e.slotId??'slot-'+e.id,elementId:e.id,type:e.type}))}
+        const target=next.style.sceneLayouts.find(l=>l.id===(options.layoutMap?.[slide.id]??slide.designLayout))??(next.style.sceneLayouts.length===1?next.style.sceneLayouts[0]:undefined)
+        if(!target)fail('Choose a target variant in layoutMap for slide '+slide.id)
+        return remapSceneLayout(slide,from,target,{assets:next.assets}).slide
+      })
+    }
+  }
   // Template lineage: { id, revision } for library templates; null clears it. A
   // bare string stays reserved for scenario ids and is rejected here.
   if (options.templateLineage !== undefined) {
@@ -845,7 +901,7 @@ export async function editDeck(options = {}) {
       next.template = { id: lineage.id, revision: lineage.revision }
     }
   }
-  if (options.saveAs !== true && JSON.stringify(snapshot(next)) === JSON.stringify(snapshot(current))) return { ...result(current, pathsFor(state.path)), changed: false }
+  if (options.convertToScene !== true && options.saveAs !== true && JSON.stringify(snapshot(next)) === JSON.stringify(snapshot(current))) return { ...result(current, pathsFor(state.path)), changed: false }
   next.history = [...next.history, snapshot(current)].slice(-MAX_HISTORY)
   return { ...await saveRevision(state, next, options.signal, options.saveAs === true, options.preserveUndo === true), changed: true }
 }

@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto'
 import { normalizeSceneSlide, mergeSceneTextStyles } from './deck-model.mjs'
 import { IDENTITY_TRANSFORM, transformPoint } from './deck-geometry.mjs'
 import { escapeXml as xml } from './deck-text.mjs'
@@ -26,7 +27,7 @@ function stroke(value) {
   return `<a:ln w="${Math.round(value.width*12700)}">${color(value.color,value.opacity)}<a:prstDash val="${({solid:'solid',dash:'dash',dot:'sysDot'})[value.dash ?? 'solid']}"/>${['head','tail'].map(key=>value[key] ? `<a:${key}End type="${value[key]}"/>` : '').join('')}</a:ln>`
 }
 function runProperties(style, frame, lang) {
-  return `<a:rPr lang="${xml(lang)}" sz="${Math.round(style.size*100)}" b="${style.bold ? 1 : 0}" i="${style.italic ? 1 : 0}"${(style.kerning??frame.kerning) !== undefined ? ` kern="${style.kerning??frame.kerning}"` : ''}${style.underline !== undefined ? ` u="${style.underline===true?'sng':style.underline===false?'none':style.underline}"` : ''}>${color(style.color)}<a:latin typeface="${xml(style.sourceTypeface??style.fontFamily)}"/><a:ea typeface="${xml(style.scriptFonts?.eastAsian ?? style.fontFamily)}"/><a:cs typeface="${xml(style.scriptFonts?.complexScript ?? style.fontFamily)}"/></a:rPr>`
+  return `<a:rPr lang="${xml(lang)}" sz="${Math.round(style.size*100)}" b="${style.bold ? 1 : 0}" i="${style.italic ? 1 : 0}"${(style.kerning??frame.kerning) !== undefined ? ` kern="${style.kerning??frame.kerning}"` : ''}${style.underline !== undefined ? ` u="${style.underline===true?'sng':style.underline===false?'none':style.underline}"` : ''}>${style.colorSpec ? `<a:solidFill><a:srgbClr val="${hex(style.colorSpec.base)}">${style.colorSpec.transforms.map(t=>`<a:${t.name} val="${t.value}"/>`).join('')}</a:srgbClr></a:solidFill>` : color(style.color)}<a:latin typeface="${xml(style.sourceTypeface??style.fontFamily)}"${Object.entries(style.fontHints??{}).map(([key,value])=>` ${key}="${xml(value)}"`).join('')}/><a:ea typeface="${xml(style.scriptFonts?.eastAsian ?? style.fontFamily)}"/><a:cs typeface="${xml(style.scriptFonts?.complexScript ?? style.fontFamily)}"/></a:rPr>`
 }
 function paragraphProperties(style) {
   const attributes = ['marL','marR','indent'].filter(key=>style[key] !== undefined).map(key=>` ${key}="${Math.round(style[key])}"`).join('')
@@ -36,15 +37,16 @@ function paragraphProperties(style) {
   const bullet = style.bullet?.kind === 'bullet' ? (style.bullet.fontFamily ? `<a:buFont typeface="${xml(style.bullet.fontFamily)}"/>` : '') + `<a:buChar char="${xml(style.bullet.character)}"/>` : '<a:buNone/>'
   return `<a:pPr algn="${align}"${attributes}>${line}${spacing}${bullet}</a:pPr>`
 }
+function fieldId(value){const h=createHash('sha256').update(value).digest('hex').slice(0,32);return `{${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}}`}
 function textBody(element, defaults, lang) {
   const frame = element.textFrame ?? {}, style = mergeSceneTextStyles(defaults,element.textStyle)
   const margins = frame.margins ?? {}
   const attributes = Object.entries({left:'lIns',right:'rIns',top:'tIns',bottom:'bIns'}).filter(([side])=>margins[side] !== undefined).map(([side,key])=>` ${key}="${Math.round(margins[side])}"`).join('')
   const fit = ({none:'noAutofit',normal:'normAutofit',shape:'spAutoFit'})[frame.autoFit ?? 'none']
-  return `<p:txBody><a:bodyPr wrap="${frame.wrap ?? 'square'}" anchor="${({top:'t',center:'ctr',bottom:'b'})[frame.anchor ?? 'top']}"${attributes}><a:${fit}/></a:bodyPr><a:lstStyle/>${element.paragraphs.map(p=>`<a:p>${paragraphProperties({...frame,...p.style})}${p.runs.map(run=>run.break ? `<a:br>${runProperties(style,frame,lang)}</a:br>` : `<a:r>${runProperties(mergeSceneTextStyles(style,run.style),frame,lang)}<a:t xml:space="preserve">${xml(run.text)}</a:t></a:r>`).join('')}</a:p>`).join('')}</p:txBody>`
+  return `<p:txBody><a:bodyPr wrap="${frame.wrap ?? 'square'}" anchor="${({top:'t',center:'ctr',bottom:'b'})[frame.anchor ?? 'top']}"${attributes}><a:${fit}/></a:bodyPr><a:lstStyle/>${element.paragraphs.map((p,paragraphIndex)=>`<a:p>${paragraphProperties({...frame,...p.style})}${p.runs.map((run,runIndex)=>run.break ? `<a:br>${runProperties(style,frame,lang)}</a:br>` : run.field ? `<a:fld id="${fieldId(element.id+'|'+paragraphIndex+'|'+runIndex)}" type="${xml(run.field.type)}">${runProperties(mergeSceneTextStyles(style,run.style),frame,lang)}<a:t>${xml(run.text)}</a:t></a:fld>` : `<a:r>${runProperties(mergeSceneTextStyles(style,run.style),frame,lang)}<a:t xml:space="preserve">${xml(run.text)}</a:t></a:r>`).join('')}</a:p>`).join('')}</p:txBody>`
 }
 function identity(element, id, text = false) {
-  return `<p:nvSpPr><p:cNvPr id="${id}" name="${xml(element.name ?? element.id)}" descr="${xml(element.id)}"/><p:cNvSpPr${text ? ' txBox="1"' : ''}/><p:nvPr/></p:nvSpPr>`
+  return `<p:nvSpPr><p:cNvPr id="${id}"${element.hidden ? ' hidden="1"' : ''} name="${xml(element.name ?? element.id)}" descr="${xml(element.id)}"/><p:cNvSpPr${text ? ' txBox="1"' : ''}/><p:nvPr/></p:nvSpPr>`
 }
 
 export function sceneImageBytes(asset, id) {
@@ -79,14 +81,33 @@ function tableXml(e,id,defaults,lang) {
     const attrs=origin ? `${cell.colSpan>1 ? ` gridSpan="${cell.colSpan}"` : ''}${cell.rowSpan>1 ? ` rowSpan="${cell.rowSpan}"` : ''}` : `${col>cell.col ? ' hMerge="1"' : ''}${row>cell.row ? ' vMerge="1"' : ''}`
     if(!origin)return `<a:tc${attrs}><a:txBody><a:bodyPr/><a:lstStyle/><a:p/></a:txBody><a:tcPr/></a:tc>`
     const borders=Object.entries(cell.borders??{}).map(([side,b])=>`<a:ln${({left:'L',right:'R',top:'T',bottom:'B'})[side]} w="${Math.round(b.width*12700)}">${color(b.color)}<a:prstDash val="solid"/></a:ln${({left:'L',right:'R',top:'T',bottom:'B'})[side]}>`).join('')
-    return `<a:tc${attrs}>${textBody(cell,defaults,lang).replaceAll('p:txBody','a:txBody')}<a:tcPr>${borders}${cell.fill?color(cell.fill):'<a:noFill/>'}</a:tcPr></a:tc>`
+    const tcAttrs=Object.entries({left:'marL',right:'marR',top:'marT',bottom:'marB'}).filter(([side])=>cell.textFrame?.margins?.[side]!==undefined).map(([side,key])=>` ${key}="${cell.textFrame.margins[side]}"`).join('')+(cell.textFrame?.anchor?` anchor="${({top:'t',center:'ctr',bottom:'b'})[cell.textFrame.anchor]}"`:'')
+    return `<a:tc${attrs}>${textBody({...cell,textFrame:{...cell.textFrame,margins:undefined,anchor:undefined}},defaults,lang).replaceAll('p:txBody','a:txBody')}<a:tcPr${tcAttrs}>${borders}${cell.fill?color(cell.fill):'<a:noFill/>'}</a:tcPr></a:tc>`
   }).join('')}</a:tr>`).join('')
   const placement=xfrm(e).replaceAll('a:xfrm','p:xfrm')
-  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${xml(e.name??e.id)}" descr="${xml(e.id)}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${placement}<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr/><a:tblGrid>${t.columns.map(w=>`<a:gridCol w="${w}"/>`).join('')}</a:tblGrid>${rows}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
+  return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}"${e.hidden ? ' hidden="1"' : ''} name="${xml(e.name??e.id)}" descr="${xml(e.id)}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>${placement}<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr/><a:tblGrid>${t.columns.map(w=>`<a:gridCol w="${w}"/>`).join('')}</a:tblGrid>${rows}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`
 }
 export function renderScenePptx(slide, {assets = {}, font = 'Liberation Sans', textColor = '#000000', lang = 'en-US', mediaRegistry = new Map(), deferCharts = false} = {}) {
   slide = normalizeSceneSlide(slide,{assets})
   const media = [], relationships = [], shapes = [], imageRelationships = new Map()
+  function imageRelation(assetId,elementId){
+    const asset=assets[assetId]
+      let name = mediaRegistry.get(assetId)
+      if (!name) {
+        const bytes = sceneImageBytes(asset,elementId), extension = asset.mime === 'image/png' ? 'png' : 'jpg'
+        name = `scene-image-${mediaRegistry.size+1}.${extension}`
+        mediaRegistry.set(assetId,name)
+        media.push({name:'ppt/media/'+name,data:bytes})
+      }
+      let rel = imageRelationships.get(assetId)
+      if (!rel) {
+        rel = `rIdScene${imageRelationships.size+1}`
+        imageRelationships.set(assetId,rel)
+        relationships.push(`<Relationship Id="${rel}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${name}"/>`)
+      }
+    return rel
+  }
+  const background=slide.backgroundAssetId ? `<p:bg><p:bgPr><a:blipFill><a:blip r:embed="${imageRelation(slide.backgroundAssetId,'background')}"/><a:stretch><a:fillRect/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>` : undefined
   let id = 2
   for (const source of slide.elements) {
     if (source.type === 'group') continue // Children already carry their final page transforms.
@@ -100,29 +121,17 @@ export function renderScenePptx(slide, {assets = {}, font = 'Liberation Sans', t
     if (element.type === 'unsupported' && !element.previewAssetId) element = {...element,type:'text',textStyle:{size:12,color:'#B00020'},paragraphs:[{runs:[{text:`Unsupported object: ${element.sourceKind}\n${element.reason}`}]}]}
     if (element.type === 'image' || element.previewAssetId) {
       const assetId = element.assetId ?? element.previewAssetId, asset = assets[assetId]
-      let name = mediaRegistry.get(assetId)
-      if (!name) {
-        const bytes = sceneImageBytes(asset,element.id), extension = asset.mime === 'image/png' ? 'png' : 'jpg'
-        name = `scene-image-${mediaRegistry.size+1}.${extension}`
-        mediaRegistry.set(assetId,name)
-        media.push({name:'ppt/media/'+name,data:bytes})
-      }
-      let rel = imageRelationships.get(assetId)
-      if (!rel) {
-        rel = `rIdScene${imageRelationships.size+1}`
-        imageRelationships.set(assetId,rel)
-        relationships.push(`<Relationship Id="${rel}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${name}"/>`)
-      }
+      const rel=imageRelation(assetId,element.id)
       const geometry = sceneImageGeometry({...element,fit:element.fit ?? 'contain'},asset)
       const crop = Object.entries({left:'l',right:'r',top:'t',bottom:'b'}).map(([side,key])=>` ${key}="${Math.round(geometry.crop[side]*100000)}"`).join('')
-      shapes.push(`<p:pic><p:nvPicPr><p:cNvPr id="${shapeId}" name="${xml(element.name ?? element.id)}" descr="${xml(element.alt ?? element.reason ?? '')}"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${rel}"/><a:srcRect${crop}/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrm({...element,frame:geometry.frame})}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`)
+      shapes.push(`<p:pic><p:nvPicPr><p:cNvPr id="${shapeId}"${element.hidden ? ' hidden="1"' : ''} name="${xml(element.name ?? element.id)}" descr="${xml(element.alt ?? element.reason ?? '')}"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${rel}"/><a:srcRect${crop}/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrm({...element,frame:geometry.frame})}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`)
     } else if (element.type === 'text') {
       shapes.push(`<p:sp>${identity(element,shapeId,true)}<p:spPr>${xfrm(element)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>${textBody(element,{fontFamily:font,size:18,color:textColor,bold:false,italic:false},lang)}</p:sp>`)
     } else {
       const line = element.type === 'line'
-      const nv = line ? `<p:nvCxnSpPr><p:cNvPr id="${shapeId}" name="${xml(element.name ?? element.id)}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>` : identity(element,shapeId)
+      const nv = line ? `<p:nvCxnSpPr><p:cNvPr id="${shapeId}"${element.hidden ? ' hidden="1"' : ''} name="${xml(element.name ?? element.id)}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>` : identity(element,shapeId)
       shapes.push(`<p:${line ? 'cxnSp' : 'sp'}>${nv}<p:spPr>${xfrm(element)}<a:prstGeom prst="${line ? 'line' : element.preset}"><a:avLst/></a:prstGeom>${element.fill ? color(element.fill.color,element.fill.opacity) : '<a:noFill/>'}${stroke(element.stroke)}</p:spPr></p:${line ? 'cxnSp' : 'sp'}>`)
     }
   }
-  return {xml:shapes.join(''),media,relationships:relationships.join('')}
+  return {xml:shapes.join(''),background,media,relationships:relationships.join('')}
 }

@@ -6,7 +6,7 @@ export { normalizeSlotTypography } from './deck-model.mjs'
 
 const TRANSFORMS = new Set(TEXT_COLOR_TRANSFORMS)
 
-function sourceColorSpec(xml, theme, colorMap) {
+export function sourceColorSpec(xml, theme, colorMap) {
   // Only typed color data is retained, never arbitrary source XML.
   const run = /<a:rPr\b[^>]*(?:\/>|>[\s\S]*?<\/a:rPr>)/.exec(xml)?.[0]
   const color = run && /<a:(srgbClr|schemeClr|sysClr)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/a:\1>)/.exec(run)

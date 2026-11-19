@@ -188,9 +188,18 @@ function sceneTransform(value, frame, path) {
   return matrix
 }
 function sceneTextStyle(value, path) {
-  record(value, path, ['fontFamily', 'sourceTypeface', 'size', 'bold', 'italic', 'underline', 'kerning', 'color', 'scriptFonts'])
+  record(value, path, ['fontFamily', 'sourceTypeface', 'size', 'bold', 'italic', 'underline', 'kerning', 'color', 'colorSpec', 'fontHints', 'scriptFonts'])
   let style
   try { style = normalizeTextStyles({body:value}).body } catch (error) { sceneError('invalid-text-style', path, error.message) }
+  if (value.fontHints !== undefined) {
+    record(value.fontHints,path+'.fontHints',['panose','pitchFamily','charset'])
+    try {style.fontHints=normalizeSlotTypography({fontHints:value.fontHints}).fontHints} catch(error) {sceneError('invalid-text-style',path+'.fontHints',error.message)}
+  }
+  if (value.colorSpec !== undefined) {
+    record(value.colorSpec,path+'.colorSpec',['base','transforms'])
+    for (const [i,t] of (value.colorSpec.transforms??[]).entries()) record(t,path+`.colorSpec.transforms[${i}]`,['name','value'])
+    try {style.colorSpec=normalizeSlotTypography({colorSpec:value.colorSpec}).colorSpec} catch(error) {sceneError('invalid-text-style',path+'.colorSpec',error.message)}
+  }
   if (value.sourceTypeface !== undefined) {try {fontFamily(value.sourceTypeface);style.sourceTypeface=value.sourceTypeface} catch(error) {sceneError('invalid-text-style',path+'.sourceTypeface',error.message)}}
   if (value.underline !== undefined) style.underline = choice(value.underline, path+'.underline', [true,false,'none','sng','dbl','heavy','dotted','dash','wavy'])
   if (value.kerning !== undefined) style.kerning = sceneNumber(value.kerning,path+'.kerning',0,400000,true)
@@ -213,15 +222,17 @@ function sceneParagraphs(value, path, budget) {
     if (budget.runs > SCENE_LIMITS.runs) sceneError('run-limit', `${at}.runs`, 'Scene exceeds 4096 runs')
     const out = {runs: paragraph.runs.map((run, i) => {
       const p = `${at}.runs[${i}]`
-      record(run, p, ['text', 'style', 'break'])
+      record(run, p, ['text', 'style', 'break', 'field'])
       if (own(run, 'break')) {
-        if (run.break !== true || own(run, 'text') || own(run, 'style')) sceneError('invalid-break', p, 'Break must be exactly {break:true}')
+        if (run.break !== true || own(run, 'text') || own(run, 'style') || own(run,'field')) sceneError('invalid-break', p, 'Break must be exactly {break:true}')
         return {break:true}
       }
       const text = sceneString(run.text, `${p}.text`, 65536, true)
       budget.text += text.length
       if (budget.text > SCENE_LIMITS.text) sceneError('text-limit', p, 'Scene exceeds 262144 text characters')
-      return {text, ...(run.style !== undefined ? {style:sceneTextStyle(run.style, `${p}.style`)} : {})}
+      let field
+      if (run.field !== undefined) {record(run.field,p+'.field',['type']);field={type:sceneString(run.field.type,p+'.field.type',128)}}
+      return {text, ...(field ? {field} : {}), ...(run.style !== undefined ? {style:sceneTextStyle(run.style, `${p}.style`)} : {})}
     })}
     if (paragraph.style !== undefined) {
       record(paragraph.style, `${at}.style`, ['align', 'spaceBefore', 'spaceAfter', 'marL', 'marR', 'indent', 'lineSpacing', 'bullet'])
@@ -258,11 +269,12 @@ function sceneAsset(value, path, assets) {
   return id
 }
 function sceneElement(value, path, assets, budget) {
-  const common = ['id', 'type', 'role', 'frame', 'name', 'slotId', 'transform', 'source', 'support']
+  const common = ['id', 'type', 'role', 'frame', 'name', 'slotId', 'transform', 'source', 'support', 'hidden']
   const fields = SCENE_ELEMENT_FIELDS
   if (!value || !SCENE_ELEMENT_TYPES.includes(value.type)) sceneError('unsupported-element-type', `${path}.type`, 'This contract revision supports ' + SCENE_ELEMENT_TYPES.join(', '))
   record(value, path, [...common, ...fields[value.type]])
   const out = {id:identifier(value.id, `${path}.id`),type:value.type,role:choice(value.role ?? 'content', `${path}.role`, ['content','decor']),frame:sceneFrame(value.frame, `${path}.frame`, value.type === 'line')}
+  if (value.hidden !== undefined) {if(typeof value.hidden !== 'boolean')sceneError('invalid-boolean',path+'.hidden','Expected boolean');out.hidden=value.hidden}
   for (const key of ['name', 'slotId']) if (value[key] !== undefined) out[key] = key === 'slotId' ? identifier(value[key], `${path}.${key}`) : sceneString(value[key], `${path}.${key}`, 1024, true)
   if (value.transform !== undefined) out.transform = sceneTransform(value.transform, out.frame, `${path}.transform`)
   if (value.source !== undefined) {
@@ -356,7 +368,7 @@ function sceneGroups(elements, path) {
 }
 export function normalizeSceneSlide(input, { assets = {}, path = 'slide' } = {}) {
   validateSlideRepresentation(input, path)
-  record(input, path, ['id','layout','purpose','label','notes','designLayout','backgroundColor','elements'])
+  record(input, path, ['id','layout','purpose','label','notes','designLayout','backgroundColor','backgroundAssetId','elements'])
   if (input.layout !== 'scene') sceneError('invalid-scene-layout', `${path}.layout`, 'Expected scene')
   if (!Array.isArray(input.elements) || input.elements.length > SCENE_LIMITS.elements) sceneError('element-limit', `${path}.elements`, 'Expected at most 256 objects')
   const budget = {images:0,runs:0,text:0}
@@ -364,6 +376,7 @@ export function normalizeSceneSlide(input, { assets = {}, path = 'slide' } = {})
   for (const key of ['id','designLayout']) if (input[key] !== undefined) out[key] = identifier(input[key], `${path}.${key}`)
   for (const key of ['label','notes']) if (input[key] !== undefined) out[key] = sceneString(input[key], `${path}.${key}`, key === 'notes' ? 65536 : 1024, true)
   if (input.backgroundColor !== undefined) out.backgroundColor = sceneColor(input.backgroundColor, `${path}.backgroundColor`)
+  if (input.backgroundAssetId !== undefined) {out.backgroundAssetId=sceneAsset(input.backgroundAssetId,path+'.backgroundAssetId',assets);if(++budget.images>SCENE_LIMITS.images)sceneError('image-limit',path,'Background counts toward image placements')}
   sceneGroups(out.elements, `${path}.elements`)
   return out
 }
@@ -386,7 +399,7 @@ export function normalizeSceneSlides(input, {assets = {}, path = 'slides'} = {})
 /** Tool schemas share the object inventory and limits with runtime validation. */
 export function sceneInputProperties(){
  const frame={type:'object',properties:Object.fromEntries(['x','y','w','h'].map(k=>[k,{type:'integer',...(k==='w'||k==='h'?{minimum:1}:{})}])),required:['x','y','w','h'],additionalProperties:false}
- const common={id:{type:'string'},type:{type:'string',enum:[...SCENE_ELEMENT_TYPES]},frame,role:{type:'string',enum:['decor','content']},name:{type:'string'},slotId:{type:'string'},transform:{type:'array',items:{type:'number'},minItems:6,maxItems:6},source:{type:'object'},support:{type:'object'}}
+ const common={hidden:{type:'boolean'},id:{type:'string'},type:{type:'string',enum:[...SCENE_ELEMENT_TYPES]},frame,role:{type:'string',enum:['decor','content']},name:{type:'string'},slotId:{type:'string'},transform:{type:'array',items:{type:'number'},minItems:6,maxItems:6},source:{type:'object'},support:{type:'object'}}
  const arrays=new Set(['paragraphs','children']),strings=new Set(['assetId','alt','fit','preset','sourceKind','reason','previewAssetId'])
  const variants=Object.entries(SCENE_ELEMENT_FIELDS).map(([type,fields])=>({type:'object',properties:{...common,type:{type:'string',enum:[type]},...Object.fromEntries(fields.map(k=>[k,{type:arrays.has(k)?'array':strings.has(k)?'string':'object',...(k==='paragraphs'?{items:{type:'object',properties:{runs:{type:'array',items:{type:'object',properties:{text:{type:'string'},break:{type:'boolean'},style:{type:'object'}}}},style:{type:'object'}},required:['runs']}}:k==='children'?{items:{type:'string'}}:{})}]))},required:['id','type','frame',...(type==='text'?['paragraphs']:type==='chart'?['chart']:type==='table'?['table']:[])],additionalProperties:false}))
  return {layout:{type:'string',enum:['scene']},label:{type:'string'},purpose:{type:'string',enum:['cover','section','content','closing']},backgroundColor:{type:'string',pattern:'^#[a-fA-F0-9]{6}$'},elements:{type:'array',maxItems:SCENE_LIMITS.elements,items:{oneOf:variants},description:'Drawing order in original EMU. Text: paragraphs:[{runs:[{text,style:{fontFamily,size,bold,italic,color}}],style:{align}}]. Charts: chart:{kind,categories,series:[{name,values}],...}. Tables: table:{columns:[EMU],rows:[EMU],cells:[{row,col,rowSpan,colSpan,paragraphs}]}. Groups reference child IDs; child transforms are already final.'}}

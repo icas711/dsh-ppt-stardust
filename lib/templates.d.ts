@@ -144,6 +144,11 @@ export declare class PptTemplateStore {
         title: string;
         includeSamples?: boolean;
         lang?: string;
+        selections?: Array<{
+            layoutId: string;
+            values?: Record<string, unknown>;
+        }>;
+        assets?: Record<string, unknown>;
     }): Promise<{
         create: Record<string, any>;
         lineage: {

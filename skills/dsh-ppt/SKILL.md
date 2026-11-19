@@ -69,3 +69,25 @@ The user wants to create a PPT / slides / presentation / deck / report / proposa
 - [ ] No unfilled templates remain; real data sources are preserved, and every slide is visually inspected rather than merely checking build success.
 - [ ] Images are embedded properly and charts match the raw data; the render receipt matches the final PPTX, and any unverified aspects are explicitly noted.
 
+
+
+## Structured slides and semantic diagrams
+
+Use `layout:scene` with `elements` when a slide needs several independent blocks, charts or tables. Geometry is integer EMU (914400 EMU/inch); preserve the original `style.pageSize` for print and screen decks. Do not force 16:9. The `elements` array is drawing order. Every object has a stable ID; edits replace `elements` while retaining IDs of unchanged objects. Text uses paragraphs, runs and explicit breaks; preserve bold, colour and alignment on the relevant runs/paragraphs.
+
+For schema 3 library templates, inspect `ppt_template get` and fill `templateSelections:[{layoutId,values:{slotId:value}}]`. Select structure variants explicitly. Text accepts strings or paragraphs, images reference an embedded asset ID, charts and tables accept typed data. Do not distribute a long bullet list positionally across slots. Omitted required slots remain a draft. When switching layouts, preserve unmatched content and report the unmapped objects.
+
+A list may become a diagram only when its semantics justify the choice:
+
+- Ordered actions → `layout:diagram`, `diagram:{kind:process,items:[{id,label,detail}]}`.
+- Explicit dates and milestones → `kind:timeline`, with `date` on each item in the supplied order.
+- Alternatives with comparable attributes → `kind:comparison`.
+- Explicit parent/child relationships → `kind:hierarchy`, with `parentId`.
+- Explicit links between entities → `kind:relationship`, with `links:[{from,to}]`.
+- Actual quantitative categories and series → `kind:chart`, with `chart:{kind,categories,series:[{name,values}]}`. No invented numbers, equal weights or fake proportions to make a diagram look quantitative.
+
+Keep every supplied label/detail/date; split diagrams above 12 items across slides. Diagrams are native editable shape/text/line objects, not screenshots or SmartArt. Native charts contain embedded Excel workbooks; supported kinds are column, bar, line, pie, doughnut and area, including supported stacked variants. A regular list remains a list when relationships are unknown. Choosing a template must not replace explicitly supplied scene/diagram content with sample slides.
+
+`ppt_edit convertToScene:true` explicitly migrates a legacy project and all history snapshots. It aborts without writing when bindings or unsupported content cannot be preserved. Mixed legacy content fields and `elements` on one slide are errors, including empty legacy fields. Do not remove fields merely to bypass that error.
+
+Treat import warnings as object-specific limitations, not success: report slide, object ID/name, preservation mode and reason. OLE attachments are never executed or copied into assets; only validated raster previews may be retained. HTML chart previews preserve data but do not guarantee Office chart typography/layout parity. Render the PPTX before claiming visual fidelity.

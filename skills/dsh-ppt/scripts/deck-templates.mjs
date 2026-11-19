@@ -1,3 +1,7 @@
+import {createHash} from 'node:crypto'
+import {normalizeSceneTemplate,fillSceneLayout} from './deck-template-scene.mjs'
+import {importPptxScenes} from './deck-pptx-scenes.mjs'
+import {imageInfo as sceneImageInfo} from './deck-image.mjs'
 import { normalizeTextZones } from './deck-model.mjs'
 import { normalizePageSize } from './deck-page.mjs'
 // deck-templates.mjs —— dsh-ppt 模板库核心：模板清单、校验、bundle 读写。
@@ -15,7 +19,7 @@ import { basename, extname, join, resolve } from 'node:path'
 import { inflateSync } from 'node:zlib'
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
 import { resolveTheme, resolveLanguage } from './deck-core.mjs'
-import { extractPptxLayouts } from './deck-pptx-layouts.mjs'
+import { extractPptxLayouts, solidPng } from './deck-pptx-layouts.mjs'
 import { LAYOUT_TYPES, MAX_LAYOUTS, MAX_LAYOUT_IMAGES, sanitizeSvg } from './deck-layouts.mjs'
 import { FONT_EXT, MAX_FONT, MAX_FONTS, fontInfo, fontFamily, normalizeTextStyles, normalizeThemeFonts, normalizeFontRefs, extractTypography } from './deck-fonts.mjs'
 
@@ -124,6 +128,15 @@ function validateLayouts(list) {
 /** 校验并规范一个模板清单；返回深拷贝。assets 用于引用检查，可省略。 */
 export function validateTemplateManifest(input, { templateAssets } = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('template.json 必须是对象')
+  if (input.schemaVersion === 3) {
+    const base = validateTemplateManifest({schemaVersion:1,id:input.id,name:input.name,description:input.description,author:input.author,revision:input.revision,createdAt:input.createdAt,updatedAt:input.updatedAt,style:{theme:input.style?.theme,pageSize:input.style?.pageSize,brand:input.style?.brand,themeFonts:input.style?.themeFonts,fonts:input.style?.fonts}})
+    if (templateAssets) for (const a of Object.values(input.assetMap ?? {})) {
+      const asset=templateAssets[a.file];if(!asset?.bytes) fail('Missing scene asset: '+a.file)
+      const info=sceneImageInfo(asset.bytes,a.file);if(info.width!==a.width||info.height!==a.height||info.mime!==a.mime) fail('Scene asset metadata mismatch: '+a.file)
+    }
+    if(templateAssets)for(const f of input.style?.fonts??[]){if(!templateAssets[f.file]?.bytes)fail('Missing template font '+f.file);fontInfo(templateAssets[f.file].bytes)}
+    return normalizeSceneTemplate({...input,...base,schemaVersion:3,style:{...input.style,...base.style}})
+  }
   if (![TEMPLATE_SCHEMA_VERSION, TEMPLATE_LAYOUTS_SCHEMA_VERSION].includes(input.schemaVersion)) fail(`不支持的模板 schemaVersion：${input.schemaVersion}`)
   if (typeof input.id !== 'string' || !ID_PATTERN.test(input.id)) fail('模板 id 需为 2-49 位小写字母/数字/连字符，且以字母或数字开头')
   if (typeof input.name !== 'string' || !NAME_PATTERN.test(input.name.trim())) fail('模板 name 需为 1-81 字符')
@@ -241,7 +254,7 @@ export function validateTemplateManifest(input, { templateAssets } = {}) {
 }
 
 function layoutAssetNames(manifest) {
-  const names = []
+  const names = Object.values(manifest.assetMap ?? {}).map(a => a.file)
   for (const layout of manifest.style?.layouts ?? []) {
     if (layout.background) names.push(layout.background.image)
     for (const image of layout.images ?? []) { names.push(image.image); if (image.svg) names.push(image.svg) }
@@ -260,8 +273,8 @@ export function summarizeTemplate(manifest) {
     brand: style.brand ? Object.fromEntries(Object.entries(style.brand).filter(([k]) => k !== 'logo')) : null,
     hasLogo: Boolean(style.brand?.logo),
     backgrounds: (style.backgrounds ?? []).map(bg => ({ layoutType: bg.layoutType, fit: bg.fit })),
-    layouts: (style.layouts ?? []).map(layout => ({ id: layout.id, name: layout.name ?? layout.id, layoutType: layout.layoutType, imageCount: layout.images.length, hasBackground: Boolean(layout.background) })),
-    outlineCount: manifest.outline?.length ?? 0,
+    layouts: (style.layouts ?? []).map(layout => ({ id: layout.id, name: layout.name ?? layout.id, layoutType: layout.layoutType, imageCount: layout.images?.length ?? layout.elements?.filter(e => e.type === 'image').length ?? 0, hasBackground: Boolean(layout.background) })),
+    outlineCount: manifest.schemaVersion === 3 ? manifest.style.layouts.length : manifest.outline?.length ?? 0,
     sampleCount: manifest.samples?.length ?? 0,
     outlineTitles: (manifest.outline ?? []).map(s => s.title ?? '').slice(0, 12),
     assetCount: countTemplateAssets(manifest),
@@ -553,6 +566,7 @@ function withDesignLayout(slide) {
  */
 export function templateCreateOptions(template, assets, options = {}) {
   const manifest = validateTemplateManifest(template, { templateAssets: assets })
+  if (manifest.schemaVersion === 3) return sceneTemplateCreate(manifest,assets,options)
   const title = String(options.title ?? '').trim()
   if (!title) fail('创建演示文稿需要标题')
   const lang = options.lang ?? 'zh'
@@ -583,6 +597,7 @@ export function templateCreateOptions(template, assets, options = {}) {
  */
 export function templatePreviewOptions(template, assets, options = {}) {
   const manifest = validateTemplateManifest(template, { templateAssets: assets })
+  if (manifest.schemaVersion === 3) return {...sceneTemplateCreate(manifest,assets,{...options,title:manifest.name}).create,lang:options.lang??'ru'}
   const lang = options.lang ?? 'ru'
   const slides = [
     { layout: 'cover', kicker: L(lang, '模板预览', 'Template preview', 'Предпросмотр шаблона'), title: manifest.name,
@@ -611,6 +626,7 @@ export function templatePreviewOptions(template, assets, options = {}) {
 /** 模板 → editDeck 参数（重设计）：theme/brand/style。 */
 export function templateRestyleOptions(template, assets) {
   const manifest = validateTemplateManifest(template, { templateAssets: assets })
+  if (manifest.schemaVersion === 3) return {restyle:{convertToScene:true,theme:manifest.style.theme,assets:sceneTemplateAssets(manifest,assets),style:{pageSize:manifest.style.pageSize,themeFonts:manifest.style.themeFonts,...(manifest.style.fonts?.length?{fonts:manifest.style.fonts.map(f=>({family:f.family,variant:f.variant,src:assets[f.file].data}))}:{}),sceneLayouts:manifest.style.layouts}},lineage:{id:manifest.id,revision:manifest.revision}}
   const restyle = {}
   if (manifest.style?.theme) restyle.theme = manifest.style.theme
   const brandSource = manifest.style?.brand
@@ -630,6 +646,7 @@ export function templateRestyleOptions(template, assets) {
 
 /** 项目 → 模板清单 + 资产。manifest 为 dsh-ppt 工程 manifest（含 assets）。 */
 export function templateFromDeckManifest(deckManifest, options = {}) {
+  if (deckManifest.slides?.every(s => s.layout === 'scene')) return templateFromSceneManifest(deckManifest,options)
   const lang = options.lang ?? deckManifest.language ?? 'zh'
   const id = options.templateId
   if (!id || !ID_PATTERN.test(id)) fail('templateId 需为 2-49 位小写字母/数字/连字符')
@@ -777,6 +794,7 @@ function pickLogoShape(pres, lib, slideSize, masterShapes) {
  * 返回 { manifest, assets, report }；不落盘。
  */
 export async function templateFromPptx(source, options = {}) {
+  if (options.model === 'scene') return templateFromPptxScene(source,options)
   const id = options.templateId
   if (!id || !ID_PATTERN.test(id)) fail('templateId 需为 2-49 位小写字母/数字/连字符')
   const name = String(options.name ?? '').trim()
@@ -922,4 +940,58 @@ function uniqueAssetName(assets, base) {
   if (!assets[base]) return base
   const dot = base.lastIndexOf('.'), stem = base.slice(0, dot), ext = base.slice(dot)
   for (let i = 2; ; i += 1) if (!assets[`${stem}-${i}${ext}`]) return `${stem}-${i}${ext}`
+}
+
+function sceneTemplateAssets(manifest,assets){
+  return Object.fromEntries(Object.entries(manifest.assetMap??{}).map(([id,a])=>[id,{mime:a.mime,width:a.width,height:a.height,data:assets[a.file].data??`data:${a.mime};base64,${Buffer.from(assets[a.file].bytes).toString('base64')}`}]))
+}
+function sceneTemplateCreate(manifest,assets,options){
+  const title=String(options.title??'').trim();if(!title)fail('Title is required')
+  const bag={...sceneTemplateAssets(manifest,assets),...(options.assets??{})}
+  const selections=options.selections??manifest.style.layouts.map(l=>({layoutId:l.id,values:{}}))
+  const diagnostics=[]
+  const slides=selections.map((selection,i)=>{
+    const layout=manifest.style.layouts.find(l=>l.id===selection.layoutId);if(!layout)fail('Unknown layout '+selection.layoutId)
+    const filled=fillSceneLayout(layout,selection.values??{},{assets:bag,slideId:'slide-'+(i+1)})
+    diagnostics.push(...filled.diagnostics.map(d=>({...d,slide:i+1})));return filled.slide
+  })
+  return {create:{title,slides,assets:bag,theme:manifest.style.theme??'data',style:{pageSize:manifest.style.pageSize,themeFonts:manifest.style.themeFonts,...(manifest.style.fonts?.length?{fonts:manifest.style.fonts.map(f=>({family:f.family,variant:f.variant,src:assets[f.file].data}))}:{}),sceneLayouts:manifest.style.layouts}},lineage:{id:manifest.id,revision:manifest.revision},diagnostics}
+}
+export function templateFromSceneManifest(project,options={}){
+  const assets={},assetMap={},fonts=[]
+  for(const face of project.fonts??project.style?.fonts??[]){const a=project.assets[face.assetId];if(!a?.data)fail('Missing embedded source font');const bytes=Buffer.from(a.data.split(',')[1]??'','base64'),info=fontInfo(bytes),file=face.assetId+(info.mime==='application/x-fontdata'?'.fntdata':info.mime==='font/otf'?'.otf':'.ttf');assets[file]={...info,bytes,data:a.data};fonts.push({family:face.family,variant:face.variant,file})}
+  for(const [id,a]of Object.entries(project.assets??{})){
+    if(!a?.data?.startsWith('data:image/'))continue
+    const bytes=Buffer.from(a.data.split(',')[1]??'','base64'),info=sceneImageInfo(bytes,id),file=id+(info.mime==='image/png'?'.png':'.jpg')
+    assets[file]={...info,bytes,data:a.data};assetMap[id]={file,...info}
+  }
+  const families=new Map()
+  const layouts=project.slides.map((s,i)=>{
+    const signature=JSON.stringify(s.elements.filter(e=>e.role==='decor').map(({id,source,name,...e})=>e))
+    if(!families.has(signature))families.set(signature,'family-'+(families.size+1))
+    const elements=structuredClone(s.elements),slots=[]
+    for(const e of elements)if(e.role!=='decor'&&['text','image','chart','table'].includes(e.type)){
+      const slot={id:'slot-'+e.id,elementId:e.id,type:e.type,name:e.name??e.id,required:true};slots.push(slot);e.slotId=slot.id
+      if(e.type==='text'){
+        let first=true;for(const p of e.paragraphs)for(const r of p.runs)if(!r.break){r.text=first?'Заполнить: '+(e.name??'текст'):'';first=false}
+      }
+      if(e.type==='table')for(const c of e.table.cells)for(const p of c.paragraphs)for(const r of p.runs)if(!r.break)r.text='Заполнить:'
+      if(e.type==='chart'){e.chart.categories=e.chart.categories.map((_,i)=>'Заполнить: '+(i+1));e.chart.series=e.chart.series.map((s,i)=>({...s,name:'Series '+(i+1),values:s.values.map(()=>1),...(s.pointDataLabels?{pointDataLabels:s.pointDataLabels.map(l=>l?{...l,text:undefined}:null)}:{}),...(s.dataLabels?{dataLabels:{...s.dataLabels,text:undefined}}:{})}))}
+      if(e.type==='image'){
+        const bytes=solidPng('#EEEEEE'),assetId='img-'+createHash('sha256').update(bytes).digest('hex'),info=sceneImageInfo(bytes,assetId),file=assetId+'.png'
+        assets[file]={...info,bytes,data:`data:${info.mime};base64,${bytes.toString('base64')}`};assetMap[assetId]={file,...info};e.assetId=assetId;e.alt='Заполнить: изображение'
+      }
+    }
+    return {id:'layout-'+(i+1),name:s.label||'Layout '+(i+1),familyId:families.get(signature),purpose:s.purpose??'content',...(s.backgroundColor?{backgroundColor:s.backgroundColor}:{}),...(s.backgroundAssetId?{backgroundAssetId:s.backgroundAssetId}:{}),elements,slots}
+  })
+  const used=new Set(layouts.flatMap(l=>[l.backgroundAssetId,...l.elements.flatMap(e=>[e.assetId,e.previewAssetId])].filter(Boolean)))
+  for(const [key,a]of Object.entries(assetMap))if(!used.has(key)){delete assetMap[key];delete assets[a.file]}
+  const manifest={schemaVersion:3,id:options.templateId,name:options.name,description:options.description,revision:1,style:{theme:project.theme??'data',pageSize:project.style?.pageSize??project.pageSize,...(project.themeFonts?{themeFonts:project.themeFonts}:{}),...(fonts.length?{fonts}:{}),...(project.sourceTheme?{brand:{primaryColor:project.sourceTheme.accent1,backgroundColor:project.sourceTheme.light1,textColor:project.sourceTheme.dark1}}:{}),layouts},assetMap}
+  return {manifest:validateTemplateManifest(manifest,{templateAssets:assets}),assets}
+}
+export async function templateFromPptxScene(source,options={}){
+  const bytes=source instanceof Uint8Array?source:readFileSync(source)
+  const imported=await importPptxScenes(bytes,{signal:options.signal})
+  const result=templateFromSceneManifest({...imported,theme:'data',style:{pageSize:imported.pageSize}},options)
+  return {...result,report:{...imported.report,slideCount:imported.slides.length,layoutCount:result.manifest.style.layouts.length,pageSize:imported.pageSize,warnings:imported.report.warnings}}
 }

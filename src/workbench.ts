@@ -151,7 +151,7 @@ export class PptWorkbench {
     try { html = ordinaryFile(files.html).toString('utf8') } catch { /* A check can register an older JSON-only project. */ }
     const render = this.renders.get(entry.id)
     const currentRender = render && render.revision === manifest.revision && digest(ordinaryFile(files.pptx)) === render.sourceSha256 ? render : undefined
-    return { ok: true, project: { ...entry, deckId: manifest.deckId, revision: manifest.revision, slides: manifest.slides,
+    return { ok: true, project: { ...entry, deckId: manifest.deckId, revision: manifest.revision, slides: manifest.slides, pageSize:manifest.style?.pageSize,
       managedDelivery: !!manifest.delivery, pdfAvailable: !!manifest.delivery && existsSync(files.pptx.slice(0, -5) + '.pdf'), pdfWarning: manifest.delivery?.pdfWarning,
       undoAvailable: manifest.history.length, quality: check, html, dataModel:manifest.dataModel ?? null,
       assets: Object.fromEntries(Object.entries(manifest.assets ?? {}).map(([key, value]: [string, any]) => [key, { data: value.data, mime: value.mime }])),
@@ -166,6 +166,10 @@ export class PptWorkbench {
     for (const [key, item] of Object.entries(value)) {
       if (['title', 'subtitle', 'kicker', 'text', 'notes'].includes(key)) {
         if (typeof item !== 'string' || item.length > 8000) throw new Error('文字字段过长或无效')
+      } else if (key === 'elements') {
+        if (!Array.isArray(item) || item.length > 256 || Buffer.byteLength(JSON.stringify(item)) > 2*1024*1024) throw new Error('Invalid scene object list')
+      } else if (key === 'label') {
+        if (typeof item !== 'string' || item.length > 1024) throw new Error('Invalid scene label')
       } else if (key === 'bullets') {
         if (!Array.isArray(item) || item.length > 50 || item.some(v => typeof v !== 'string' || v.length > 2000)) throw new Error('要点内容无效')
       } else if (key === 'image') {
@@ -276,6 +280,9 @@ export class PptWorkbench {
             theme: options.restyle.theme,
             brand: options.restyle.brand,
             style: options.restyle.style,
+            assets:options.restyle.assets,
+            convertToScene:options.restyle.convertToScene,
+            layoutMap:body.layoutMap,
             templateLineage: options.lineage,
           })
           await this.remember(result, {}, undefined, identity)

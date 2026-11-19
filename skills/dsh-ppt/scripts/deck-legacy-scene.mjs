@@ -1,3 +1,5 @@
+import {sourceTypefaceHints} from './deck-fonts.mjs'
+import {sourceColorSpec} from './deck-text-slots.mjs'
 import {readNativeChart,readNativeTable} from './deck-native-objects.mjs'
 // Adapt the existing generator's normalized content using its actual native
 // geometry. No second copy of cover/bullets/quote layout coordinates.
@@ -17,7 +19,7 @@ function textStyle(format, fonts, defaults, path) {
   const resolve = (value, suffix) => value?.startsWith('+mj') ? fonts['major'+suffix] : value?.startsWith('+mn') ? fonts['minor'+suffix] : value
   const font = resolve(format.font,'Latin') || defaults.font
   if (font !== font.trim() && !defaults.allowTypeface) unsupported(path,'Raw typeface aliases require a sourceTypeface field before migration')
-  const style = {fontFamily:font.trim(),size:format.size ?? 18,color:format.color ?? defaults.color,bold:format.bold ?? false,italic:format.italic ?? false}
+  const style = {fontFamily:font.trim(),size:format.size ?? 18,color:defaults.resolveColor?.(format.color??defaults.color) ?? format.color ?? defaults.color,bold:format.bold ?? false,italic:format.italic ?? false}
   if (font !== font.trim()) style.sourceTypeface=font
   if (format.underline !== undefined) style.underline=format.underline
   if (format.kern !== undefined) style.kerning=format.kern
@@ -33,6 +35,8 @@ export function textElement(lib, pres, shape, common, defaults, path) {
   if (autoFit && (autoFit.fontScale !== 1 || autoFit.lnSpcReduction !== 0)) unsupported(path,'Explicit autofit scale/reduction must be preserved by a later text-contract extension')
   const textbox = lib.isShapeTextBox(shape)
   const paragraphs = []
+  const inheritedHints=defaults.allowTypeface?sourceTypefaceHints(lib,pres,shape):undefined
+  const rawParagraphs = lib.getShapeXmlString(shape).match(/<a:p\b[^>]*>[\s\S]*?<\/a:p>/g) ?? []
   for (let p=0;p<lib.getShapeParagraphCount(shape);p++) {
     const properties = lib.getParagraphPropertiesEffective(pres,shape,p)
     const style = {align:properties.align ?? (textbox ? 'left' : 'center')}
@@ -43,13 +47,27 @@ export function textElement(lib, pres, shape, common, defaults, path) {
       if (bullet.color != null || bullet.sizePct != null || bullet.sizePts != null || lib.isParagraphBulletPicture(shape,p)) unsupported(path,'Custom bullet color/size or image bullet is not supported')
       style.bullet = {kind:'bullet',character:'•',...(bullet.font ? {fontFamily:bullet.font} : {})}
     } else if (properties.bullet !== 'none' && properties.bullet != null) unsupported(path,'Automatic numbering is not supported by this adapter')
-    let index = 0
+    let index = 0, rawIndex = 0
+    const rawRuns = rawParagraphs[p]?.match(/<a:(r|fld)\b[^>]*>[\s\S]*?<\/a:\1>/g) ?? []
     const runs = lib.getShapeParagraphElements(shape,p).map(item=>{
       if (item.kind === 'br') return {break:true}
+      const raw=rawRuns[rawIndex++]??'',spec=sourceColorSpec(raw,lib.getPresentationTheme(pres),defaults.colorMap)
+      const attrs=/<a:latin\b([^>]*)\/?>/.exec(raw)?.[1]??'',hints={...inheritedHints}
+      const panose=/panose="([A-Fa-f0-9]{20})"/.exec(attrs)?.[1];if(panose)hints.panose=panose
+      for(const key of ['charset','pitchFamily']){const m=new RegExp(key+'="(\\d+)"').exec(attrs);if(m)hints[key]=Number(m[1])}
+      if (item.kind === 'fld' && defaults.allowTypeface) {
+        const proxy=lib.copyShape(defaults.fieldProxySlide,shape)
+        let format
+        try {
+          lib.setShapeParagraphs(proxy,Array.from({length:lib.getShapeParagraphCount(shape)},(_,i)=>({runs:lib.getShapeParagraphElements(shape,i).filter(e=>e.kind!=='br').map(e=>({text:e.text,format:e.format})),endFormat:lib.getParagraphEndFormat(shape,i)??{}})))
+          format=lib.getShapeRunFormatEffective(pres,proxy,p,rawIndex-1)
+        } finally {lib.removeShape(proxy)}
+        return {text:item.text,field:{type:item.type??'slidenum'},style:{...textStyle(format,fonts,defaults,path),...(spec?{colorSpec:spec}:{}),...(Object.keys(hints).length?{fontHints:hints}:{})}}
+      }
       if (item.kind !== 'r') unsupported(path,'Dynamic text fields cannot be flattened silently')
       const format = lib.getShapeRunFormatEffective(pres,shape,p,index++)
       if (format.kern != null && !defaults.allowTypeface) unsupported(path,'Per-run kerning is not yet supported by the adapter')
-      return {text:item.text,style:textStyle(format,fonts,defaults,path)}
+      return {text:item.text,style:{...textStyle(format,fonts,defaults,path),...(spec?{colorSpec:spec}:{}),...(Object.keys(hints).length?{fontHints:hints}:{})}}
     })
     paragraphs.push({style,runs:runs.length ? runs : [{text:'',style:textStyle(lib.getParagraphEndFormat(shape,p) ?? {},fonts,defaults,path)}]})
   }
@@ -130,7 +148,7 @@ export function nativeShapeElement(lib,pres,shape,common,defaults,path,storeImag
         if (hasText) return (textElement(lib,pres,shape,common,defaults,path))
         else {
           if (!['solid','none','inherit'].includes(fill.kind) || !['solid','none','inherit'].includes(stroke.kind)) unsupported(path,'Complex fill/stroke is not supported')
-          const line = kind === 'connector', preset = lib.getShapePreset(shape)
+          const preset = lib.getShapePreset(shape), line = kind === 'connector' || preset === 'line'
           if (!line && !['rect','roundRect','ellipse','triangle','diamond'].includes(preset)) unsupported(path,'Unsupported native geometry: '+preset)
           const element = {...common,type:line ? 'line' : 'shape',...(line ? {} : {preset})}
           if (fill.kind === 'solid') element.fill = {color:lib.getShapeFillColorResolved(pres,shape) ?? fill.color,opacity:lib.getShapeFillOpacity(shape) ?? 1}
