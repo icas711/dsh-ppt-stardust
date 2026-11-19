@@ -1,20 +1,17 @@
 // Mandatory renderer command: missing runtime/fonts must fail, never skip.
 import assert from 'node:assert/strict'
-import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { unzipSync } from 'fflate'
 import { fixtures, page } from '../test/fixtures/pptx/generate.mjs'
 import { templateFromPptx, templateCreateOptions, buildTemplateBundle, readTemplateZip } from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import { buildDeckAsync } from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
+import { createFixtureConverter, fixtureRoot } from './golden-pptx-runtime.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const fixtureRoot = join(root, 'test/fixtures/pptx')
-const runtime = resolve(process.env.DSH_PPT_RENDER_RUNTIME ?? join(fixtureRoot, 'render-runtime'))
-const requireRuntime = createRequire(join(runtime, 'package.json'))
 const out = resolve(process.env.DSH_PPT_SYNTHETIC_OUT ?? join(root, '.test-output/pptx-synthetic-render'))
 const record = process.argv.includes('--record')
 if (process.argv.slice(2).some(arg => arg !== '--record')) throw new Error('Only --record is supported; output/runtime are configured with environment variables')
@@ -22,16 +19,9 @@ if (record && process.env.CI) throw new Error('CI cannot approve its own renderi
 const hash = bytes => createHash('sha256').update(bytes).digest('hex')
 mkdirSync(out, { recursive: true })
 try {
-  const kit = await import(pathToFileURL(requireRuntime.resolve('@deepseek-ai/libreoffice-kit')).href)
-  assert.equal(kit.ENGINE_VERSION, '0.2.3', 'Renderer version is pinned')
-  // Force the same portable engine even on a host with a native installation.
-  const converter = await kit.createConverter({ timeoutMs: 120000, fontMetadataCacheDirectory: false,
-    fontDirectories: [join(fixtureRoot, 'fonts')], resolveEnginePackage: name => {
-      if (name !== '@deepseek-ai/libreoffice-kit-wasm') throw Object.assign(new Error('Synthetic acceptance uses WASM'), { code: 'MODULE_NOT_FOUND' })
-      return requireRuntime.resolve(`${name}/package.json`)
-    } })
+  const { converter, version } = await createFixtureConverter()
   const expectations = JSON.parse(readFileSync(join(fixtureRoot, 'expectations.json')))
-  const metadata = { renderer: { package: '@deepseek-ai/libreoffice-kit', version: kit.ENGINE_VERSION, backend: converter.backend, dpi: 96 },
+  const metadata = { renderer: { package: '@deepseek-ai/libreoffice-kit', version, backend: converter.backend, dpi: 96 },
     pageSize: page, fonts: {}, cases: [] }
   try {
     assert.equal(converter.backend, 'wasm')

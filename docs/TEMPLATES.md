@@ -199,6 +199,8 @@ node build-deck.mjs --export-template public:corp --to ./out            # выг
 
 Развитие объектной модели и пересмотр этих ограничений описаны в [плане сложной модели слайда](FEATURE-PLAN-SLIDE-MODEL-2026-11-19.md). При выпуске новой модели этот раздел обновляется по фактической матрице поддержки.
 
+Контракт следующих схем проекта v2 и шаблона v3, миграция и подтверждённые возможности нативных диаграмм описаны в [SLIDE-MODEL.md](SLIDE-MODEL.md). Эти схемы пока не включены в продукт.
+
 ## Визуальная регрессия PowerPoint
 
 Для локального PPTX с произвольным количеством слайдов доступен opt-in тест `test/pptx-template-golden.test.mjs`. Требуются Windows, установленный PowerPoint, `pwsh` и Python с Pillow, numpy, scikit-image. Задайте `DSH_PPT_GOLDEN_SOURCE` путём к исходнику и запустите `node --test test/pptx-template-golden.test.mjs`. Необязательные `DSH_PPT_GOLDEN_OUT` и `DSH_PPT_GOLDEN_PYTHON` задают каталог результатов и Python. Для разных исходников используйте отдельные каталоги результатов.

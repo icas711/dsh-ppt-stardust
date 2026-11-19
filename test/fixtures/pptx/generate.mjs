@@ -85,6 +85,18 @@ export function fixtures() {
   ]
 }
 
+// Capacity inputs use the same independent package writer, not the exporter.
+export function capacityFixture({ blocks = 0, images = 0, depth = 0 } = {}) {
+  const columns = Math.ceil(Math.sqrt(Math.max(1, blocks)))
+  const cellW = Math.floor(9000000 / columns), cellH = Math.floor(5400000 / columns)
+  let content = Array.from({ length: blocks }, (_, i) => text(10 + i, `Block ${i}`, 400000 + i % columns * cellW, 1100000 + Math.floor(i / columns) * cellH, cellW - 10000, cellH - 10000, `Block ${i}`)).join('')
+  // Identity transforms isolate depth/traversal cost from geometric scaling.
+  for (let level = 0; level < depth; level++) content = group(1000 + level, `Level ${level}`, [0, 0, page.width, page.height], [0, 0, page.width, page.height], content)
+  content += Array.from({ length: images }, (_, i) => picture(2000 + i, 200000 + i % 16 * 580000, 1100000 + Math.floor(i / 16) * 500000, 400000, 200000)).join('')
+  const png = new PNG({ width: 32, height: 16 }); png.data.fill(255)
+  return packageDeck(title + content, images ? { 'ppt/media/preview.png': PNG.sync.write(png) } : {}, images ? [['rImage', 'image', '../media/preview.png']] : [])
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const out = resolve(process.argv[2] ?? '.test-output/pptx-fixtures')
   mkdirSync(out, { recursive: true })

@@ -1,0 +1,333 @@
+{
+  "date": "2026-11-19",
+  "scope": "Package 1B local capability evidence; production scene schemas are not enabled",
+  "charts": {
+    "sdk": "0.21.0",
+    "chartCount": 8,
+    "slideCount": 2,
+    "variants": [
+      "column",
+      "bar",
+      "line",
+      "pie",
+      "doughnut",
+      "area",
+      "stacked-column",
+      "percent-stacked-bar"
+    ],
+    "embeddedWorkbooks": 8,
+    "dataUpdate": {
+      "before": [
+        12,
+        8
+      ],
+      "after": [
+        18,
+        4
+      ],
+      "workbookAfter": [
+        "18",
+        "4"
+      ]
+    },
+    "verified": [
+      "kind",
+      "categories",
+      "series values",
+      "series colors",
+      "title font",
+      "legend",
+      "data labels",
+      "axis scale/format",
+      "doughnut hole",
+      "stacking",
+      "geometry on update",
+      "XLSX values on update"
+    ],
+    "decision": "Use the SDK native chart API and setChartSpec; no custom chart OOXML writer is needed for these variants.",
+    "render": {
+      "backend": "wasm",
+      "dataChangeVisible": true,
+      "otherSlideUnchanged": true
+    }
+  },
+  "nativeCharts": [
+    {
+      "values": [
+        18,
+        4
+      ],
+      "chartType": 51,
+      "slide": 1,
+      "name": "column"
+    },
+    {
+      "values": [
+        12,
+        8
+      ],
+      "chartType": 57,
+      "slide": 1,
+      "name": "bar"
+    },
+    {
+      "values": [
+        12,
+        8
+      ],
+      "chartType": 65,
+      "slide": 1,
+      "name": "line"
+    },
+    {
+      "values": [
+        12,
+        8
+      ],
+      "chartType": 5,
+      "slide": 1,
+      "name": "pie"
+    },
+    {
+      "values": [
+        12,
+        8
+      ],
+      "chartType": -4120,
+      "slide": 2,
+      "name": "doughnut"
+    },
+    {
+      "values": [
+        12,
+        8
+      ],
+      "chartType": 1,
+      "slide": 2,
+      "name": "area"
+    },
+    {
+      "values": [
+        12,
+        8
+      ],
+      "chartType": 52,
+      "slide": 2,
+      "name": "stacked-column"
+    },
+    {
+      "values": [
+        12,
+        8
+      ],
+      "chartType": 59,
+      "slide": 2,
+      "name": "percent-stacked-bar"
+    }
+  ],
+  "capacity": {
+    "node": "v22.19.0",
+    "platform": "win32",
+    "gcExposed": true,
+    "note": "Current importer still truncates to 6 slots/12 images. Full plain projection is only a size estimate, not the future rich model or its peak memory. Timings include reader work and are not performance guarantees.",
+    "results": [
+      {
+        "request": {
+          "blocks": 10
+        },
+        "inputBytes": 4930,
+        "sourceObjects": 11,
+        "fullPlainProjectionBytes": 1126,
+        "currentTemplateJSONBytes": 3568,
+        "uniqueAssetCount": 0,
+        "uniqueAssetBytes": 0,
+        "currentSlots": 6,
+        "currentImages": 0,
+        "knownLossKinds": [
+          "content-area"
+        ],
+        "readMs": 7.57,
+        "importMs": 57.52,
+        "heapDeltaBytes": 2509104,
+        "rssAtEndBytes": 60854272,
+        "renderMs": 2993.28
+      },
+      {
+        "request": {
+          "blocks": 30
+        },
+        "inputBytes": 5264,
+        "sourceObjects": 31,
+        "fullPlainProjectionBytes": 3154,
+        "currentTemplateJSONBytes": 3567,
+        "uniqueAssetCount": 0,
+        "uniqueAssetBytes": 0,
+        "currentSlots": 6,
+        "currentImages": 0,
+        "knownLossKinds": [
+          "content-area"
+        ],
+        "readMs": 0.58,
+        "importMs": 39.22,
+        "heapDeltaBytes": 3352512,
+        "rssAtEndBytes": 334286848,
+        "renderMs": 2983.03
+      },
+      {
+        "request": {
+          "blocks": 100
+        },
+        "inputBytes": 6294,
+        "sourceObjects": 101,
+        "fullPlainProjectionBytes": 10199,
+        "currentTemplateJSONBytes": 3557,
+        "uniqueAssetCount": 0,
+        "uniqueAssetBytes": 0,
+        "currentSlots": 6,
+        "currentImages": 0,
+        "knownLossKinds": [
+          "content-area"
+        ],
+        "readMs": 0.54,
+        "importMs": 72.48,
+        "heapDeltaBytes": 12046344,
+        "rssAtEndBytes": 86396928,
+        "renderMs": 3483.4
+      },
+      {
+        "request": {
+          "blocks": 256
+        },
+        "inputBytes": 8635,
+        "sourceObjects": 257,
+        "fullPlainProjectionBytes": 26245,
+        "currentTemplateJSONBytes": 3557,
+        "uniqueAssetCount": 0,
+        "uniqueAssetBytes": 0,
+        "currentSlots": 6,
+        "currentImages": 0,
+        "knownLossKinds": [
+          "content-area"
+        ],
+        "readMs": 5.2,
+        "importMs": 170.78,
+        "heapDeltaBytes": 13262840,
+        "rssAtEndBytes": 116977664,
+        "renderMs": 4295.95
+      },
+      {
+        "request": {
+          "images": 13
+        },
+        "inputBytes": 5201,
+        "sourceObjects": 14,
+        "fullPlainProjectionBytes": 1368,
+        "currentTemplateJSONBytes": 2681,
+        "uniqueAssetCount": 1,
+        "uniqueAssetBytes": 102,
+        "currentSlots": 1,
+        "currentImages": 12,
+        "knownLossKinds": [
+          "picture"
+        ],
+        "readMs": 0.49,
+        "importMs": 10.04,
+        "heapDeltaBytes": 3309904,
+        "rssAtEndBytes": 110182400,
+        "renderMs": 2794.31
+      },
+      {
+        "request": {
+          "images": 30
+        },
+        "inputBytes": 5403,
+        "sourceObjects": 31,
+        "fullPlainProjectionBytes": 3015,
+        "currentTemplateJSONBytes": 2681,
+        "uniqueAssetCount": 1,
+        "uniqueAssetBytes": 102,
+        "currentSlots": 1,
+        "currentImages": 12,
+        "knownLossKinds": [
+          "picture"
+        ],
+        "readMs": 0.39,
+        "importMs": 14.35,
+        "heapDeltaBytes": 2005208,
+        "rssAtEndBytes": 410611712,
+        "renderMs": 2841.98
+      },
+      {
+        "request": {
+          "images": 128
+        },
+        "inputBytes": 6419,
+        "sourceObjects": 129,
+        "fullPlainProjectionBytes": 12509,
+        "currentTemplateJSONBytes": 2681,
+        "uniqueAssetCount": 1,
+        "uniqueAssetBytes": 102,
+        "currentSlots": 1,
+        "currentImages": 12,
+        "knownLossKinds": [
+          "picture"
+        ],
+        "readMs": 2.25,
+        "importMs": 27.52,
+        "heapDeltaBytes": 2564488,
+        "rssAtEndBytes": 366997504,
+        "renderMs": 2896.74
+      },
+      {
+        "request": {
+          "blocks": 100,
+          "images": 30
+        },
+        "inputBytes": 7051,
+        "sourceObjects": 131,
+        "fullPlainProjectionBytes": 13105,
+        "currentTemplateJSONBytes": 4792,
+        "uniqueAssetCount": 1,
+        "uniqueAssetBytes": 102,
+        "currentSlots": 6,
+        "currentImages": 12,
+        "knownLossKinds": [
+          "picture",
+          "content-area"
+        ],
+        "readMs": 0.56,
+        "importMs": 86.63,
+        "heapDeltaBytes": 6183968,
+        "rssAtEndBytes": 110342144,
+        "renderMs": 3736.42
+      },
+      {
+        "request": {
+          "blocks": 10,
+          "depth": 16
+        },
+        "inputBytes": 5131,
+        "sourceObjects": 27,
+        "fullPlainProjectionBytes": 2486,
+        "currentTemplateJSONBytes": 3568,
+        "uniqueAssetCount": 0,
+        "uniqueAssetBytes": 0,
+        "currentSlots": 6,
+        "currentImages": 0,
+        "knownLossKinds": [
+          "content-area"
+        ],
+        "readMs": 0.51,
+        "importMs": 16.92,
+        "heapDeltaBytes": 2568976,
+        "rssAtEndBytes": 112599040,
+        "renderMs": 2788.61
+      }
+    ]
+  },
+  "limitations": [
+    "WASM measured on Windows; GitHub Linux execution pending",
+    "Current importer truncates to 6 content slots and 12 images",
+    "Plain projection is not the future rich model; heap delta is not peak memory"
+  ]
+}

@@ -49,9 +49,12 @@ jobs:
       - run: python -m pip install -r test/fixtures/pptx/requirements-render.txt
       - run: node --test test/pptx-synthetic-import.test.mjs
       - run: pnpm run test:pptx-render
+      - run: node scripts/probe-pptx-charts.mjs --render
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: pptx-synthetic-${{ matrix.os }}
-          path: .test-output/pptx-synthetic-render/
+          path: |
+            .test-output/pptx-synthetic-render/
+            .test-output/chart-capabilities/
           if-no-files-found: error

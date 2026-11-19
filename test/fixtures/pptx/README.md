@@ -45,6 +45,15 @@ npm run test:pptx-render
 
 Review baseline images and manifest in the diff. CI refuses `--record`. `DSH_PPT_RENDER_RUNTIME`, `DSH_PPT_SYNTHETIC_OUT` and `DSH_PPT_GOLDEN_PYTHON` can select a separate installed runtime, artifact directory and Python executable.
 
+Additional capability probes use the same portable runtime:
+
+```sh
+node scripts/probe-pptx-charts.mjs --render
+node --expose-gc scripts/benchmark-pptx-import.mjs --render
+```
+
+The chart probe verifies eight native variants, embedded XLSX values and visible updates; it also runs in the rendering CI job. Capacity measurements are diagnostic and have no timing assertions. The planned scene contract and current support matrix are documented in `docs/SLIDE-MODEL.md`.
+
 ## Fonts and license
 
 The unmodified `LiberationSans-*.ttf` files and `LICENSE_LIBERATION` are redistributed from `pdfjs-dist@5.6.205/standard_fonts`. They are licensed under SIL Open Font License 1.1; copyright and reserved-name notices are in `fonts/LICENSE_LIBERATION`. Their SHA-256 hashes are recorded with the rendering baseline. These files are test assets and are not included in the published plugin's `files` list.
