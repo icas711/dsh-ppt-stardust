@@ -127,6 +127,8 @@ export function mergeSceneTextStyles(...styles) {
   const out = {}
   for (const style of styles) if (style) {
     const fonts = {...out.scriptFonts,...style.scriptFonts}
+    // A more specific plain colour replaces the inherited DrawingML colour.
+    if (style.color !== undefined && style.colorSpec === undefined) delete out.colorSpec
     Object.assign(out,style)
     if (Object.keys(fonts).length) out.scriptFonts = fonts
   }
@@ -260,6 +262,7 @@ function sceneParagraphs(value, path, budget) {
 }
 function sceneStroke(value, path) {
   record(value, path, ['color', 'width', 'opacity', 'dash', 'head', 'tail'])
+  if (value.width !== undefined && (typeof value.width !== 'number' || !Number.isFinite(value.width) || value.width < 0 || value.width > 100)) sceneError('invalid-number', path+'.width', `Received ${String(value.width)}; expected 0…100 pt (not EMU); e.g. 0.75 pt = 9525 EMU`)
   const out = {color:sceneColor(value.color, `${path}.color`), width:sceneNumber(value.width ?? 1, `${path}.width`, 0, 100)}
   if (value.opacity !== undefined) out.opacity = sceneNumber(value.opacity, `${path}.opacity`, 0, 1)
   if (value.dash !== undefined) out.dash = choice(value.dash, `${path}.dash`, ['solid', 'dash', 'dot'])
@@ -376,7 +379,17 @@ export function normalizeSceneSlide(input, { assets = {}, path = 'slide' } = {})
   if (input.layout !== 'scene') sceneError('invalid-scene-layout', `${path}.layout`, 'Expected scene')
   if (!Array.isArray(input.elements) || input.elements.length > SCENE_LIMITS.elements) sceneError('element-limit', `${path}.elements`, 'Expected at most 256 objects')
   const budget = {images:0,runs:0,text:0}
-  const out = {layout:'scene',purpose:choice(input.purpose ?? 'content', `${path}.purpose`, ['cover','section','content','closing']),elements:input.elements.map((value,index) => sceneElement(value, `${path}.elements[${index}]`, assets, budget))}
+  const out = {layout:'scene',purpose:choice(input.purpose ?? 'content', `${path}.purpose`, ['cover','section','content','closing']),elements:input.elements.map((value,index) => {
+    try { return sceneElement(value, `${path}.elements[${index}]`, assets, budget) }
+    catch (error) {
+      error.elementId = value?.id ?? null
+      error.elementName = value?.name ?? null
+      error.origin = value?.role === 'decor' ? 'template decor' : 'content'
+      error.message += `; ${path}, object ${value?.id ?? index}${value?.name ? ' ('+value.name+')' : ''}, ${error.origin}`
+      if(error.path?.endsWith('.frame'))error.message += '; elements requires complete objects with frame:{x,y,w,h}; use elementUpdates for partial changes'
+      throw error
+    }
+  })}
   for (const key of ['id','designLayout']) if (input[key] !== undefined) out[key] = identifier(input[key], `${path}.${key}`)
   for (const key of ['label','notes']) if (input[key] !== undefined) out[key] = sceneString(input[key], `${path}.${key}`, key === 'notes' ? 65536 : 1024, true)
   if (input.backgroundColor !== undefined) out.backgroundColor = sceneColor(input.backgroundColor, `${path}.backgroundColor`)
@@ -419,11 +432,14 @@ export function normalizeSceneSlides(input, {assets = {}, path = 'slides'} = {})
 
 /** Tool schemas share the object inventory and limits with runtime validation. */
 export function sceneInputProperties(){
- const frame={type:'object',properties:Object.fromEntries(['x','y','w','h'].map(k=>[k,{type:'integer',...(k==='w'||k==='h'?{minimum:1}:{})}])),required:['x','y','w','h'],additionalProperties:false}
+ const frame={type:'object',description:'Position and size in integer EMU; 914400 EMU/inch. Not points.',properties:Object.fromEntries(['x','y','w','h'].map(k=>[k,{type:'integer',...(k==='w'||k==='h'?{minimum:1}:{})}])),required:['x','y','w','h'],additionalProperties:false}
+ const stroke={type:'object',properties:{color:{type:'string',pattern:'^#[a-fA-F0-9]{6}$'},width:{type:'number',minimum:0,maximum:100,default:1,description:'Thickness in points (pt), NOT EMU. 0.75 pt = 9525 EMU.'},opacity:{type:'number',minimum:0,maximum:1},dash:{type:'string',enum:['solid','dash','dot']},head:{type:'string',enum:['none','triangle','stealth','diamond','oval','arrow']},tail:{type:'string',enum:['none','triangle','stealth','diamond','oval','arrow']}},required:['color'],additionalProperties:false}
+ const border={type:'object',properties:{color:stroke.properties.color,width:stroke.properties.width},required:['color'],additionalProperties:false}
+ const table={type:'object',properties:{columns:{type:'array',items:{type:'integer',minimum:1,description:'Width in EMU'}},rows:{type:'array',items:{type:'integer',minimum:1,description:'Height in EMU'}},cells:{type:'array',items:{type:'object',properties:{borders:{type:'object',properties:Object.fromEntries(['left','right','top','bottom'].map(side=>[side,border])),additionalProperties:false}}}}}}
  const common={hidden:{type:'boolean'},id:{type:'string'},type:{type:'string',enum:[...SCENE_ELEMENT_TYPES]},frame,role:{type:'string',enum:['decor','content']},name:{type:'string'},slotId:{type:'string'},transform:{type:'array',items:{type:'number'},minItems:6,maxItems:6},source:{type:'object'},support:{type:'object'}}
  const arrays=new Set(['paragraphs','children']),strings=new Set(['assetId','alt','fit','preset','sourceKind','reason','previewAssetId'])
- const variants=Object.entries(SCENE_ELEMENT_FIELDS).map(([type,fields])=>({type:'object',properties:{...common,type:{type:'string',enum:[type]},...Object.fromEntries(fields.map(k=>[k,{type:arrays.has(k)?'array':strings.has(k)?'string':'object',...(k==='paragraphs'?{items:{type:'object',properties:{runs:{type:'array',items:{type:'object',properties:{text:{type:'string'},break:{type:'boolean'},style:{type:'object'}}}},style:{type:'object'}},required:['runs']}}:k==='children'?{items:{type:'string'}}:{})}]))},required:['id','type','frame',...(type==='text'?['paragraphs']:type==='chart'?['chart']:type==='table'?['table']:[])],additionalProperties:false}))
- return {layout:{type:'string',enum:['scene']},designLayout:{type:'string',description:'Optional existing template reference ID; otherwise purpose selects the reference.'},label:{type:'string'},purpose:{type:'string',enum:['cover','section','content','closing']},backgroundColor:{type:'string',pattern:'^#[a-fA-F0-9]{6}$'},elements:{type:'array',maxItems:SCENE_LIMITS.elements,items:{oneOf:variants},description:'Drawing order in original EMU. Text: paragraphs:[{runs:[{text,style:{fontFamily,size,bold,italic,color}}],style:{align}}]. Shapes: preset rect|roundRect|ellipse|triangle|diamond, fill:{color,opacity?}, stroke:{color,width?}; overlay a separate text element for labels. Charts: chart:{kind,categories,series:[{name,values}],...}. Tables: table:{columns:[EMU],rows:[EMU],cells:[{row,col,rowSpan,colSpan,paragraphs}]}. Groups reference child IDs; child transforms are already final.'}}
+ const variants=Object.entries(SCENE_ELEMENT_FIELDS).map(([type,fields])=>({type:'object',properties:{...common,type:{type:'string',enum:[type]},...Object.fromEntries(fields.map(k=>[k,k==='stroke'?stroke:k==='table'?table:{type:arrays.has(k)?'array':strings.has(k)?'string':'object',...(k==='paragraphs'?{items:{type:'object',properties:{runs:{type:'array',items:{type:'object',properties:{text:{type:'string'},break:{type:'boolean'},style:{type:'object',description:'size in points; explicit color overrides inherited colorSpec unless a new colorSpec is also supplied.'}}}},style:{type:'object',description:'spaceBefore/spaceAfter in pt; lineSpacing:{kind:pct,value:1} means 100%, kind:pts uses pt.'}},required:['runs']}}:k==='children'?{items:{type:'string'}}:{})}]))},required:['id','type','frame',...(type==='text'?['paragraphs']:type==='chart'?['chart']:type==='table'?['table']:[])],additionalProperties:false}))
+ return {layout:{type:'string',enum:['scene']},designLayout:{type:'string',description:'Optional existing template reference ID; otherwise purpose selects the reference.'},label:{type:'string'},purpose:{type:'string',enum:['cover','section','content','closing']},backgroundColor:{type:'string',pattern:'^#[a-fA-F0-9]{6}$'},elements:{type:'array',maxItems:SCENE_LIMITS.elements,items:{oneOf:variants},description:'Complete objects in drawing order. frame x/y/w/h and textFrame.margins use integer EMU (914400/inch). stroke.width uses points (0–100, default 1), NOT EMU. Font size and paragraph spaceBefore/spaceAfter use pt; lineSpacing pct value 1 means 100%, pts uses pt. Editing elements fully replaces the array including decor; prefer patch.elementUpdates. Text: paragraphs:[{runs:[{text,style:{fontFamily,size,bold,italic,color}}],style:{align}}]. Shapes: preset rect|roundRect|ellipse|triangle|diamond, fill:{color,opacity?}, stroke:{color,width?}; overlay a separate text element for labels. Charts: chart:{kind,categories,series:[{name,values}],...}. Tables: table:{columns:[EMU],rows:[EMU],cells:[{row,col,rowSpan,colSpan,paragraphs}]}. Groups reference child IDs; child transforms are already final.'}}
 }
 /** Preserve unrelated concurrent object edits when the user explicitly reloads while keeping their draft. */
 export function mergeSceneDraftElements(original,draft,latest){

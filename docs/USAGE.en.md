@@ -200,3 +200,16 @@ Plugin: MIT. Office Kit: MIT. Optional official LibreOffice Kit and its engine r
 - [dsh-hyperframes](https://github.com/STARDUSTLC666/dsh-hyperframes) — HTML video skills (source of this plugin's visual styles)
 - [dsh-remotion](https://github.com/STARDUSTLC666/dsh-remotion) — React programmatic video skills
 - [dsh-email](https://github.com/STARDUSTLC666/dsh-email) — Email toolset
+
+
+## Safe scene editing and recovery
+
+Read `ppt_check {deckPath, slide:5}` for the current revision and complete `selectedSlide`. Prefer `ppt_edit {deckPath, expectedRevision, edits:[{slide:5, patch:{elementUpdates:[{id:"existing-id", changes:{paragraphs:[{runs:[{text:"Updated",style:{color:"#FFFFFF"}}]}]}}]}}]}`. This updates existing objects by ID, preserving other objects and frames. Object fields are replaced when supplied, except `textStyle`, which merges; preserve unchanged paragraphs/runs when editing text. IDs and types cannot change in this mode.
+
+`patch.elements` fully replaces the entire array, including decor; every element must be complete. Omitted objects are deleted. `designLayout` does not reinsert decor during editing. Do not combine `elements` with `elementUpdates`.
+
+After an output/transport error, inspect the known project path and current revision before retrying: files may already have been saved. Undo unwanted edits with `ppt_undo` and inspect each restored version before considering recreation. `ppt_create overwrite:true` overwrites delivery files but creates a new internal JSON, new ID, revision 0 and empty history. Continue with its returned `jsonPath`; it does not repair the old project. `saveAs:true` saves a separate copy. Never select a project just because its directory is newest.
+
+Coordinates, sizes and text-frame margins use integer EMU. Stroke and table-border thickness use points, 0–100, default 1; 9525 EMU = 0.75 pt. Font size and paragraph spacing use points; lineSpacing pct value 1 means 100%. Explicit `color` overrides inherited `colorSpec`; when both are explicitly supplied, `colorSpec` wins.
+
+Check embedded template/library fonts and actual render `missingFonts` before reporting substitution. Missing system installation alone is not evidence of missing embedded fonts. Re-render the current PPTX after changes; static estimates do not constitute visual acceptance.

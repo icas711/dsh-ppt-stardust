@@ -1,6 +1,6 @@
 import {diagramToScene} from './deck-diagrams.mjs'
 // Shared schema 3 template contract and addressable slot filling.
-import {normalizeSceneSlide,normalizeTextStyles,SCENE_LIMITS} from './deck-model.mjs'
+import {normalizeSceneSlide,normalizeTextStyles,mergeSceneTextStyles,SCENE_LIMITS} from './deck-model.mjs'
 import {normalizeVariantDescription,validateDeckPlan} from './deck-generation.mjs'
 const clone=value=>JSON.parse(JSON.stringify(value))
 function fail(code,path,message){const e=new Error(`dsh-ppt: ${code} at ${path}: ${message}`);e.code=code;e.path=path;throw e}
@@ -24,11 +24,11 @@ export function composeSceneTemplateSlides(slides,manifest,assets){
   const content=clone(input.elements).map(e=>{
    if(e.type!=='text')return e
    const role=textIndex++===0?'title':'body',prototype=role==='title'?heading:body
-   const defaults={...prototype?.textStyle,...prototype?.paragraphs[0]?.runs.find(r=>!r.break)?.style,...manifest.style.textStyles?.[role]}
-   return {...e,textStyle:{...defaults,...e.textStyle}}
+   const defaults=mergeSceneTextStyles(prototype?.textStyle,prototype?.paragraphs[0]?.runs.find(r=>!r.break)?.style,manifest.style.textStyles?.[role])
+   return {...e,textStyle:mergeSceneTextStyles(defaults,e.textStyle)}
   })
   return normalizeSceneSlide({...input,id:input.id??'slide-'+(index+1),purpose,designLayout:layout.id,
-   ...(layout.backgroundColor?{backgroundColor:layout.backgroundColor}:{}),...(layout.backgroundAssetId?{backgroundAssetId:layout.backgroundAssetId}:{}),elements:[...decor,...content]},{assets})
+   ...(layout.backgroundColor?{backgroundColor:layout.backgroundColor}:{}),...(layout.backgroundAssetId?{backgroundAssetId:layout.backgroundAssetId}:{}),elements:[...decor,...content]},{assets,path:`slides[${index}] (slide ${index+1})`})
  })
 }
 export function normalizeSceneTemplate(input,{assets}={}){

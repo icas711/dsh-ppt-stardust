@@ -1,11 +1,12 @@
 import {renderSceneChartSvg} from './deck-scene-chart-html.mjs'
 import { normalizeSceneSlide, mergeSceneTextStyles } from './deck-model.mjs'
+import { sceneTextColor } from './deck-scene-color.mjs'
 import { escapeHtml as html } from './deck-text.mjs'
 import { pageSize } from './deck-page.mjs'
 import { sceneImageGeometry, sceneImageBytes, scenePptxPlacement } from './deck-scene-pptx.mjs'
 
 const px = emu => emu/9525
-const fontCss = style => `font-family:${style.fontFamily.includes(',') ? style.fontFamily : JSON.stringify(style.fontFamily)};font-size:${style.size*4/3}px;color:${style.color};font-weight:${style.bold ? 700 : 400};font-style:${style.italic ? 'italic' : 'normal'};text-decoration:${style.underline&&style.underline!=='none'?'underline':'none'}`
+const fontCss = style => {const resolved=sceneTextColor(style);return `font-family:${style.fontFamily.includes(',') ? style.fontFamily : JSON.stringify(style.fontFamily)};font-size:${style.size*4/3}px;color:${resolved.color};opacity:${resolved.opacity};font-weight:${style.bold ? 700 : 400};font-style:${style.italic ? 'italic' : 'normal'};text-decoration:${style.underline&&style.underline!=='none'?'underline':'none'}`}
 function textMarkup(element, theme) {
   const frame = element.textFrame ?? {}, base = mergeSceneTextStyles({fontFamily:theme.fonts.body,size:18,color:theme.palette.fg},element.textStyle)
   const margins = {left:91440,right:91440,top:45720,bottom:45720,...frame.margins}

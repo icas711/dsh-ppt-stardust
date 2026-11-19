@@ -6,7 +6,7 @@ import {expandDiagramSlides,diagramToScene,restoreSemanticRepresentation} from '
 import {scenePptxPlacement} from './deck-scene-pptx.mjs'
 import {sceneContrastIssues} from './deck-scene-quality.mjs'
 import { normalizePageSize, pageSize } from './deck-page.mjs'
-import { assertLegacySlideInput, validateSlideRepresentation, normalizeSceneSlides, normalizeSceneSlide } from './deck-model.mjs'
+import { assertLegacySlideInput, validateSlideRepresentation, normalizeSceneSlides, normalizeSceneSlide, mergeSceneTextStyles } from './deck-model.mjs'
 import { PROJECT_SCHEMA_VERSION, MAX_PROJECT_HISTORY as MAX_HISTORY, normalizeProjectEnvelope, nextProjectRevision } from './deck-migrations.mjs'
 import { mkdirSync, readFileSync, statSync, openSync, closeSync, rmSync, existsSync, unlinkSync } from 'node:fs'
 import { resolve, dirname, extname, basename, join, isAbsolute } from 'node:path'
@@ -577,7 +577,7 @@ function documentBytes(manifest) {
 function result(manifest, paths) {
   return { ok: true, title: manifest.title, theme: manifest.theme, language: manifest.language,
     slideCount: manifest.slides.length, deckId: manifest.deckId, revision: manifest.revision,
-    slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.label ?? s.title, layout: s.layout })),
+    slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.label ?? s.title ?? '', layout: s.layout })),
     undoAvailable: manifest.history.length, deliveryStatus: manifest.quality?.issues.some(i => i.code === 'template-unfilled') ? 'draft' : 'ready-for-review',
     quality: manifest.quality, ...(manifest.generation?{generationReport:{...manifest.generation.report,stale:manifest.generation.contentFingerprint!==generationFingerprint(manifest.slides)}}:{}), verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' }, outputDir: dirname(paths.html),
     internalProject: !!manifest.delivery,
@@ -683,7 +683,7 @@ function artifactProblem(manifest, paths) {
   if (!manifest.artifacts) return '旧工程没有成品校验记录，无法确认外部修改；请另存副本，保留原文件。'
   for (const kind of ['html', 'pptx']) {
     try { if (hash(readFileSync(paths[kind])) === manifest.artifacts[kind]) continue } catch {}
-    return kind.toUpperCase() + ' 已在外部修改或缺失，不会覆盖；请另存副本。副本从 JSON 生成，不导入 Office 手工修改。'
+    return kind.toUpperCase() + ' 已在外部修改或缺失，不会覆盖；请另存副本。副本从 JSON 生成，不导入 Office 手工修改。 Project '+manifest.deckId+': delivery files changed or are missing (possibly overwritten by a new ppt_create project). Use the current project jsonPath, or saveAs:true to recover this JSON as a separate copy; do not retry against shared delivery paths.'
   }
 }
 
@@ -850,7 +850,7 @@ export async function editDeck(options = {}) {
     if (index < 0 || index >= next.slides.length) fail('找不到要修改的页面：' + edit.slide)
     if (used.has(index)) fail('一次修改不能重复指定同一页：' + (index + 1))
     used.add(index)
-    if (!edit.patch || typeof edit.patch !== 'object' || Array.isArray(edit.patch)) fail('第 ' + (index + 1) + ' 页 patch 需为对象')
+    if (!edit.patch || typeof edit.patch !== 'object' || Array.isArray(edit.patch)) fail('第 ' + (index + 1) + ' 页 patch 需为对象; use edits:[{slide: '+(index+1)+', patch:{elementUpdates:[{id:"existing-id", changes:{paragraphs:[{runs:[{text:"New text"}]}]}}]}}]')
     if(edit.patch.restoreRepresentation!==undefined){if(Object.keys(edit.patch).some(k=>k!=='restoreRepresentation'))fail('Restore representation must be a separate explicit operation');next.slides[index]=restoreSemanticRepresentation(next.slides[index],edit.patch.restoreRepresentation,{...semanticRenderOptions(next),assets:next.assets});continue}
     if (edit.patch.layout === 'diagram') {
       if(Object.keys(edit.patch).some(k=>!['layout','diagram','title','notes'].includes(k)))fail('Diagram patches only accept layout, diagram, title and notes')
@@ -866,8 +866,24 @@ export async function editDeck(options = {}) {
     }
     validateSlideRepresentation({ ...next.slides[index], ...edit.patch }, `slides[${index}]`)
     if (next.slides[index].layout === 'scene') {
-      for (const key of Object.keys(edit.patch)) if (!['elements','notes','label','purpose','designLayout','backgroundColor'].includes(key)) fail('Unsupported scene patch: '+key)
-      next.slides[index] = normalizeSceneSlide({...next.slides[index],...edit.patch}, {assets:next.assets})
+      for (const key of Object.keys(edit.patch)) if (!['elements','elementUpdates','notes','label','purpose','designLayout','backgroundColor'].includes(key)) fail('Unsupported scene patch: '+key)
+      const {elementUpdates,...patch}=edit.patch
+      if(elementUpdates!==undefined){
+        if(patch.elements!==undefined)fail('Use either elements (full replacement) or elementUpdates (preserve other objects), not both')
+        if(!Array.isArray(elementUpdates)||!elementUpdates.length||elementUpdates.length>256)fail('elementUpdates requires 1–256 {id, changes} entries')
+        const updates=new Map()
+        for(const update of elementUpdates){
+          if(!update||typeof update.id!=='string'||!update.changes||typeof update.changes!=='object'||Array.isArray(update.changes)||Object.keys(update).some(k=>!['id','changes'].includes(k)))fail('elementUpdates entries require {id, changes:{...}}')
+          if(updates.has(update.id)||!next.slides[index].elements.some(e=>e.id===update.id))fail('Duplicate or unknown elementUpdates ID on slide '+(index+1)+': '+update.id)
+          if(Object.hasOwn(update.changes,'id')||Object.hasOwn(update.changes,'type'))fail('elementUpdates cannot change id or type: '+update.id)
+          updates.set(update.id,update.changes)
+        }
+        patch.elements=next.slides[index].elements.map(e=>{
+          const changes=updates.get(e.id)
+          return changes?{...e,...changes,...(changes.textStyle?{textStyle:mergeSceneTextStyles(e.textStyle,changes.textStyle)}:{})}:e
+        })
+      }
+      next.slides[index] = normalizeSceneSlide({...next.slides[index],...patch}, {assets:next.assets,path:`slides[${index}] (slide ${index+1})`})
       continue
     }
     assertLegacySlideInput({ ...next.slides[index], ...edit.patch }, `slides[${index}]`)
@@ -1017,10 +1033,17 @@ export function checkDeck(options = {}) {
     quality.issues.push({ slide: 0, severity: 'error', code: 'artifact-conflict', message: problem, suggestion: '保留原成品，使用 saveAs:true 或面板「另存副本」。副本不包含 Office 手工修改。' })
     quality.errorCount++; quality.ok = false
   }
+  let selectedSlide
+  if(options.slide!==undefined){
+    const index=typeof options.slide==='number'&&Number.isInteger(options.slide)?options.slide-1:manifest.slides.findIndex(s=>s.id===options.slide)
+    if(index<0||index>=manifest.slides.length)fail('Unknown slide: '+options.slide)
+    selectedSlide={slide:index+1,...clone(manifest.slides[index])}
+  }
   return { ...quality, deckPath: path, deckId: manifest.deckId, revision: manifest.revision,
+    ...(selectedSlide?{selectedSlide}:{}),
     ...(manifest.generation?{generationReport:{...manifest.generation.report,stale:manifest.generation.contentFingerprint!==generationFingerprint(manifest.slides)}}:{}),
     verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' },
-    undoAvailable: manifest.history.length, slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.label ?? s.title, layout: s.layout })),
+    undoAvailable: manifest.history.length, slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.label ?? s.title ?? '', layout: s.layout })),
     template: manifest.template ?? null }
 }
 

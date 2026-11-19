@@ -101,12 +101,20 @@ export interface PptCheckResult extends PptQualityResult {
     verification: PptVerification;
     render?: PptRenderResult;
     generationReport?: PptGenerationReport;
+    selectedSlide?: PptSlideSpec & {
+        slide: number;
+    };
 }
 export interface PptEditArgs {
     deckPath: string;
     edits?: Array<{
         slide: number | string;
-        patch: Partial<Omit<PptSlideSpec, 'id'>>;
+        patch: Partial<Omit<PptSlideSpec, 'id'>> & {
+            elementUpdates?: Array<{
+                id: string;
+                changes: Record<string, unknown>;
+            }>;
+        };
     }>;
     order?: string[];
     brand?: PptBrand | null;

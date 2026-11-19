@@ -75,6 +75,24 @@ The user wants to create a PPT / slides / presentation / deck / report / proposa
 
 ## Structured slides and semantic diagrams
 
+### Editing and recovery
+
+Read the current revision and full target slide with `ppt_check {deckPath, slide:5}`. It returns `selectedSlide` including complete elements and template decor. For ordinary changes use `ppt_edit {deckPath, expectedRevision, edits:[{slide:5, patch:{elementUpdates:[{id:'existing-text-id',changes:{paragraphs:[{runs:[{text:'Updated',style:{color:'#FFFFFF'}}]}]}}]}}]}`. IDs must exist and be unique. Supplied object fields replace those fields; `textStyle` merges with existing typography. Read and retain all other paragraphs/runs and their formatting when changing only part of a text object. Omitted objects, frames, IDs and drawing order are preserved. This mode cannot add/remove objects or change their type/ID.
+
+`patch.elements` remains a **full replacement of every element**, including template decor. Supply the complete array with unchanged objects and full frames; omitted elements are deleted. `designLayout` does not recreate deleted decor during editing. Do not combine `elements` and `elementUpdates`. Structural changes use the full replacement path deliberately.
+
+After an output serialization or transport error, the operation may already be committed. Check the known project path, revision and content before retrying. A stale `expectedRevision` must not be bypassed. For unwanted edits, use `ppt_undo` with the current revision and inspect the restored version; several saved edits may require several undo steps. Prefer history recovery before rebuilding.
+
+`ppt_create overwrite:true` replaces same-name delivery files but always creates a new internal JSON project, new `deckId`, revision 0 and empty history. It does not repair the old JSON. Continue using the returned `jsonPath`; old projects sharing those delivery paths may report artifact conflicts. `saveAs:true` creates a separate copy from the selected JSON. Never identify the current project by newest-directory shell commands (`ls -t | head -1`); use its path/ID and verify its session and task.
+
+### Units, colour and fonts
+
+`frame.x/y/w/h`, text-frame margins and table row/column dimensions use integer EMU (914400/inch). `stroke.width` and table border widths use **points, 0–100, default 1**, not EMU: 9525 EMU = 0.75 pt, 19050 EMU = 1.5 pt. Font size, paragraph `spaceBefore`/`spaceAfter` and `lineSpacing` kind `pts` use points; `lineSpacing` kind `pct` uses a ratio (1 = 100%). Do not guess or clamp invalid units.
+
+An explicit run/element `color` overrides an inherited `colorSpec`; supplying both explicitly makes `colorSpec` authoritative. Imported colour transforms remain intact when colour is not overridden. Do not duplicate every colour in `colorSpec` as a workaround.
+
+Do not infer unavailable fonts solely from missing system installation: templates and the user's font library can embed font files. Distinguish untested availability from confirmed substitution. Use actual current-PPTX render results and `missingFonts`, identify missing family/style, and re-render after changes before claiming visual acceptance. An empty missing-font list is the renderer's report, not proof of identical typography on every target machine.
+
 Use `layout:scene` with `elements` when a slide needs several independent blocks, charts or tables. Geometry is integer EMU (914400 EMU/inch); preserve the original `style.pageSize` for print and screen decks. Do not force 16:9. The `elements` array is drawing order. Every object has a stable ID; edits replace `elements` while retaining IDs of unchanged objects. Text uses paragraphs, runs and explicit breaks; preserve bold, colour and alignment on the relevant runs/paragraphs.
 
 For schema 3 templates, normally pass `templateId` and freely composed scene `slides`. Each slide has `purpose` (cover/content/section/closing), optional `designLayout` referencing an existing template page, and new content `elements`. The engine copies only fixed decor and backgrounds; sample text and required slots do not constrain this path. The first text element inherits heading defaults, later text elements body defaults; copy explicit run styles when needed. Preserve useful body content, not just headings.
