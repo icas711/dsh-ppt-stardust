@@ -1,0 +1,108 @@
+{
+  "date": "2026-11-19",
+  "source": "Private six-slide working presentation; source content excluded",
+  "renderer": "Microsoft PowerPoint, 1440 px width, native aspect ratio",
+  "threshold": 0.999,
+  "sourceUnmodified": true,
+  "package": {
+    "partCount": 199,
+    "noopChangedParts": [
+      "[Content_Types].xml"
+    ],
+    "noopContentTypesEquivalent": true,
+    "textPatchChangedParts": [
+      "[Content_Types].xml",
+      "ppt/slides/slide2.xml"
+    ],
+    "textPatchXmlDifferences": [
+      {
+        "path": "/cSld[0]/spTree[0]/sp[5]/txBody[2]/p[2]/r[1]/t[1]",
+        "text": true
+      }
+    ],
+    "preservedOleBinaryParts": 4
+  },
+  "chartRewrite": {
+    "nativeOpenFailed": true,
+    "relationship": {
+      "chartPart": "ppt/charts/chart4.xml",
+      "expectedId": "rId3",
+      "actualId": "rId1",
+      "valid": false
+    }
+  },
+  "slides": [
+    {
+      "slide": 1,
+      "unsupportedCount": 0,
+      "templateSSIM": 1,
+      "directVsTemplateSSIM": 1,
+      "noopSSIM": 1,
+      "textPatchSSIM": 1,
+      "hiddenUnsupportedSSIM": 1,
+      "restoredChartColorsSSIM": 1,
+      "unchangedChartRewriteAfterRelationshipFixSSIM": 1
+    },
+    {
+      "slide": 2,
+      "unsupportedCount": 11,
+      "templateSSIM": 0.8244101402773008,
+      "directVsTemplateSSIM": 1,
+      "noopSSIM": 1,
+      "textPatchSSIM": 0.9970957494047127,
+      "hiddenUnsupportedSSIM": 0.8802546743940903,
+      "restoredChartColorsSSIM": 0.8259591802923634,
+      "unchangedChartRewriteAfterRelationshipFixSSIM": 1
+    },
+    {
+      "slide": 3,
+      "unsupportedCount": 2,
+      "templateSSIM": 0.7524023171303028,
+      "directVsTemplateSSIM": 1,
+      "noopSSIM": 1,
+      "textPatchSSIM": 1,
+      "hiddenUnsupportedSSIM": 0.7633317487361819,
+      "restoredChartColorsSSIM": 0.7524023171303028,
+      "unchangedChartRewriteAfterRelationshipFixSSIM": 1
+    },
+    {
+      "slide": 4,
+      "unsupportedCount": 3,
+      "templateSSIM": 0.872352176362995,
+      "directVsTemplateSSIM": 1,
+      "noopSSIM": 1,
+      "textPatchSSIM": 1,
+      "hiddenUnsupportedSSIM": 0.882601567572402,
+      "restoredChartColorsSSIM": 0.872352176362995,
+      "unchangedChartRewriteAfterRelationshipFixSSIM": 1
+    },
+    {
+      "slide": 5,
+      "unsupportedCount": 6,
+      "templateSSIM": 0.861231510793417,
+      "directVsTemplateSSIM": 1,
+      "noopSSIM": 1,
+      "textPatchSSIM": 1,
+      "hiddenUnsupportedSSIM": 0.8817140125040407,
+      "restoredChartColorsSSIM": 0.861231510793417,
+      "unchangedChartRewriteAfterRelationshipFixSSIM": 1
+    },
+    {
+      "slide": 6,
+      "unsupportedCount": 0,
+      "templateSSIM": 0.939685028874976,
+      "directVsTemplateSSIM": 1,
+      "noopSSIM": 1,
+      "textPatchSSIM": 1,
+      "hiddenUnsupportedSSIM": 0.939685028874976,
+      "restoredChartColorsSSIM": 0.9753155581794491,
+      "unchangedChartRewriteAfterRelationshipFixSSIM": 0.9583461330870087
+    }
+  ],
+  "notes": [
+    "Ablations are independent and do not restore all content.",
+    "Text patch intentionally changes content on slide 2.",
+    "OLE preservation is a diagnostic observation, not an approved product policy.",
+    "Product full test suite before diagnostic-only changes: 411 passed, 0 skipped."
+  ]
+}

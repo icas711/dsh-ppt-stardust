@@ -44,4 +44,6 @@
 
 Локальные частные артефакты этого прохода: `.test-output/golden-scene-example/` и `.test-output/golden-scene-example2/` (PPTX, ZIP, сравнения, `overview.png`, подробная диагностика). Они игнорируются Git. Обезличенные машиночитаемые результаты: [scene-acceptance-2026-11-19.json](scene-acceptance-2026-11-19.json).
 
+Последующий [разбор слайдов 2–6](PPTX-FIDELITY-DIAGNOSIS-2026-11-19.md) отделяет потери импорта от fallback-отрисовки и проверяет возможность патча исходного пакета. Он не меняет зафиксированный здесь FAIL.
+
 См. также [матрицу ограничений](../TEMPLATES.md) и [контракт](../SLIDE-MODEL.md).
