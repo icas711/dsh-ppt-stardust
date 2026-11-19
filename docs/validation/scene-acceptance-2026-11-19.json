@@ -1,0 +1,178 @@
+{
+  "date": "2026-11-19",
+  "scope": "Scene implementation and visual acceptance; private source content is excluded",
+  "threshold": 0.999,
+  "localPlatform": "Windows; native Microsoft PowerPoint and pinned LibreOffice WASM",
+  "checks": {
+    "unitTests": 411,
+    "passed": 411,
+    "skipped": 0
+  },
+  "portable": {
+    "passed": true,
+    "cases": [
+      {
+        "id": "dense",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "typography",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "groups",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "artwork",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "layers",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "import-dense",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "import-groups",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "import-typography",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "import-artwork",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "import-layers",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "legacy-cover",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "legacy-section",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "legacy-bullets",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "legacy-statement",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "legacy-quote",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      },
+      {
+        "id": "legacy-closing",
+        "ssim": 1.0,
+        "passed": true,
+        "minimumRegionSSIM": 1.0
+      }
+    ],
+    "fontSubstitutions": {
+      "legacy-bullets": {
+        "source": [
+          "Arial"
+        ],
+        "actual": [
+          "Arial"
+        ]
+      }
+    }
+  },
+  "simpleNative": {
+    "passed": true,
+    "ssim": [
+      1.0,
+      1.0
+    ],
+    "nativeDifferences": 0
+  },
+  "workingNative": {
+    "passed": false,
+    "slides": [
+      {
+        "slide": 1,
+        "previousSSIM": 0.979616,
+        "ssim": 1.0,
+        "unmappedObjects": 0
+      },
+      {
+        "slide": 2,
+        "previousSSIM": 0.794821,
+        "ssim": 0.8244101402773008,
+        "unmappedObjects": 11
+      },
+      {
+        "slide": 3,
+        "previousSSIM": 0.632885,
+        "ssim": 0.7524023171303028,
+        "unmappedObjects": 2
+      },
+      {
+        "slide": 4,
+        "previousSSIM": 0.788351,
+        "ssim": 0.872352176362995,
+        "unmappedObjects": 3
+      },
+      {
+        "slide": 5,
+        "previousSSIM": 0.709305,
+        "ssim": 0.861231510793417,
+        "unmappedObjects": 6
+      },
+      {
+        "slide": 6,
+        "previousSSIM": 0.713756,
+        "ssim": 0.939685028874976,
+        "unmappedObjects": 0
+      }
+    ],
+    "nativeDifferencesByCode": {
+      "native-bold": 4,
+      "native-colorRgb": 26,
+      "missing-native-text": 7,
+      "native-alignment": 5
+    }
+  },
+  "remoteCIExecuted": false
+}
