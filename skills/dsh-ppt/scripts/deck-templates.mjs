@@ -1,5 +1,8 @@
 import {createHash} from 'node:crypto'
 import {normalizeSceneTemplate,fillSceneLayout} from './deck-template-scene.mjs'
+import {validateDeckPlan} from './deck-generation.mjs'
+import {variantSampleValues} from './deck-variant-editor.mjs'
+export function templatePlanReport(template,plan){const manifest=validateTemplateManifest(template);if(manifest.schemaVersion!==3)fail('Plan validation requires schema 3');return validateDeckPlan(plan,manifest.style.layouts,{pageSize:manifest.style.pageSize})}
 import {importPptxScenes} from './deck-pptx-scenes.mjs'
 import {imageInfo as sceneImageInfo} from './deck-image.mjs'
 import { normalizeTextZones } from './deck-model.mjs'
@@ -566,6 +569,7 @@ function withDesignLayout(slide) {
  */
 export function templateCreateOptions(template, assets, options = {}) {
   const manifest = validateTemplateManifest(template, { templateAssets: assets })
+  if(options.deckPlan&&manifest.schemaVersion!==3)fail('deckPlan requires a schema 3 scene template')
   if (manifest.schemaVersion === 3) return sceneTemplateCreate(manifest,assets,options)
   const title = String(options.title ?? '').trim()
   if (!title) fail('创建演示文稿需要标题')
@@ -597,7 +601,7 @@ export function templateCreateOptions(template, assets, options = {}) {
  */
 export function templatePreviewOptions(template, assets, options = {}) {
   const manifest = validateTemplateManifest(template, { templateAssets: assets })
-  if (manifest.schemaVersion === 3) return {...sceneTemplateCreate(manifest,assets,{...options,title:manifest.name}).create,lang:options.lang??'ru'}
+  if (manifest.schemaVersion === 3) return {...sceneTemplateCreate(manifest,assets,{...options,title:manifest.name,...(options.sampleLength?{selections:manifest.style.layouts.map(l=>({layoutId:l.id,values:variantSampleValues(l,options.sampleLength)}))}:{})}).create,lang:options.lang??'ru'}
   const lang = options.lang ?? 'ru'
   const slides = [
     { layout: 'cover', kicker: L(lang, '模板预览', 'Template preview', 'Предпросмотр шаблона'), title: manifest.name,
@@ -948,14 +952,17 @@ function sceneTemplateAssets(manifest,assets){
 function sceneTemplateCreate(manifest,assets,options){
   const title=String(options.title??'').trim();if(!title)fail('Title is required')
   const bag={...sceneTemplateAssets(manifest,assets),...(options.assets??{})}
-  const selections=options.selections??manifest.style.layouts.map(l=>({layoutId:l.id,values:{}}))
+  if(options.deckPlan&&options.selections)fail('deckPlan and selections are mutually exclusive')
+  const generationReport=options.deckPlan?validateDeckPlan(options.deckPlan,manifest.style.layouts,{pageSize:manifest.style.pageSize}):undefined
+  if(generationReport&&!generationReport.valid){const error=new Error('dsh-ppt: generation-plan-invalid: '+generationReport.diagnostics.filter(d=>d.severity==='error').map(d=>d.slideId+': '+d.message).join('; '));error.code='generation-plan-invalid';error.diagnostics=generationReport.diagnostics;throw error}
+  const selections=options.deckPlan?.map(p=>({layoutId:p.variantId,values:p.values,id:p.id,label:p.intent}))??options.selections??manifest.style.layouts.map(l=>({layoutId:l.id,values:{}}))
   const diagnostics=[]
   const slides=selections.map((selection,i)=>{
     const layout=manifest.style.layouts.find(l=>l.id===selection.layoutId);if(!layout)fail('Unknown layout '+selection.layoutId)
-    const filled=fillSceneLayout(layout,selection.values??{},{assets:bag,slideId:'slide-'+(i+1)})
+    const filled=fillSceneLayout(layout,selection.values??{},{assets:bag,slideId:selection.id??'slide-'+(i+1),label:selection.label})
     diagnostics.push(...filled.diagnostics.map(d=>({...d,slide:i+1})));return filled.slide
   })
-  return {create:{title,slides,assets:bag,theme:manifest.style.theme??'data',style:{pageSize:manifest.style.pageSize,themeFonts:manifest.style.themeFonts,...(manifest.style.fonts?.length?{fonts:manifest.style.fonts.map(f=>({family:f.family,variant:f.variant,src:assets[f.file].data}))}:{}),sceneLayouts:manifest.style.layouts}},lineage:{id:manifest.id,revision:manifest.revision},diagnostics}
+  return {create:{title,slides,assets:bag,...(generationReport?{generation:{version:1,plan:clone(options.deckPlan)}}:{}),theme:manifest.style.theme??'data',style:{pageSize:manifest.style.pageSize,themeFonts:manifest.style.themeFonts,...(manifest.style.fonts?.length?{fonts:manifest.style.fonts.map(f=>({family:f.family,variant:f.variant,src:assets[f.file].data}))}:{}),sceneLayouts:manifest.style.layouts}},lineage:{id:manifest.id,revision:manifest.revision},diagnostics:[...diagnostics,...(generationReport?.diagnostics??[])],...(generationReport?{generationReport}:{})}
 }
 export function templateFromSceneManifest(project,options={}){
   const assets={},assetMap={},fonts=[]

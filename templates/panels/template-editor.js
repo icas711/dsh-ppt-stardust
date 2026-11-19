@@ -267,18 +267,44 @@ function TplSlideList({ slides, limit, hint, disabled, onChange, designLayouts =
             tplTr('Добавить страницу', 'Add slide') + ' (' + slides.length + '/' + limit + ')'));
 }
 
-function TplLayoutsEditor({ draft, images, disabled, set, pickImage, error }) {
+function TplLayoutsEditor({ draft, images, disabled, set, pickImage, error, sampleLength, onSampleLength }) {
     const [index, setIndex] = React.useState(0);
+    const [undo, setUndo] = React.useState([]);
+    const [editError, setEditError] = React.useState('');
     const layouts = draft.layouts, current = layouts[Math.min(index, layouts.length - 1)];
     const at = Math.min(index, Math.max(0, layouts.length - 1));
     const patch = (change) => set({ layouts: layouts.map((layout, i) => i === at ? { ...layout, ...change } : layout) });
-    if (draft.schemaVersion === 3) return h('div',null,
+    if (draft.schemaVersion === 3) {
+      const page=draft.pageSize,description=current?DshDeckModel.reconcileVariantDescription(current,page):null;
+      const apply=next=>{setUndo(previous=>[...previous,tplClone(layouts)].slice(-20));set({layouts:next});setEditError('');};
+      const change=values=>{const next={...current,...values};next.description=DshDeckModel.reconcileVariantDescription(next,page);apply(layouts.map((l,i)=>i===at?next:l));};
+      const describe=values=>change({description:{...description,...values,origin:'user'}});
+      const make=mode=>{try{let n=layouts.length+1;while(layouts.some(l=>l.id==='variant-'+n))n++;const next=DshDeckModel.createSceneVariant(current,{id:'variant-'+n,mode,pageSize:page,columns:2});apply([...layouts,next]);setIndex(layouts.length);}catch(e){setEditError(e.message);}};
+      const duplicates=DshDeckModel.duplicateVariantIds(layouts,page);
+      return h('div',null,
       h('select',{value:at,disabled,onChange:e=>setIndex(Number(e.target.value))},layouts.map((layout,i)=>h('option',{key:layout.id,value:i},(layout.familyId??'')+' / '+layout.name))),
+      h('div',{className:'w-toolbar'},...['duplicate','mirror','columns','image-left','image-right','no-image'].map((mode,i)=>h(W.Button,{key:mode,disabled:disabled||layouts.length>=120||!current,onClick:()=>make(mode)},[tplTr('Копия','Duplicate'),tplTr('Зеркальная перестановка','Mirror areas'),tplTr('Две колонки','Two columns'),tplTr('Изображение слева','Image left'),tplTr('Изображение справа','Image right'),tplTr('Без изображения','No image')][i])),h(W.Button,{disabled:disabled||!undo.length,onClick:()=>{set({layouts:undo[undo.length-1]});setUndo(undo.slice(0,-1));setIndex(0);}},tplTr('Отменить изменение варианта','Undo variant edit'))),
+      editError?h(W.Status,{tone:'error'},editError):null,
+      ...duplicates.map(d=>h('p',{key:d.variantId,role:'status'},tplTr('Одинаковая структура: ','Same structure: ')+d.variantId+' / '+d.duplicateOf)),
+      current?h('div',null,
+        h('label',null,tplTr('Название варианта','Variant name'),h('input',{value:current.name,disabled,onChange:e=>change({name:e.target.value})})),
+        h('label',null,tplTr('Назначение для модели','Purpose for generation'),h('textarea',{value:description.intent,disabled,maxLength:1024,onChange:e=>describe({intent:e.target.value})})),
+        ...[['suitableFor',tplTr('Подходящее содержимое — по строке','Suitable content — one per line')],['constraints',tplTr('Ограничения — по строке','Constraints — one per line')]].map(([key,label])=>h('label',{key},label,h('textarea',{value:description[key].join('\n'),disabled,onChange:e=>describe({[key]:e.target.value.split('\n').filter(v=>v.trim())})}))),
+        h('label',null,tplTr('Частота','Frequency'),h('select',{value:description.frequency,disabled,onChange:e=>describe({frequency:e.target.value})},...['main','support','accent'].map(v=>h('option',{key:v,value:v},v)))),
+        h('p',null,tplTr('Выберите представления, которым соответствует структура областей.','Choose representations supported by the actual slot arrangement.')),
+        h('div',null,...DshDeckModel.VISUAL_STRUCTURES.map(v=>h('label',{key:v},h('input',{type:'checkbox',checked:description.structures.includes(v),disabled,onChange:e=>describe({structures:e.target.checked?[...description.structures,v]:description.structures.filter(s=>s!==v)})}),v))),
+        ...description.slots.map(s=>h('fieldset',{key:s.slotId},h('legend',null,(current.slots.find(v=>v.id===s.slotId)?.name??s.slotId)+' · '+s.types[0]),
+          h('label',null,tplTr('Смысловая роль','Semantic role'),h('input',{value:s.role,disabled,onChange:e=>describe({slots:description.slots.map(v=>v.slotId===s.slotId?{...v,role:e.target.value,origin:'user'}:v)})})),
+          h('label',null,h('input',{type:'checkbox',checked:s.required,disabled,onChange:e=>change({slots:current.slots.map(v=>v.id===s.slotId?{...v,required:e.target.checked}:v)})}),tplTr('Обязательная область','Required slot')),
+          ...({text:['characters','items'],chart:['categories','series'],table:['rows','columns'],image:[]}[s.types[0]]).map(key=>h('label',{key},tplTr('Лимит: ','Limit: ')+key,h('input',{type:'number',min:1,max:262144,disabled,value:s.capacity?.[key]??'',onChange:e=>{const capacity={...s.capacity};if(e.target.value==='')delete capacity[key];else capacity[key]=Number(e.target.value);describe({slots:description.slots.map(v=>v.slotId===s.slotId?{...v,capacity,origin:'user'}:v)});}}))),
+          s.estimate?.characters?h('p',null,tplTr('Оценка символов (не гарантия вписывания): ','Estimated characters (not a fit guarantee): ')+s.estimate.characters):null)),
+        h('label',null,tplTr('Образец предпросмотра','Preview sample'),h('select',{value:sampleLength??'short',onChange:e=>onSampleLength?.(e.target.value)},h('option',{value:'short'},tplTr('Короткий заголовок, 2 пункта','Short title, 2 items')),h('option',{value:'long'},tplTr('Длинный заголовок, 6 пунктов','Long title, 6 items'))))):null,
       current?h(PptSceneObjects,{key:current.id,elements:current.elements,assets:Object.fromEntries(Object.entries(draft.assetMap??{}).map(([id,a])=>[id,a])),disabled,onChange:elements=>{
         const slots=elements.filter(e=>e.role!=='decor'&&['text','image','chart','table'].includes(e.type)).map(e=>current.slots.find(s=>s.elementId===e.id)??{id:'slot-'+e.id,elementId:e.id,type:e.type,name:e.name??e.id,required:true});
         elements=elements.map(e=>{const copy={...e},slot=slots.find(s=>s.elementId===e.id);if(slot)copy.slotId=slot.id;else delete copy.slotId;return copy});
-        patch({elements,slots});
+        change({elements,slots});
       }}):null);
+    }
     const patchImage = (i, change) => patch({ images: current.images.map((image, k) => k === i ? { ...image, ...change } : image) });
     const uid = () => Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
     const add = () => {
@@ -349,6 +375,8 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
     const [loadError, setLoadError] = React.useState('');
     const [preview, setPreview] = React.useState('');
     const [previewError, setPreviewError] = React.useState('');
+    const [sampleLength,setSampleLength]=React.useState('short');
+    const [previewWarnings,setPreviewWarnings]=React.useState([]);
     const [previewBusy, setPreviewBusy] = React.useState(false);
     const [copy, setCopy] = React.useState(null); // { id, name } — диалог «Сохранить как копию»
     const previewSeq = React.useRef(0);
@@ -380,14 +408,14 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
         setPreviewBusy(true);
         const timer = setTimeout(async () => {
             try {
-                const value = await action({ operation: 'template-preview', manifest: tplBuild(draft, base), uploads, baseKey: templateKey || undefined, lang: languageOf() });
+                const value = await action({ operation: 'template-preview', manifest: tplBuild(draft, base), uploads, baseKey: templateKey || undefined, lang: languageOf(),sampleLength });
                 if (seq !== previewSeq.current) return;
-                setPreview(value.html); setPreviewError('');
+                setPreview(value.html); setPreviewError('');setPreviewWarnings(value.quality?.issues??[]);
             } catch (e) { if (seq === previewSeq.current) setPreviewError(e instanceof Error ? e.message : String(e)); }
             finally { if (seq === previewSeq.current) setPreviewBusy(false); }
         }, 500);
         return () => clearTimeout(timer);
-    }, [draft, uploads, styleProblem]);
+    }, [draft, uploads, styleProblem,sampleLength]);
 
     if (loadError) return h('div', { className: 'tpe' }, h(W.Status, { tone: 'error' }, loadError), h('div', { className: 'w-toolbar' }, h(W.Button, { icon: 'left', onClick: onClose }, tplTr('К списку шаблонов', 'Back to templates'))));
     if (!draft) return h('div', { className: 'tpe-busywrap', style: { minHeight: '140px' } }, h('style', null, TPL_BUSY_CSS), h(TplBusy, { label: tplTr('Загружаю шаблон…', 'Loading the template…') }));
@@ -531,7 +559,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
                 h('div', { className: 'tpe-nav', role: 'group', 'aria-label': tplTr('Разделы шаблона', 'Template sections') },
                     sections.map(([id, label]) => h(W.Button, { key: id, 'aria-pressed': section === id, onClick: () => setSection(id) }, label))),
                 section === 'main' ? main : section === 'style' ? (draft.schemaVersion===3?h('div',null,h('p',null,tplTr('Оформление объектов изменяйте в разделе «Макеты».','Edit object formatting under Layouts.')),h(TplFontUploads,{draft,disabled,onPick:pickFont})):style)
-                    : section === 'layouts' ? h(TplLayoutsEditor, { draft, images, disabled, set, pickImage })
+                    : section === 'layouts' ? h(TplLayoutsEditor, { draft, images, disabled, set, pickImage,sampleLength,onSampleLength:setSampleLength })
                     : section === 'outline' ? h(TplSlideList, { designLayouts: draft.layouts, slides: draft.outline, limit: 120, disabled, hint: tplTr('Каркас — страницы-заготовки нового дека. {{deck.title}} подставит название презентации; строки «Заполнить: …» помечают места для ввода, дек остаётся черновиком, пока они не заполнены.', 'The outline is the skeleton of a new deck. {{deck.title}} is replaced with the deck title; “To fill: …” lines mark spots to complete and keep the deck a draft until they are replaced.'), onChange: outline => set({ outline }) })
                         : h(TplSlideList, { designLayouts: draft.layouts, slides: draft.samples, limit: 5, disabled, hint: tplTr('Образцы — до 5 готовых страниц с реальным содержанием: показывают, как должен выглядеть заполненный дек.', 'Samples are up to 5 finished slides with real content that show what a completed deck should look like.'), onChange: samples => set({ samples }) })),
             h('div', { className: 'tpe-preview' },
@@ -539,6 +567,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
                     ? h('iframe', { title: tplTr('Предпросмотр шаблона', 'Template preview'), sandbox: 'allow-scripts', srcDoc: preview })
                     : previewError ? null : h('p', { className: 'tpe-hint', style: { padding: '12px', minHeight: '80px' } }, tplTr('Готовлю предпросмотр…', 'Preparing the preview…'))),
                 previewError ? h(W.Status, { tone: 'error' }, previewError) : null,
+                ...previewWarnings.map((issue,i)=>h('p',{key:'fit-'+i,role:'status'},tplTr('Проверка образца (оценка): ','Sample check (estimate): ')+(issue.message??issue.code))),
                 h('p', { className: 'tpe-hint' }, tplTr('Предпросмотр показывает тему, цвета, шрифт, логотип, футер и фоны на типовых страницах. Он обновляется при каждой правке и ничего не сохраняет.', 'The preview shows the theme, colours, font, logo, footer and backgrounds on typical slides. It updates as you edit and saves nothing.')))),
         copy ? h(TplDialog, { busyLabel: tplTr('Сохраняю копию…', 'Saving the copy…'), title: tplTr('Сохранить как копию', 'Save as a copy'), closeLabel: tplTr('Отмена', 'Cancel'), busy, onClose: () => setCopy(null) },
             h('div', { className: 'ppt-tpl-import' },

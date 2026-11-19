@@ -76,6 +76,8 @@ export interface PptCreateArgs {
   templateId?: string
   /** Apply template sample slides in addition to the outline skeleton; default true. */
   templateSelections?: Array<{layoutId:string;values?:Record<string,unknown>}>
+  /** Schema 3: explicit, validated generation plan with addressable content. */
+  deckPlan?: Record<string,unknown>[]
   templateSamples?: boolean
   brand?: PptBrand
   /** Optional explicit source facts, assumptions and safe arithmetic; bind slides with {{metricId}}. */

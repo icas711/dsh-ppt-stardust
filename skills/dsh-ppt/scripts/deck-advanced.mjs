@@ -1,4 +1,5 @@
 import {transformedBounds} from './deck-geometry.mjs'
+import {validateDeckPlan,generationFingerprint} from './deck-generation.mjs'
 import {normalizeSceneTemplate,remapSceneLayout} from './deck-template-scene.mjs'
 import {expandDiagramSlides,diagramToScene} from './deck-diagrams.mjs'
 import {scenePptxPlacement} from './deck-scene-pptx.mjs'
@@ -163,7 +164,7 @@ function validateRawSlides(slides) {
   })
 }
 function snapshot(manifest) {
-  return clone(Object.fromEntries(['title', 'theme', 'language', 'motion', 'slides', 'brand', 'style', 'template', 'dataModel'].filter(k => manifest[k] !== undefined).map(k => [k, manifest[k]])))
+  return clone(Object.fromEntries(['title', 'theme', 'language', 'motion', 'slides', 'brand', 'style', 'template', 'dataModel', 'generation'].filter(k => manifest[k] !== undefined).map(k => [k, manifest[k]])))
 }
 function collectAssets(manifest) {
   const ids = new Set()
@@ -563,7 +564,7 @@ function result(manifest, paths) {
     slideCount: manifest.slides.length, deckId: manifest.deckId, revision: manifest.revision,
     slides: manifest.slides.map((s, i) => ({ slide: i + 1, id: s.id, title: s.label ?? s.title, layout: s.layout })),
     undoAvailable: manifest.history.length, deliveryStatus: manifest.quality?.issues.some(i => i.code === 'template-unfilled') ? 'draft' : 'ready-for-review',
-    quality: manifest.quality, verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' }, outputDir: dirname(paths.html),
+    quality: manifest.quality, ...(manifest.generation?{generationReport:{...manifest.generation.report,stale:manifest.generation.contentFingerprint!==generationFingerprint(manifest.slides)}}:{}), verification: { static: 'checked', pptxRender: 'not-verified', visual: 'not-verified' }, outputDir: dirname(paths.html),
     internalProject: !!manifest.delivery,
     ...(manifest.delivery?.pdfWarning ? { pdfWarning: manifest.delivery.pdfWarning } : {}),
     files: { ...paths, ...(manifest.delivery && existsSync(paths.pptx.slice(0, -5) + '.pdf') ? { pdf: paths.pptx.slice(0, -5) + '.pdf' } : {}) },
@@ -688,13 +689,20 @@ export async function buildDeckAsync(options = {}) {
   const assets = clone(options.assets ?? {})
   const brand = normalizeBrand(options.brand, assets, cwd)
   const style = normalizeStyle(options.style, assets, cwd)
+  let generation
+  if(options.generation!==undefined){
+    if(options.generation?.version!==1||!style?.sceneLayouts)fail('generation-plan-invalid: expected versioned plan and scene template')
+    const report=validateDeckPlan(options.generation.plan,style.sceneLayouts,{pageSize:style.pageSize})
+    if(!report.valid)fail('generation-plan-invalid: '+report.diagnostics.filter(d=>d.severity==='error').map(d=>d.message).join('; '))
+    generation={version:1,plan:clone(options.generation.plan),report,contentFingerprint:generationFingerprint(normalized.deck.slides)}
+  }
   const lineage = options.templateLineage
   if (lineage !== undefined && (lineage === null || typeof lineage !== 'object' || Array.isArray(lineage)
     || typeof lineage.id !== 'string' || !Number.isInteger(lineage.revision))) fail('templateLineage 需为 { id, revision }')
   const manifest = { version: DECK_VERSION, schemaVersion: normalized.deck.slides.every(s => s.layout === 'scene') ? 2 : PROJECT_SCHEMA_VERSION, deckId: randomUUID(), revision: 0,
     title: normalized.title, theme: normalized.theme.id, language: normalized.language.id, motion: normalized.motion,
     ...(scenario ? { template: scenario.id } : {}), ...(lineage ? { template: { id: lineage.id, revision: lineage.revision } } : {}),
-    ...(brand ? { brand } : {}), ...(style ? { style } : {}), ...(dataModel ? {dataModel} : {}), assets, history: [],
+    ...(brand ? { brand } : {}), ...(style ? { style } : {}), ...(dataModel ? {dataModel} : {}), ...(generation?{generation}:{}), assets, history: [],
     slides: embedSlides(normalized.deck.slides, assets, cwd).map(s => ({ ...s, id: s.layout==='scene' ? s.id??randomUUID() : randomUUID() })) }
   const data = await generate(manifest, options.signal)
   mkdirSync(normalized.outputDir, { recursive: true })
@@ -731,7 +739,7 @@ export function previewDeckHtml(options = {}) {
   collectAssets(manifest)
   manifest.slideCount = manifest.slides.length
   const html = renderHtml(manifest, brandedTheme(manifest), resolveLanguage(manifest.language), { pptx: 'preview.pptx', json: 'preview.json' })
-  return { ok: true, html, slideCount: manifest.slideCount }
+  return { ok: true, html, slideCount: manifest.slideCount,quality:checkManifest(manifest),fitAssessment:'estimated' }
 }
 
 function readDocument(pathInput, cwd = '.') {

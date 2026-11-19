@@ -19,12 +19,13 @@ export function variantSignature(layout,page=defaultPage){
  }).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))
  return JSON.stringify(parts)
 }
-export function variantRevision(layout){
- // Exact inputs to capacity estimation. Unlike the diversity signature, typography matters.
+export function generationFingerprint(value){
+ // Cache/staleness key only; source package integrity uses cryptographic hashes elsewhere.
  let hash=14695981039346656037n
- for(const ch of JSON.stringify({elements:layout.elements,slots:layout.slots})){hash^=BigInt(ch.codePointAt(0));hash=BigInt.asUintN(64,hash*1099511628211n)}
+ for(const ch of JSON.stringify(value)){hash^=BigInt(ch.codePointAt(0));hash=BigInt.asUintN(64,hash*1099511628211n)}
  return hash.toString(16).padStart(16,'0')
 }
+export function variantRevision(layout){return generationFingerprint({elements:layout.elements,slots:layout.slots})}
 export function describeVariant(layout,page=defaultPage){
  const slots=layout.slots.map(s=>{
   const e=layout.elements.find(e=>e.id===s.elementId),b=transformedBounds(e.frame,e.transform)

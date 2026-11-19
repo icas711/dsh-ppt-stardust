@@ -35,8 +35,24 @@ export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine
     /** ppt_template: библиотека шаблонов — список, импорт/экспорт, создание из pptx/проекта, редизайн. */
     template(rawArgs: unknown, exec?: PptExecution): Promise<{
         ok: boolean;
+        generationReport: any;
+        templates?: undefined;
+        scenarios?: undefined;
+        template?: undefined;
+        manifest?: undefined;
+        key?: undefined;
+        report?: undefined;
+        deleted?: undefined;
+        path?: undefined;
+        bytes?: undefined;
+        changed?: undefined;
+        revision?: undefined;
+        files?: undefined;
+    } | {
+        ok: boolean;
         templates: import("./types.js").PptTemplateSummary[];
         scenarios: unknown[];
+        generationReport?: undefined;
         template?: undefined;
         manifest?: undefined;
         key?: undefined;
@@ -51,6 +67,7 @@ export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine
         ok: boolean;
         template: any;
         manifest: Record<string, any>;
+        generationReport?: undefined;
         templates?: undefined;
         scenarios?: undefined;
         key?: undefined;
@@ -66,6 +83,7 @@ export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine
         key: string;
         template: any;
         report: any;
+        generationReport?: undefined;
         templates?: undefined;
         scenarios?: undefined;
         manifest?: undefined;
@@ -79,6 +97,7 @@ export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine
         ok: boolean;
         key: string;
         template: any;
+        generationReport?: undefined;
         templates?: undefined;
         scenarios?: undefined;
         manifest?: undefined;
@@ -92,6 +111,7 @@ export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine
     } | {
         ok: boolean;
         deleted: string;
+        generationReport?: undefined;
         templates?: undefined;
         scenarios?: undefined;
         template?: undefined;
@@ -107,6 +127,7 @@ export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine
         ok: boolean;
         path: string;
         bytes: number;
+        generationReport?: undefined;
         templates?: undefined;
         scenarios?: undefined;
         template?: undefined;
@@ -131,6 +152,7 @@ export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine
             json: string;
             pdf?: string;
         };
+        generationReport?: undefined;
         templates?: undefined;
         scenarios?: undefined;
         manifest?: undefined;

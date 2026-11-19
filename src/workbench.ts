@@ -18,6 +18,8 @@ import type { PptTemplateStore } from './templates.js'
 import type { WorkbenchIdentity } from './web-owner.js'
 // @ts-ignore Shared bundled ESM helpers.
 import { storedProjectPaths, touchRenderCache } from '../skills/dsh-ppt/scripts/deck-storage.mjs'
+// @ts-ignore Shared pure model cache key, not a package integrity hash.
+import {generationFingerprint} from '../skills/dsh-ppt/scripts/deck-generation.mjs'
 
 export const PPT_WORKBENCH_ROUTE = '/api/dsh-ppt/workbench'
 export const PPT_DOWNLOAD_ROUTE = '/api/dsh-ppt/download'
@@ -154,6 +156,7 @@ export class PptWorkbench {
     return { ok: true, project: { ...entry, deckId: manifest.deckId, revision: manifest.revision, slides: manifest.slides, pageSize:manifest.style?.pageSize,
       managedDelivery: !!manifest.delivery, pdfAvailable: !!manifest.delivery && existsSync(files.pptx.slice(0, -5) + '.pdf'), pdfWarning: manifest.delivery?.pdfWarning,
       undoAvailable: manifest.history.length, quality: check, html, dataModel:manifest.dataModel ?? null,
+      generationReport:manifest.generation?{...manifest.generation.report,stale:manifest.generation.contentFingerprint!==generationFingerprint(manifest.slides)}:null,
       assets: Object.fromEntries(Object.entries(manifest.assets ?? {}).map(([key, value]: [string, any]) => [key, { data: value.data, mime: value.mime }])),
       render: currentRender ? { pageCount: currentRender.pngPaths.length, missingFonts: currentRender.missingFonts ?? [] } : null } }
   }
@@ -260,6 +263,7 @@ export class PptWorkbench {
             uploads: body.uploads && typeof body.uploads === 'object' && !Array.isArray(body.uploads) ? body.uploads as Record<string, any> : undefined,
             baseKey: typeof body.baseKey === 'string' && body.baseKey ? body.baseKey : undefined,
             lang: typeof body.lang === 'string' ? body.lang : 'ru',
+            sampleLength:body.sampleLength==='long'?'long':'short',
             identity,
           })
           return engine.previewDeckHtml(options)

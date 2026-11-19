@@ -86,6 +86,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       if (typeof args.title !== 'string' || args.title.trim() === '') throw new Error('dsh-ppt：title 不能为空')
       const hasContent = typeof args.content === 'string' && args.content.trim() !== ''
       const hasSlides = Array.isArray(args.slides) && args.slides.length > 0
+      if(args.deckPlan&&(!args.templateId||hasContent||hasSlides||args.templateSelections||args.dataModel))throw new Error('dsh-ppt: deckPlan requires templateId and cannot be combined with content, slides, templateSelections or dataModel')
       if (!hasContent && !hasSlides && !args.template && !args.templateId) throw new Error('dsh-ppt：content 不能为空（或用 slides / template / templateId 传结构化幻灯片）')
       const engine = await loadEngine()
       // Check cancellation after loading and before artifact commit inside the async engine.
@@ -101,6 +102,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
           title: args.title.trim(),
           includeSamples: args.templateSamples !== false,
           selections: args.templateSelections,
+          deckPlan: args.deckPlan,
           assets:args.assets,
           lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || 'zh'),
         })
@@ -111,6 +113,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
           style: create.style,
           assets: create.assets,
           templateLineage: lineage,
+          generation:create.generation,
         }
       }
       const explicitSlides = hasSlides ? args.slides : undefined
@@ -133,6 +136,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         style: templateApply.style ?? args.style,
         assets: {...(templateApply.assets as object ?? {}),...args.assets},
         templateLineage: templateApply.templateLineage,
+        generation:templateApply.generation,
         dataModel: args.dataModel,
         cwd,
         signal: exec?.signal,
@@ -164,6 +168,11 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       const summarize = (record: { manifest: Record<string, any>; key: string; readonly: boolean }) =>
         ({ ...mod.summarizeTemplate(record.manifest), key: record.key, readonly: record.readonly })
       switch (args.operation) {
+        case 'validate-plan': {
+          if(!key)throw new Error('dsh-ppt: templateId is required')
+          const record=await needStore().get(key,identity)
+          return {ok:true,generationReport:mod.templatePlanReport(record.manifest,args.deckPlan)}
+        }
         case 'list': {
           const list = store ? await store.list(identity) : []
           const scenarios = engine.listTemplates(lang)

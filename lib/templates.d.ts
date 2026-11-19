@@ -104,6 +104,7 @@ export declare class PptTemplateStore {
         uploads?: Record<string, any>;
         baseKey?: string;
         lang?: string;
+        sampleLength?: 'short' | 'long';
         identity: CallerIdentity;
     }): Promise<Record<string, any>>;
     /** Import a bundle (.zip or template.json) into user space, or public for admins. */
@@ -148,6 +149,7 @@ export declare class PptTemplateStore {
             layoutId: string;
             values?: Record<string, unknown>;
         }>;
+        deckPlan?: Record<string, unknown>[];
         assets?: Record<string, unknown>;
     }): Promise<{
         create: Record<string, any>;

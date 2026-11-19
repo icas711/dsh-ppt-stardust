@@ -280,7 +280,7 @@ export class PptTemplateStore {
   }
 
   /** Arguments for the engine's HTML-only preview of an unsaved draft. */
-  async previewOptions(input: { manifest: Record<string, any>; uploads?: Record<string, any>; baseKey?: string; lang?: string; identity: CallerIdentity }): Promise<Record<string, any>> {
+  async previewOptions(input: { manifest: Record<string, any>; uploads?: Record<string, any>; baseKey?: string; lang?: string; sampleLength?:'short'|'long';identity: CallerIdentity }): Promise<Record<string, any>> {
     const m = await this.mod()
     let base: TemplateRecord | undefined
     if (input.baseKey) { try { base = await this.get(input.baseKey, input.identity) } catch { /* a new template has no stored base */ } }
@@ -288,11 +288,11 @@ export class PptTemplateStore {
     const draft = input.manifest ?? {}
     // The preview tolerates a half-typed id or an empty name; saving validates them strictly.
     const manifest = {
-      ...draft, schemaVersion: Array.isArray(draft?.style?.layouts) && draft.style.layouts.length ? 2 : 1,
+      ...draft, schemaVersion: draft.schemaVersion===3?3:Array.isArray(draft?.style?.layouts) && draft.style.layouts.length ? 2 : 1,
       id: typeof draft.id === 'string' && /^[a-z0-9][a-z0-9-]{1,48}$/.test(draft.id) ? draft.id : 'preview-template',
       name: typeof draft.name === 'string' && draft.name.trim() ? draft.name : 'Шаблон',
     }
-    return m.templatePreviewOptions(manifest, assets, { lang: input.lang })
+    return m.templatePreviewOptions(manifest, assets, { lang: input.lang,sampleLength:input.sampleLength })
   }
 
   /** Import a bundle (.zip or template.json) into user space, or public for admins. */
@@ -355,7 +355,7 @@ export class PptTemplateStore {
   }
 
   /** Create options for buildDeckAsync + lineage. */
-  async createOptions(key: string, identity: CallerIdentity, options: { title: string; includeSamples?: boolean; lang?: string; selections?: Array<{layoutId:string;values?:Record<string,unknown>}>;assets?:Record<string,unknown> }): Promise<{ create: Record<string, any>; lineage: { id: string; revision: number } }> {
+  async createOptions(key: string, identity: CallerIdentity, options: { title: string; includeSamples?: boolean; lang?: string; selections?: Array<{layoutId:string;values?:Record<string,unknown>}>;deckPlan?:Record<string,unknown>[];assets?:Record<string,unknown> }): Promise<{ create: Record<string, any>; lineage: { id: string; revision: number } }> {
     const m = await this.mod()
     const record = await this.get(key, identity)
     return m.templateCreateOptions(record.manifest, record.assets, options)
