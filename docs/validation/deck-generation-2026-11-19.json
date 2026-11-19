@@ -1,0 +1,320 @@
+{
+  "date": "2026-11-19",
+  "scope": "Public fixed plans; does not establish LLM selection quality or arbitrary PPTX fidelity",
+  "policy": {
+    "version": 1,
+    "minSlides": 6,
+    "maxVariantRun": 2,
+    "maxStructureRun": 2,
+    "accentWindow": 5
+  },
+  "results": [
+    {
+      "templateVariants": 1,
+      "content": "uniform",
+      "version": 1,
+      "policy": {
+        "version": 1,
+        "minSlides": 6,
+        "maxVariantRun": 2,
+        "maxStructureRun": 2,
+        "accentWindow": 5
+      },
+      "valid": true,
+      "diagnostics": [
+        {
+          "severity": "warning",
+          "code": "rhythm-variant-run",
+          "slideId": "slide-2",
+          "variantId": "variant-0",
+          "message": "Repeated structural variant",
+          "alternatives": []
+        },
+        {
+          "severity": "warning",
+          "code": "rhythm-structure-run",
+          "slideId": "slide-2",
+          "variantId": "variant-0",
+          "message": "Repeated visual structure",
+          "alternatives": []
+        },
+        {
+          "severity": "warning",
+          "code": "rhythm-limited-variants",
+          "slideId": "slide-0",
+          "variantId": "variant-0",
+          "message": "Template/content has only one compatible structural variant"
+        },
+        {
+          "severity": "warning",
+          "code": "rhythm-uniform-content",
+          "slideId": "slide-0",
+          "variantId": "variant-0",
+          "message": "One visual structure; use other structures only if supported by the material"
+        }
+      ],
+      "metrics": {
+        "contentSlides": 12,
+        "variants": 1,
+        "structures": 1,
+        "reachableVariants": 1,
+        "targetVariants": 1,
+        "maxVariantRun": 12,
+        "maxStructureRun": 12
+      },
+      "usedVariants": [
+        "variant-0"
+      ],
+      "usedStructures": [
+        "list"
+      ],
+      "unusedVariants": []
+    },
+    {
+      "templateVariants": 1,
+      "content": "mixed",
+      "version": 1,
+      "policy": {
+        "version": 1,
+        "minSlides": 6,
+        "maxVariantRun": 2,
+        "maxStructureRun": 2,
+        "accentWindow": 5
+      },
+      "valid": true,
+      "diagnostics": [
+        {
+          "severity": "warning",
+          "code": "rhythm-variant-run",
+          "slideId": "slide-2",
+          "variantId": "variant-0",
+          "message": "Repeated structural variant",
+          "alternatives": []
+        },
+        {
+          "severity": "warning",
+          "code": "rhythm-limited-variants",
+          "slideId": "slide-0",
+          "variantId": "variant-0",
+          "message": "Template/content has only one compatible structural variant"
+        }
+      ],
+      "metrics": {
+        "contentSlides": 12,
+        "variants": 1,
+        "structures": 11,
+        "reachableVariants": 1,
+        "targetVariants": 1,
+        "maxVariantRun": 12,
+        "maxStructureRun": 1
+      },
+      "usedVariants": [
+        "variant-0"
+      ],
+      "usedStructures": [
+        "process",
+        "number",
+        "hierarchy",
+        "comparison",
+        "timeline",
+        "kpi",
+        "list",
+        "quote",
+        "cycle",
+        "cards",
+        "chart"
+      ],
+      "unusedVariants": []
+    },
+    {
+      "templateVariants": 3,
+      "content": "uniform",
+      "version": 1,
+      "policy": {
+        "version": 1,
+        "minSlides": 6,
+        "maxVariantRun": 2,
+        "maxStructureRun": 2,
+        "accentWindow": 5
+      },
+      "valid": true,
+      "diagnostics": [
+        {
+          "severity": "warning",
+          "code": "rhythm-structure-run",
+          "slideId": "slide-2",
+          "variantId": "variant-2",
+          "message": "Repeated visual structure",
+          "alternatives": []
+        },
+        {
+          "severity": "warning",
+          "code": "rhythm-uniform-content",
+          "slideId": "slide-0",
+          "variantId": "variant-0",
+          "message": "One visual structure; use other structures only if supported by the material"
+        }
+      ],
+      "metrics": {
+        "contentSlides": 12,
+        "variants": 3,
+        "structures": 1,
+        "reachableVariants": 3,
+        "targetVariants": 3,
+        "maxVariantRun": 1,
+        "maxStructureRun": 12
+      },
+      "usedVariants": [
+        "variant-0",
+        "variant-1",
+        "variant-2"
+      ],
+      "usedStructures": [
+        "list"
+      ],
+      "unusedVariants": []
+    },
+    {
+      "templateVariants": 3,
+      "content": "mixed",
+      "version": 1,
+      "policy": {
+        "version": 1,
+        "minSlides": 6,
+        "maxVariantRun": 2,
+        "maxStructureRun": 2,
+        "accentWindow": 5
+      },
+      "valid": true,
+      "diagnostics": [],
+      "metrics": {
+        "contentSlides": 12,
+        "variants": 3,
+        "structures": 11,
+        "reachableVariants": 3,
+        "targetVariants": 3,
+        "maxVariantRun": 1,
+        "maxStructureRun": 1
+      },
+      "usedVariants": [
+        "variant-0",
+        "variant-1",
+        "variant-2"
+      ],
+      "usedStructures": [
+        "process",
+        "number",
+        "hierarchy",
+        "comparison",
+        "timeline",
+        "kpi",
+        "list",
+        "quote",
+        "cycle",
+        "cards",
+        "chart"
+      ],
+      "unusedVariants": []
+    },
+    {
+      "templateVariants": 8,
+      "content": "uniform",
+      "version": 1,
+      "policy": {
+        "version": 1,
+        "minSlides": 6,
+        "maxVariantRun": 2,
+        "maxStructureRun": 2,
+        "accentWindow": 5
+      },
+      "valid": true,
+      "diagnostics": [
+        {
+          "severity": "warning",
+          "code": "rhythm-structure-run",
+          "slideId": "slide-2",
+          "variantId": "variant-2",
+          "message": "Repeated visual structure",
+          "alternatives": []
+        },
+        {
+          "severity": "warning",
+          "code": "rhythm-uniform-content",
+          "slideId": "slide-0",
+          "variantId": "variant-0",
+          "message": "One visual structure; use other structures only if supported by the material"
+        }
+      ],
+      "metrics": {
+        "contentSlides": 12,
+        "variants": 8,
+        "structures": 1,
+        "reachableVariants": 8,
+        "targetVariants": 4,
+        "maxVariantRun": 1,
+        "maxStructureRun": 12
+      },
+      "usedVariants": [
+        "variant-0",
+        "variant-1",
+        "variant-2",
+        "variant-3",
+        "variant-4",
+        "variant-5",
+        "variant-6",
+        "variant-7"
+      ],
+      "usedStructures": [
+        "list"
+      ],
+      "unusedVariants": []
+    },
+    {
+      "templateVariants": 8,
+      "content": "mixed",
+      "version": 1,
+      "policy": {
+        "version": 1,
+        "minSlides": 6,
+        "maxVariantRun": 2,
+        "maxStructureRun": 2,
+        "accentWindow": 5
+      },
+      "valid": true,
+      "diagnostics": [],
+      "metrics": {
+        "contentSlides": 12,
+        "variants": 8,
+        "structures": 11,
+        "reachableVariants": 8,
+        "targetVariants": 4,
+        "maxVariantRun": 1,
+        "maxStructureRun": 1
+      },
+      "usedVariants": [
+        "variant-0",
+        "variant-1",
+        "variant-2",
+        "variant-3",
+        "variant-4",
+        "variant-5",
+        "variant-6",
+        "variant-7"
+      ],
+      "usedStructures": [
+        "process",
+        "number",
+        "hierarchy",
+        "comparison",
+        "timeline",
+        "kpi",
+        "list",
+        "quote",
+        "cycle",
+        "cards",
+        "chart"
+      ],
+      "unusedVariants": []
+    }
+  ]
+}
