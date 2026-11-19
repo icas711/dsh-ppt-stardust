@@ -165,7 +165,7 @@ Relative paths and configured output directories resolve per session cwd without
 
 - `lang` argument: `zh` (default) / `en` / `bilingual` / `ru` controls the player UI, page numbers, and closing defaults.
 - Content language is up to the author: for a bilingual deck, prefer "Chinese title + English subtitle" or generate two decks from the same outline.
-- Plugin docs come in Chinese (README.md) and English (this file); CLI and skill error messages are in Chinese.
+- Quality reports follow the deck language; some legacy diagnostics remain in Chinese.
 
 ## Engineering quality
 
@@ -213,3 +213,6 @@ After an output/transport error, inspect the known project path and current revi
 Coordinates, sizes and text-frame margins use integer EMU. Stroke and table-border thickness use points, 0–100, default 1; 9525 EMU = 0.75 pt. Font size and paragraph spacing use points; lineSpacing pct value 1 means 100%. Explicit `color` overrides inherited `colorSpec`; when both are explicitly supplied, `colorSpec` wins.
 
 Check embedded template/library fonts and actual render `missingFonts` before reporting substitution. Missing system installation alone is not evidence of missing embedded fonts. Re-render the current PPTX after changes; static estimates do not constitute visual acceptance.
+
+
+If image viewing is unavailable or `read_image` fails with a provider/adapter error, immediately disclose that visual inspection was not completed and ask the user to inspect every unchecked page in the delivered PPTX/PDF/HTML. Rendering and structural checks do not substitute for viewing. Do not automatically delegate to subagents, select another model or trigger review-role configuration. Separate AI review requires an explicit user request; delivery of existing artifacts must not wait for model setup.

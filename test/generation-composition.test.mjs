@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtempSync,rmSync,readFileSync} from 'node:fs'
+import {mkdtempSync,rmSync,readFileSync,readdirSync,existsSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {unzipSync,strFromU8} from 'fflate'
@@ -8,6 +8,9 @@ import {createPptExecutors} from '../lib/execution.js'
 import {PptTemplateStore} from '../lib/templates.js'
 import * as templates from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import * as engine from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
+import {composeSceneTemplateSlides,resolveSceneReference} from '../skills/dsh-ppt/scripts/deck-template-scene.mjs'
+import {buildPptTools} from '../lib/tools.js'
+import {resolvePptConfig} from '../lib/config.js'
 
 const frame={x:500000,y:500000,w:7500000,h:600000}
 const text=(id,value,y=500000)=>({id,type:'text',frame:{...frame,y},paragraphs:[{runs:[{text:value}]}]})
@@ -61,4 +64,78 @@ test('real tool exports all free content, fixed artwork and editable chart from 
  assert.ok(xml.includes('Evidence and explanation 10'));assert.ok(xml.includes('0000FF'));assert.ok(xml.includes('roundRect'))
  assert.ok(Object.keys(parts).some(k=>/^ppt\/charts\/chart\d+\.xml$/.test(k)))
  assert.deepEqual(saved.slides[1].elements.find(e=>e.id==='data').chart.series[0].values,[12,8])
+})
+
+test('content-only references require an explicit cover ID while preserving semantic purpose and original template',()=>{
+ const {template,slides}=fixture()
+ const [title,body]=template.style.layouts
+ Object.assign(title,{id:'title-reference',name:'Title artwork',purpose:'content'})
+ Object.assign(body,{id:'body-reference',name:'Body artwork',purpose:'content'})
+ const before=structuredClone(template)
+ assert.throws(()=>composeSceneTemplateSlides([slides[0]],template,{}),error=>{
+  assert.equal(error.code,'composition-reference');assert.equal(error.slide,1);assert.equal(error.purpose,'cover')
+  assert.deepEqual(error.availableLayouts,[{id:'title-reference',name:'Title artwork',purpose:'content'},{id:'body-reference',name:'Body artwork',purpose:'content'}])
+  assert.match(error.message,/No reference for purpose "cover"/)
+  assert.match(error.message,/"purpose":"cover","designLayout":"title-reference"/)
+  assert.match(error.message,/not an automatic choice/);return true
+ })
+ const result=composeSceneTemplateSlides([{...slides[0],designLayout:'title-reference'},{...slides[1],designLayout:'body-reference'}, {...slides[2],purpose:'closing'}],template,{})
+ assert.equal(result[0].purpose,'cover');assert.equal(result[0].designLayout,'title-reference')
+ assert.equal(result[0].elements[0].fill.color,'#FF0000')
+ assert.equal(result[1].elements[0].fill.color,'#0000FF')
+ // The fallback is the FIRST content reference, not a visual guess about its name.
+ assert.equal(result[2].purpose,'closing');assert.equal(result[2].designLayout,'title-reference')
+ assert.equal(resolveSceneReference({purpose:'section'},template.style.layouts).id,'title-reference')
+ assert.throws(()=>resolveSceneReference({purpose:'closing',designLayout:'unknown'},template.style.layouts,3),error=>{
+  assert.equal(error.slide,4);assert.equal(error.designLayout,'unknown');assert.match(error.message,/Unknown explicit designLayout/);return true
+ })
+ assert.throws(()=>resolveSceneReference({purpose:'content'},[{...body,purpose:'section'}]),/Available layouts/)
+ assert.throws(()=>resolveSceneReference({purpose:'cover'},[]),/no reference layouts/)
+ assert.deepEqual(template,before)
+})
+
+test('template get text exposes default reference IDs and schema explains explicit cross-purpose selection',()=>{
+ const {template}=fixture();template.style.layouts[0].purpose='content'
+ const tools=buildPptTools(resolvePptConfig({}))
+ const output=tools.find(t=>t.name==='ppt_template').output.render({}, {template:{key:'user:free-compose',name:'Two references',revision:1},manifest:template})[0].text
+ const data=JSON.parse(output.slice(output.indexOf('{\n')))
+ assert.deepEqual(data.defaultReferences,{cover:null,content:'cover',section:'cover',closing:'cover'})
+ assert.match(output,/keep purpose:cover/)
+ const scene=tools.find(t=>t.name==='ppt_create').parameters.properties.slides.items.properties
+ assert.match(scene.designLayout.description,/explicit ID wins even across purposes/)
+ assert.match(scene.designLayout.description,/Cover without a cover reference requires an explicit ID/)
+})
+
+test('reference failures through the creation executor never generate delivery files or modify the template',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'reference-preflight-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const {template,slides}=fixture(),identity={login:'reference-user',admin:false,local:false}
+ template.style.layouts[0].purpose='content'
+ const store=new PptTemplateStore({root:join(dir,'library'),templatesModuleLoader:async()=>templates,admins:[]})
+ await store.save({manifest:template,assets:{},identity})
+ const files=readdirSync(dir,{recursive:true}).sort(),saved=await store.get('user:'+template.id,identity)
+ let generations=0
+ const executors=createPptExecutors(resolvePptConfig({outputDir:join(dir,'delivery')}),async()=>({...engine,buildDeckAsync:args=>{generations++;return engine.buildDeckAsync(args)}}),{templateStore:store})
+ const exec={agent:{session:{header:{owner:identity.login}}}}
+ for(const bad of [[slides[0]],[{...slides[1],designLayout:'does-not-exist'}]]){
+  await assert.rejects(executors.create({title:'Invalid reference',templateId:'user:'+template.id,slides:bad},exec),/composition-reference/)
+  assert.equal(generations,0);assert.equal(existsSync(join(dir,'delivery')),false)
+  assert.deepEqual(readdirSync(dir,{recursive:true}).sort(),files)
+  assert.deepEqual(await store.get('user:'+template.id,identity),saved)
+ }
+})
+
+test('scene template creation preserves declared roles; PPTX import defaults to content without guessing a cover',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'reference-import-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const {slides}=fixture(),source=await engine.buildDeckAsync({title:'Title artwork',outputDir:dir,slides:[slides[0]]})
+ const manifest=engine.readDeckProject({deckPath:source.jsonPath}).manifest
+ const fromProject=templates.templateFromSceneManifest(manifest,{templateId:'project-roles',name:'Declared roles'})
+ assert.equal(fromProject.manifest.style.layouts[0].purpose,'cover')
+ const original=readFileSync(source.pptxPath)
+ const imported=await templates.templateFromPptxScene(source.pptxPath,{templateId:'imported-roles',name:'Imported title artwork'})
+ assert.equal(imported.manifest.style.layouts[0].purpose,'content')
+ assert.deepEqual(readFileSync(source.pptxPath),original)
+ const reference=imported.manifest.style.layouts[0]
+ const composed=composeSceneTemplateSlides([{layout:'scene',purpose:'cover',designLayout:reference.id,elements:[text('new-title','New title')]}],imported.manifest,{})
+ assert.equal(composed[0].purpose,'cover');assert.equal(composed[0].designLayout,reference.id)
+ assert.equal(imported.manifest.style.layouts[0].purpose,'content')
 })

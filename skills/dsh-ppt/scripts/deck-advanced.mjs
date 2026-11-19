@@ -446,9 +446,15 @@ export function checkManifest(manifest) {
   })
   if (manifest.brand?.logoAssetId && !manifest.assets?.[manifest.brand.logoAssetId]) issue(0, 'missing-logo', { severity: 'error' })
   else if (manifest.brand?.logoAssetId && assetError(manifest.brand.logoAssetId)) issue(0, 'invalid-logo', { severity: 'error', detail: assetError(manifest.brand.logoAssetId), suggestionCode: 'invalid-logo-suggestion' })
-  return { ok: !issues.some(i => i.severity === 'error'), slideCount: manifest.slides.length,
+  const reportLanguage = manifest.language === 'ru' ? 'ru' : manifest.language === 'en' ? 'en' : 'zh'
+  const suggestions = {ru:'Проверьте объект в итоговом рендере; выход декора за край может быть частью оформления.',en:'Inspect the object in the final render; artwork may intentionally extend beyond the page.',zh:'请检查最终渲染；装饰对象可能有意超出页面。'}
+  const localizedIssues = issues.map(issue => ({...issue,
+    message: reportLanguage === 'ru' ? issue.messageRu ?? issue.message : reportLanguage === 'en' ? issue.messageEn ?? issue.message : issue.message,
+    suggestion: (reportLanguage === 'ru' ? issue.suggestionRu : reportLanguage === 'en' ? issue.suggestionEn : issue.suggestion) ?? issue.suggestion ?? suggestions[reportLanguage],
+  }))
+  return { ok: !issues.some(i => i.severity === 'error'), slideCount: manifest.slides.length, language:reportLanguage,
     errorCount: issues.filter(i => i.severity === 'error').length, warningCount: issues.filter(i => i.severity === 'warning').length,
-    issues, note: '文字尺寸与溢出为静态估算；最终请检查 HTML 放映和 PowerPoint / WPS 实际显示。页脚和页码的小字号不计入正文检查。',
+    issues:localizedIssues, note: reportLanguage === 'ru' ? 'Размеры текста и переполнение — статическая оценка; проверьте итоговый HTML и отображение в PowerPoint / WPS. Мелкий текст колонтитулов и номеров страниц не считается основным текстом.' : reportLanguage === 'en' ? 'Text size and overflow are static estimates; verify HTML playback and PowerPoint / WPS rendering. Small footer and page-number text is not counted as body text.' : '文字尺寸与溢出为静态估算；最终请检查 HTML 放映和 PowerPoint / WPS 实际显示。页脚和页码的小字号不计入正文检查。',
     noteEn: 'Text size and overflow are static estimates; verify the actual HTML playback and PowerPoint / WPS rendering. Small footer and page-number text is not counted as body text.',
     noteRu: 'Размеры текста и переполнение — статическая оценка; итоговую вёрстку проверяйте в HTML-показе и в PowerPoint / WPS. Мелкий текст колонтитула и номеров страниц телом слайда не считается.' }
 }
@@ -1030,13 +1036,16 @@ export function checkDeck(options = {}) {
   const { manifest, path } = readDocument(options.deckPath, options.cwd)
   const quality = checkManifest(manifest), problem = artifactProblem(manifest, pathsFor(path))
   if (problem) {
-    quality.issues.push({ slide: 0, severity: 'error', code: 'artifact-conflict', message: problem, suggestion: '保留原成品，使用 saveAs:true 或面板「另存副本」。副本不包含 Office 手工修改。' })
+    quality.issues.push({ slide: 0, severity: 'error', code: 'artifact-conflict', message: quality.language==='ru'?'Файлы выдачи изменены или отсутствуют; текущий JSON может относиться к старому проекту.':quality.language==='en'?'Delivery files changed or are missing; this JSON may belong to an older project.':problem, suggestion: quality.language==='ru'?'Используйте jsonPath актуального проекта либо saveAs:true для восстановления отдельной копии из этого JSON.':quality.language==='en'?'Use the current project jsonPath or saveAs:true to recover a separate copy from this JSON.':'保留原成品，使用 saveAs:true 或面板「另存副本」。副本不包含 Office 手工修改。' })
     quality.errorCount++; quality.ok = false
   }
   let selectedSlide
   if(options.slide!==undefined){
-    const index=typeof options.slide==='number'&&Number.isInteger(options.slide)?options.slide-1:manifest.slides.findIndex(s=>s.id===options.slide)
-    if(index<0||index>=manifest.slides.length)fail('Unknown slide: '+options.slide)
+    // Prefer exact IDs, including numeric-looking IDs, before accepting a page string.
+    const exact=manifest.slides.findIndex(s=>s.id===options.slide)
+    const numeric=typeof options.slide==='number'?options.slide:typeof options.slide==='string'&&/^[1-9]\d*$/.test(options.slide)?Number(options.slide):NaN
+    const index=exact>=0?exact:Number.isSafeInteger(numeric)?numeric-1:-1
+    if(index<0||index>=manifest.slides.length)fail('Unknown slide: '+options.slide+'; use a 1-based page number (e.g. slide:1) or an existing slide ID: '+manifest.slides.map(s=>s.id).join(', '))
     selectedSlide={slide:index+1,...clone(manifest.slides[index])}
   }
   return { ...quality, deckPath: path, deckId: manifest.deckId, revision: manifest.revision,

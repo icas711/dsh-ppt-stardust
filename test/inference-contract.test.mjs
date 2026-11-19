@@ -147,3 +147,31 @@ test('overwrite creates a new project; old index entry cannot silently overwrite
   lossless(engine.checkDeck({deckPath:first.jsonPath}))
   assert.ok(engine.checkDeck({deckPath:first.jsonPath}).issues.some(i=>i.code==='artifact-conflict'))
 })
+
+test('check renders Russian report data, revision, IDs, full selected slide and all warnings without undefined',async t=>{
+  const root=temporary(t),scene=composed(1)[0]
+  scene.elements.push(...Array.from({length:14},(_,i)=>({id:'bleed-'+i,type:'shape',role:'decor',preset:'rect',frame:{x:-100,y:100,w:500,h:500}})))
+  const made=await engine.buildDeckAsync({title:'Report',lang:'ru',outputDir:root,slides:[scene]})
+  const tool=buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_check')
+  const result=await tool.execute({deckPath:made.jsonPath,slide:'1'})
+  lossless(result);assert.equal(result.selectedSlide.id,'slide-1')
+  assert.ok(result.warningCount>=14);assert.ok(result.issues.every(issue=>typeof issue.suggestion==='string'))
+  const rendered=tool.output.render({},result)[0].text
+  assert.match(rendered,/Проверка качества:/);assert.doesNotMatch(rendered,/undefined|[\u3400-\u9fff]/)
+  const data=JSON.parse(rendered.split('Данные проекта:\n')[1])
+  assert.equal(data.revision,0);assert.equal(data.deckId,made.deckId)
+  assert.equal(data.slides[0].id,'slide-1');assert.deepEqual(data.selectedSlide,result.selectedSlide)
+  assert.equal(data.issues.length,result.issues.length)
+  assert.match(rendered,/передайте renderReceipt/)
+})
+
+test('check accepts numeric page strings, prefers exact numeric-looking IDs and explains invalid references',async t=>{
+  const root=temporary(t),slides=composed(2);slides[0].id='2'
+  const made=await engine.buildDeckAsync({title:'IDs',outputDir:root,slides})
+  assert.equal(engine.checkDeck({deckPath:made.jsonPath,slide:'1'}).selectedSlide.id,'2')
+  assert.equal(engine.checkDeck({deckPath:made.jsonPath,slide:'2'}).selectedSlide.id,'2')
+  assert.equal(engine.checkDeck({deckPath:made.jsonPath,slide:2}).selectedSlide.id,'slide-2')
+  for(const slide of [0,-1,1.5,'0','1.0','missing','999999999999999999999999']){
+    assert.throws(()=>engine.checkDeck({deckPath:made.jsonPath,slide}),/use a 1-based page number.*slide-2/)
+  }
+})

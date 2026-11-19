@@ -51,6 +51,7 @@ export interface PptQualityResult {
     note: string;
     noteEn?: string;
     noteRu?: string;
+    language?: string;
 }
 export interface PptVerification {
     static: 'checked';
@@ -104,6 +105,15 @@ export interface PptCheckResult extends PptQualityResult {
     selectedSlide?: PptSlideSpec & {
         slide: number;
     };
+    revision?: number;
+    deckId?: string;
+    deckPath?: string;
+    slides?: Array<{
+        slide: number;
+        id: string;
+        title: string;
+        layout: string;
+    }>;
 }
 export interface PptEditArgs {
     deckPath: string;
