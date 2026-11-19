@@ -19,3 +19,8 @@ export function resizeSlideXml(xml, size) {
     .replace(/<a:gridCol w="(\d+)"\/>/g, (_, w) => `<a:gridCol w="${Math.round(Number(w) * sx)}"/>`)
     .replace(/<a:tr h="(\d+)"/g, (_, h) => `<a:tr h="${Math.round(Number(h) * sy)}"`)
 }
+
+// 页面类型 → 模板背景类型；deck-advanced 的样式规范化复用同一映射。
+export const TEMPLATE_BACKGROUND_TYPES = ['cover', 'section', 'content', 'closing']
+const BG_LAYOUT_MAP = { cover: 'cover', section: 'section', closing: 'closing', bullets: 'content', statement: 'content', quote: 'content', table: 'content', image: 'content', 'image-left': 'content', 'image-right': 'content', chart: 'content' }
+export function backgroundTypeOfLayout(layout) { return BG_LAYOUT_MAP[layout] ?? 'content' }
