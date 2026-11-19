@@ -4,6 +4,7 @@ import {validateDeckPlan,generationFingerprint} from './deck-generation.mjs'
 import {normalizeSceneTemplate,remapSceneLayout} from './deck-template-scene.mjs'
 import {expandDiagramSlides,diagramToScene,restoreSemanticRepresentation} from './deck-diagrams.mjs'
 import {scenePptxPlacement} from './deck-scene-pptx.mjs'
+import {sceneContrastIssues} from './deck-scene-quality.mjs'
 import { normalizePageSize, pageSize } from './deck-page.mjs'
 import { assertLegacySlideInput, validateSlideRepresentation, normalizeSceneSlides, normalizeSceneSlide } from './deck-model.mjs'
 import { PROJECT_SCHEMA_VERSION, MAX_PROJECT_HISTORY as MAX_HISTORY, normalizeProjectEnvelope, nextProjectRevision } from './deck-migrations.mjs'
@@ -360,6 +361,11 @@ export function checkManifest(manifest) {
       en: ['Body text and background contrast is below 4.5:1.', 'Adjust the brand background or text colour.'],
       ru: ['Контраст текста и фона ниже 4.5:1', 'Скорректируйте цвет фона или текста бренда'],
     },
+    'contrast-unverified': {
+      zh: ['无法静态确认该对象的文字对比度', '背景含图片、局部覆盖或颜色变换；请查看实际渲染'],
+      en: ['Text contrast could not be verified for this object.', 'Inspect the render: the background is an image, partial overlay or has colour transforms.'],
+      ru: ['Контраст текста объекта не проверен', 'Просмотрите рендер: фон содержит изображение, частичное перекрытие или преобразования цвета'],
+    },
     'missing-logo': {
       zh: ['品牌 Logo 资产不存在', '重新提供 Logo'],
       en: ['The brand logo asset is missing.', 'Provide the logo again.'],
@@ -391,6 +397,9 @@ export function checkManifest(manifest) {
   manifest.slides.forEach((slide, i) => {
     if (slide.layout === 'scene') {
       const size = pageSize(manifest)
+      for(const finding of sceneContrastIssues(slide,{background:theme.palette.bg,textColor:theme.palette.fg})){
+        issue(i,finding.code);Object.assign(issues.at(-1),finding)
+      }
       for (const e of slide.elements) {
         const id = e.assetId ?? e.previewAssetId
         if (id && assetError(id)) issue(i, 'invalid-image', {severity:'error', detail:assetError(id), suggestionCode:'invalid-image-suggestion'})
