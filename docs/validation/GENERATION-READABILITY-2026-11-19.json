@@ -1,0 +1,140 @@
+{
+  "date": "2026-11-19",
+  "codeCommit": "992948e8f3f9b43171accb412d17fb1133e05efa",
+  "scope": "Local replay, no live model; unchanged user plans, corrected v2 template, current generator",
+  "liveModelCalls": 0,
+  "inputSha256": "d676616bd37cdffd69340a63196154f849415051288971be75882ece7b54807e",
+  "checks": {
+    "fullSuite": {
+      "passed": 469,
+      "failed": 0,
+      "skipped": 0
+    },
+    "sceneGolden": {
+      "cases": 23,
+      "passed": true,
+      "minimumSsim": 1.0
+    },
+    "legacyImportGolden": {
+      "cases": 6,
+      "regressionPassed": true,
+      "fidelityPassed": false
+    },
+    "native": {
+      "renderer": "Microsoft PowerPoint",
+      "version": "16.0",
+      "decks": 11,
+      "reviewedPages": 26
+    },
+    "correctedTemplate": {
+      "id": "generation-evaluation-v2",
+      "background": "#FFFFFF",
+      "text": "#242424",
+      "contrastRatio": 15.522910417680388
+    },
+    "offlineReview": {
+      "passed": 8,
+      "total": 10,
+      "remainingIssues": [
+        {
+          "caseId": "cycle",
+          "issues": [
+            {
+              "code": "source-reference",
+              "message": "Use the supplied material ID and section order, without invented provenance"
+            }
+          ]
+        },
+        {
+          "caseId": "kpi",
+          "issues": [
+            {
+              "code": "source-reference",
+              "message": "Use the supplied material ID and section order, without invented provenance"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "replayedCases": [
+    {
+      "caseId": "categories",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "4ebb0bc0d94a2a68e0a81794a1f816240448d78d93676b2f3b29159680cf8d46"
+    },
+    {
+      "caseId": "comparison",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "1f2ecaead6dd264967b83c877fd611cdb8036698858f219addd63612ef4ed509"
+    },
+    {
+      "caseId": "cycle",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "5df7b6f7d5ebed2ccd70a63ccac2c39a88eb7a051f264aacf092117eb3e2dc1f"
+    },
+    {
+      "caseId": "identifiers",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "0616f8a8fe7a2d555e644800b775ad213a199ec039264196f5a7fb92db28b370"
+    },
+    {
+      "caseId": "kpi",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "7a0ecd0681d3402c57e27a00290dea875338490a56609b53acb855544eb376e8"
+    },
+    {
+      "caseId": "mixed-deck",
+      "slides": 9,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "adefabaf99b5ba14878da048a705ca004ef4f09b054c9e0d88ad9cd2949f3a88"
+    },
+    {
+      "caseId": "process",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "91fc5aa934b06d25467bd3c70411a709ed9ffe2490e7133a6924f85fb1034841"
+    },
+    {
+      "caseId": "quote",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "b7fc2c3fa937b763509a06030e1e973276a6c714ceba15c41f5c53fb0629c5c1"
+    },
+    {
+      "caseId": "timeline",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "06aff5f8344acbc180c92dd966c524fc83536cb704e5c8fead7b3f9157c45742"
+    },
+    {
+      "caseId": "unordered",
+      "slides": 1,
+      "layoutErrors": 0,
+      "layoutWarnings": 0,
+      "pptxSha256": "92cb3eb9b32e360547116d079a1821183f5cda9e1b4cf2f2f22d63c30892e46b"
+    }
+  ],
+  "limitations": [
+    "Live DSH/model test and remote CI not repeated",
+    "Static scene contrast does not certify image/partial/colour-transform backgrounds or native chart label placement",
+    "Area automatic labels disabled; explicit label positions for area/doughnut rejected by shared contract",
+    "Series palette tones repeat for larger sets; explicit series/point colours and visual review remain available",
+    "No source IDs invented for the two incomplete user responses",
+    "Historical DSH review and arbitrary-source fidelity metrics unchanged"
+  ]
+}
