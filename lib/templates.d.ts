@@ -150,6 +150,7 @@ export declare class PptTemplateStore {
             values?: Record<string, unknown>;
         }>;
         deckPlan?: Record<string, unknown>[];
+        generationPolicy?: Record<string, number>;
         assets?: Record<string, unknown>;
     }): Promise<{
         create: Record<string, any>;

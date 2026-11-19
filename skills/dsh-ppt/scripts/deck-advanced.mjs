@@ -1,7 +1,8 @@
 import {transformedBounds} from './deck-geometry.mjs'
+import {pptxFontName} from './deck-pptx.mjs'
 import {validateDeckPlan,generationFingerprint} from './deck-generation.mjs'
 import {normalizeSceneTemplate,remapSceneLayout} from './deck-template-scene.mjs'
-import {expandDiagramSlides,diagramToScene} from './deck-diagrams.mjs'
+import {expandDiagramSlides,diagramToScene,restoreSemanticRepresentation} from './deck-diagrams.mjs'
 import {scenePptxPlacement} from './deck-scene-pptx.mjs'
 import { normalizePageSize, pageSize } from './deck-page.mjs'
 import { assertLegacySlideInput, validateSlideRepresentation, normalizeSceneSlides, normalizeSceneSlide } from './deck-model.mjs'
@@ -26,6 +27,10 @@ const layouts = new Set(['cover', 'section', 'bullets', 'statement', 'closing', 
 const hash = data => createHash('sha256').update(data).digest('hex')
 const clone = value => structuredClone(value)
 function abort(signal) { signal?.throwIfAborted() }
+function semanticRenderOptions(options){
+  const theme=resolveTheme(options.theme||scenarios.find(s=>s.id===options.template)?.theme),body=options.style?.textStyles?.body??{},font=body.fontFamily||options.brand?.fontFamily||options.style?.themeFonts?.minorLatin||pptxFontName(theme.fonts.body)
+  return {pageSize:options.style?.pageSize,accent:options.brand?.primaryColor??theme.palette.accent,color:options.brand?.textColor??theme.palette.fg,background:options.brand?.backgroundColor??theme.palette.bg,textStyle:{fontFamily:font.trim(),...(font!==font.trim()?{sourceTypeface:font}:{}),...(body.size?{size:body.size}:{})}}
+}
 function fail(message) { throw new Error('dsh-ppt：' + message) }
 
 const scenarios = [
@@ -114,7 +119,7 @@ function normalizeStyle(input, assets, cwd) {
   if (input === undefined || input === null) return undefined
   if (typeof input !== 'object' || Array.isArray(input)) fail('style 必须是对象')
   const pageSize = normalizePageSize(input.pageSize)
-  const sceneLayouts = input.sceneLayouts === undefined ? undefined : normalizeSceneTemplate({schemaVersion:3,style:{layouts:input.sceneLayouts}}, {assets}).style.layouts
+  const sceneLayouts = input.sceneLayouts === undefined ? undefined : normalizeSceneTemplate({schemaVersion:3,style:{layouts:input.sceneLayouts,...(pageSize?{pageSize}:{})}}, {assets}).style.layouts
   if (sceneLayouts && input.layouts) fail('mixed-template-layout: legacy layouts and scene layouts')
   const themeFonts = normalizeThemeFonts(input.themeFonts)
   const backgrounds = input.backgrounds ?? []
@@ -673,7 +678,7 @@ function artifactProblem(manifest, paths) {
 }
 
 export async function buildDeckAsync(options = {}) {
-  options = {...options,slides:expandDiagramSlides(options.slides,{pageSize:options.style?.pageSize})}
+  options = {...options,slides:expandDiagramSlides(options.slides,semanticRenderOptions(options))}
   abort(options.signal)
   validateRawSlides(options.slides)
   const scenario = options.template ? scenarios.find(s => s.id === options.template) : undefined
@@ -692,7 +697,7 @@ export async function buildDeckAsync(options = {}) {
   let generation
   if(options.generation!==undefined){
     if(options.generation?.version!==1||!style?.sceneLayouts)fail('generation-plan-invalid: expected versioned plan and scene template')
-    const report=validateDeckPlan(options.generation.plan,style.sceneLayouts,{pageSize:style.pageSize})
+    const report=validateDeckPlan(options.generation.plan,style.sceneLayouts,{pageSize:style.pageSize,policy:options.generation.policy})
     if(!report.valid)fail('generation-plan-invalid: '+report.diagnostics.filter(d=>d.severity==='error').map(d=>d.message).join('; '))
     generation={version:1,plan:clone(options.generation.plan),report,contentFingerprint:generationFingerprint(normalized.deck.slides)}
   }
@@ -725,7 +730,7 @@ export async function buildDeckAsync(options = {}) {
  * on every edit. Accepts the same theme / brand / style / slides arguments as buildDeckAsync.
  */
 export function previewDeckHtml(options = {}) {
-  options = {...options,slides:expandDiagramSlides(options.slides,{pageSize:options.style?.pageSize})}
+  options = {...options,slides:expandDiagramSlides(options.slides,semanticRenderOptions(options))}
   validateRawSlides(options.slides)
   const normalized = normalizeBuildOptions({ ...options, outputDir: '.' })
   const cwd = resolve('.'), assets = clone(options.assets ?? {})
@@ -834,6 +839,7 @@ export async function editDeck(options = {}) {
     if (used.has(index)) fail('一次修改不能重复指定同一页：' + (index + 1))
     used.add(index)
     if (!edit.patch || typeof edit.patch !== 'object' || Array.isArray(edit.patch)) fail('第 ' + (index + 1) + ' 页 patch 需为对象')
+    if(edit.patch.restoreRepresentation!==undefined){if(Object.keys(edit.patch).some(k=>k!=='restoreRepresentation'))fail('Restore representation must be a separate explicit operation');next.slides[index]=restoreSemanticRepresentation(next.slides[index],edit.patch.restoreRepresentation,{...semanticRenderOptions(next),assets:next.assets});continue}
     if (edit.patch.layout === 'diagram') {
       if(Object.keys(edit.patch).some(k=>!['layout','diagram','title','notes'].includes(k)))fail('Diagram patches only accept layout, diagram, title and notes')
       const original=state.manifest.slides.find(s=>s.id===next.slides[index].id)
@@ -842,7 +848,7 @@ export async function editDeck(options = {}) {
       const labels=(edit.patch.diagram?.items??[]).flatMap(item=>[item.label,item.detail,item.date].filter(Boolean)).join('\n')
       if(edit.patch.diagram?.kind!=='chart'&&source.some(text=>!labels.includes(text)))fail('diagram-content-unmapped: include every source text in diagram labels/details')
       if(edit.patch.diagram?.kind==='chart'&&source.length)fail('diagram-content-unmapped: create a separate numeric chart from explicit categories and values; retain the source list')
-      const converted=diagramToScene({layout:'diagram',title,notes:edit.patch.notes??original.notes,diagram:edit.patch.diagram},{pageSize:next.style?.pageSize})
+      const converted=diagramToScene({layout:'diagram',title,notes:edit.patch.notes??original.notes,diagram:edit.patch.diagram},semanticRenderOptions(next))
       next.slides[index]={...converted,id:next.slides[index].id}
       continue
     }
@@ -894,10 +900,10 @@ export async function editDeck(options = {}) {
     duplicate.has(slide.id) ? [slide, { ...clone(slide), id: randomUUID() }] : [slide])
   if (options.append !== undefined) {
     if (!Array.isArray(options.append) || options.append.length < 1 || options.append.length > 5) fail('append 需为 1-5 页')
-    validateRawSlides(expandDiagramSlides(options.append,{pageSize:next.style?.pageSize}))
+    validateRawSlides(expandDiagramSlides(options.append,semanticRenderOptions(next)))
     let added
     if(next.slides[0].layout==='scene'){
-      const expanded=expandDiagramSlides(options.append,{pageSize:next.style?.pageSize})
+      const expanded=expandDiagramSlides(options.append,semanticRenderOptions(next))
       if(expanded.every(s=>s.layout==='scene'))added=normalizeSceneSlides(expanded,{assets:next.assets})
       else{
         if(expanded.some(s=>s.layout==='scene'))fail('Append cannot mix legacy slides and scenes')

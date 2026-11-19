@@ -1,9 +1,19 @@
 // Pure, shared generation planning. Never repairs content or silently substitutes layouts.
 import {transformedBounds} from './deck-geometry.mjs'
 import {normalizeSceneChart,normalizeSceneTable} from './deck-structured.mjs'
+import {validateSemanticDiagram,semanticInputProperties,semanticListLines} from './deck-semantic.mjs'
 export const GENERATION_POLICY=Object.freeze({version:1,minSlides:6,maxVariantRun:2,maxStructureRun:2,accentWindow:5})
 export const VISUAL_STRUCTURES=Object.freeze(['list','cards','process','hierarchy','timeline','cycle','comparison','kpi','quote','number','relationship','chart','table','image'])
 export const CONFIRMED_CHART_VARIANTS=Object.freeze(['column','bar','line','pie','doughnut','area','stacked-column','percent-stacked-bar'])
+export function sceneChartVariant(chart){return chart.grouping==='stacked'&&chart.kind==='column'?'stacked-column':chart.grouping==='percentStacked'&&chart.kind==='bar'?'percent-stacked-bar':chart.kind}
+export function selectSceneChartVariant(chart,variant){
+ if(!CONFIRMED_CHART_VARIANTS.includes(variant))fail('chart-unconfirmed','chart.kind','Unconfirmed chart variant')
+ const next=clone(chart);delete next.grouping
+ next.kind=variant==='stacked-column'?'column':variant==='percent-stacked-bar'?'bar':variant
+ if(variant==='stacked-column')next.grouping='stacked'
+ if(variant==='percent-stacked-bar')next.grouping='percentStacked'
+ return normalizeSceneChart(next)
+}
 const clone=v=>JSON.parse(JSON.stringify(v))
 function fail(code,path,message){const e=new Error(`dsh-ppt: ${code} at ${path}: ${message}`);e.code=code;e.path=path;throw e}
 function object(v,path,keys){if(!v||typeof v!=='object'||Array.isArray(v))fail('generation-schema',path,'Expected object');for(const k of Object.keys(v))if(!keys.includes(k))fail('unknown-field',path+'.'+k,'Unknown field')}
@@ -11,12 +21,13 @@ function string(v,path,max=1024){if(typeof v!=='string'||!v.trim()||v.length>max
 function integer(v,path,min=1,max=262144){if(!Number.isSafeInteger(v)||v<min||v>max)fail('generation-schema',path,'Expected bounded integer');return v}
 function strings(v,path,choices){if(!Array.isArray(v)||v.length>32||new Set(v).size!==v.length)fail('generation-schema',path,'Expected unique list');return v.map((x,i)=>{string(x,path+'['+i+']');if(choices&&!choices.includes(x))fail('generation-schema',path,'Unknown choice '+x);return x})}
 const defaultPage={width:12192000,height:6858000}
+function planText(value){if(typeof value==='string')return value;if(!Array.isArray(value)||!value.length||value.length>1024||value.some(p=>!p||!Array.isArray(p.runs)||p.runs.some(r=>!r||typeof r!=='object'||r.text!==undefined&&typeof r.text!=='string')))return null;return value.map(p=>p.runs.map(r=>r.text??'').join('')).join('\n')}
 /** Structural signature deliberately excludes IDs, text, assets, colors and typography. */
 export function variantSignature(layout,page=defaultPage){
  const parts=layout.elements.filter(e=>e.role!=='decor'&&!e.hidden&&e.type!=='group').map(e=>{
   const b=transformedBounds(e.frame,e.transform)
   return [e.type,...['x','y','w','h'].map(k=>Math.round(b[k]/(['x','w'].includes(k)?page.width:page.height)*100))]
- }).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))
+ }).sort((a,b)=>{const x=JSON.stringify(a),y=JSON.stringify(b);return x<y?-1:x>y?1:0})
  return JSON.stringify(parts)
 }
 export function generationFingerprint(value){
@@ -25,7 +36,7 @@ export function generationFingerprint(value){
  for(const ch of JSON.stringify(value)){hash^=BigInt(ch.codePointAt(0));hash=BigInt.asUintN(64,hash*1099511628211n)}
  return hash.toString(16).padStart(16,'0')
 }
-export function variantRevision(layout){return generationFingerprint({elements:layout.elements,slots:layout.slots})}
+export function variantRevision(layout,page=defaultPage){return generationFingerprint({page,elements:layout.elements,slots:layout.slots})}
 export function describeVariant(layout,page=defaultPage){
  const slots=layout.slots.map(s=>{
   const e=layout.elements.find(e=>e.id===s.elementId),b=transformedBounds(e.frame,e.transform)
@@ -34,8 +45,8 @@ export function describeVariant(layout,page=defaultPage){
   const estimate=s.type==='text'?{characters:Math.max(1,Math.floor(w/(size*12700*.6))*Math.floor(h/(size*12700*1.25)))}:{}
   return {slotId:s.id,role:e.role??'content',types:[s.type],required:s.required??false,...(s.maxCharacters?{capacity:{characters:s.maxCharacters}}:{}),estimate,origin:'auto'}
  })
- const types=new Set(layout.slots.map(s=>s.type))
- return {version:1,origin:'auto',revision:variantRevision(layout),intent:'Заполнение областей: '+layout.slots.map(s=>s.name??s.type).join(', ').slice(0,900),suitableFor:[],constraints:[],frequency:'main',structures:[...(types.has('text')?['list']:[]),...['chart','table','image'].filter(t=>types.has(t))],slots}
+ const types=new Set(layout.slots.map(s=>s.type)),visualArea=layout.slots.some(s=>{const e=layout.elements.find(e=>e.id===s.elementId);return s.type==='text'&&e.frame.w>=page.width*.5&&e.frame.h>=page.height*.3})
+ return {version:1,origin:'auto',revision:variantRevision(layout,page),intent:'Заполнение областей: '+layout.slots.map(s=>s.name??s.type).join(', ').slice(0,900),suitableFor:[],constraints:visualArea?['Generated visual structures require explicit version 2 semantic source in visual.slotId.']:[],frequency:'main',structures:[...new Set([...(types.has('text')?['list']:[]),...(visualArea?['cards','process','hierarchy','timeline','cycle','comparison','kpi','quote','number','relationship','chart']:[]),...['chart','table','image'].filter(t=>types.has(t))])],slots}
 }
 export function normalizeVariantDescription(input,layout,page=defaultPage){
  if(input===undefined)return describeVariant(layout,page)
@@ -57,9 +68,10 @@ export function normalizeVariantDescription(input,layout,page=defaultPage){
   return clone(s)
  })
  // Recompute stale estimates, retaining user intent and hard capacities.
- if(input.revision!==variantRevision(layout)){
+ if(input.revision!==variantRevision(layout,page)){
   const calculated=describeVariant(layout,page)
   out.slots=out.slots.map(s=>({...s,estimate:calculated.slots.find(x=>x.slotId===s.slotId).estimate}))
+  if(input.origin==='auto'){out.structures=calculated.structures;out.constraints=calculated.constraints}
   out.revision=calculated.revision
  }
  return out
@@ -78,24 +90,33 @@ export function chartApplicability(chart,evidence={}){
  return issues
 }
 export function generationInputProperties(){return {
- deckPlan:{type:'array',minItems:1,maxItems:120,description:'Schema 3 template plan. Choose variant IDs and structures from template descriptions by meaning. Include original slot values; validator reports errors and rhythm warnings without replacing the choice.',items:{type:'object',additionalProperties:false,required:['id','variantId','intent','structure','values'],properties:{id:{type:'string'},variantId:{type:'string'},intent:{type:'string'},structure:{type:'string',enum:[...VISUAL_STRUCTURES]},values:{type:'object',additionalProperties:true},sources:{type:'array',items:{type:'string'}},evidence:{type:'object',additionalProperties:false,properties:{ordered:{type:'boolean'},whole:{type:'boolean'},additive:{type:'boolean'},repeats:{type:'boolean'}}}}}}
+ generationPolicy:{type:'object',properties:Object.fromEntries(Object.keys(GENERATION_POLICY).map(k=>[k,{type:'integer',minimum:k==='accentWindow'?2:1,maximum:120,...(k==='version'?{enum:[1]}:{})}])),additionalProperties:false,description:'Optional explicit rhythm policy; unspecified fields use version 1 defaults. Rhythm warnings never replace selected content or layouts.'},
+ deckPlan:{type:'array',minItems:1,maxItems:120,description:'Schema 3 template plan. Choose variant IDs and structures from template descriptions by meaning. Include original slot values; validator reports errors and rhythm warnings without replacing the choice.',items:{type:'object',additionalProperties:false,required:['id','variantId','intent','structure','values'],properties:{id:{type:'string'},variantId:{type:'string'},intent:{type:'string'},structure:{type:'string',enum:[...VISUAL_STRUCTURES]},values:{type:'object',additionalProperties:true},sources:{type:'array',items:{type:'string'}},visual:{type:'object',properties:{slotId:{type:'string'},diagram:semanticInputProperties()},required:['slotId','diagram'],additionalProperties:false,description:'Optional native representation inside a text slot. Use semantic version 2. Original slot text must be preserved in the supplied diagram. Other template objects remain fixed.'},evidence:{type:'object',additionalProperties:false,properties:{ordered:{type:'boolean'},whole:{type:'boolean'},additive:{type:'boolean'},repeats:{type:'boolean'}}}}}}
 }}
 /** Deterministic maximum distinct feasible variants, not number of IDs in the ZIP. */
 function reachableDistinct(sets){const matched=new Map();function visit(i,seen){for(const signature of sets[i]){if(seen.has(signature))continue;seen.add(signature);if(!matched.has(signature)||visit(matched.get(signature),seen)){matched.set(signature,i);return true}}return false}for(let i=0;i<sets.length;i++)visit(i,new Set());return matched.size}
 export function validateDeckPlan(plan,layouts,{pageSize=defaultPage,policy=GENERATION_POLICY}={}){
  if(!Array.isArray(plan)||!plan.length||plan.length>120)fail('plan-limit','deckPlan','Expected 1–120 slides')
- object(policy,'policy',Object.keys(GENERATION_POLICY));if(policy.version!==1)fail('generation-schema','policy.version','Unknown policy version');for(const k of ['minSlides','maxVariantRun','maxStructureRun','accentWindow'])integer(policy[k],'policy.'+k,1,120)
+ object(policy,'policy',Object.keys(GENERATION_POLICY));if(policy.version!==1)fail('generation-schema','policy.version','Unknown policy version');for(const k of ['minSlides','maxVariantRun','maxStructureRun','accentWindow'])integer(policy[k],'policy.'+k,k==='accentWindow'?2:1,120)
  const descriptions=new Map(layouts.map(l=>[l.id,normalizeVariantDescription(l.description,l,pageSize)])),signatures=new Map(layouts.map(l=>[l.id,variantSignature(l,pageSize)])),diagnostics=[],seen=new Set()
  const add=(severity,code,p,message,extra={})=>diagnostics.push({severity,code,slideId:p.id,variantId:p.variantId,message,...extra})
  function compatibility(p,l,report){
   const d=descriptions.get(l.id),issues=[]
   if(!d.structures.includes(p.structure))issues.push({code:'plan-structure',message:'Variant does not support this structure'})
-  if(['process','timeline'].includes(p.structure)&&p.evidence?.ordered!==true)issues.push({code:'plan-order',message:'Order must be explicitly confirmed'})
-  if(p.structure==='cycle'&&p.evidence?.repeats!==true)issues.push({code:'plan-cycle',message:'Repetition must be explicitly confirmed'})
+  if(d.origin==='auto'&&!['list','chart','table','image'].includes(p.structure)&&!p.visual)issues.push({code:'plan-visual-required',message:'This automatic capability needs explicit visual semantic source, not a label alone'})
+  if(p.structure==='chart'&&!p.visual&&!l.slots.some(s=>s.type==='chart'))issues.push({code:'plan-visual-required',message:'A chart needs native chart data or explicit visual source'})
+  if(['process','timeline'].includes(p.structure)&&p.evidence?.ordered!==true&&p.visual?.diagram?.ordered!==true)issues.push({code:'plan-order',message:'Order must be explicitly confirmed'})
+  if(p.structure==='cycle'&&p.evidence?.repeats!==true&&p.visual?.diagram?.repeats!==true)issues.push({code:'plan-cycle',message:'Repetition must be explicitly confirmed'})
+  if(p.visual){
+   const slot=l.slots.find(s=>s.id===p.visual.slotId),target=l.elements.find(e=>e.id===slot?.elementId)
+   if(!slot||slot.type!=='text'||target.transform?.some((v,i)=>v!==[1,0,0,1,0,0][i])||l.elements.some(e=>e.type==='group'&&e.children.includes(target.id)))issues.push({code:'plan-visual-slot',slotId:p.visual.slotId,message:'Visual representation requires an unrotated independent text slot'})
+   if(p.visual.diagram.version!==2||p.visual.diagram.kind!==p.structure)issues.push({code:'plan-structure',message:'Visual source must be version 2 and match the selected structure'})
+   try{validateSemanticDiagram(p.visual.diagram);if(p.structure==='chart')issues.push(...chartApplicability(p.visual.diagram.chart,p.evidence));const original=p.values[p.visual.slotId],text=planText(original)??'';const labels=semanticListLines(p.visual.diagram).join('\n');if(text.split('\n').filter(t=>t.trim()).some(t=>!labels.includes(t)))issues.push({code:'plan-content-unmapped',slotId:p.visual.slotId,message:'Visual structure must retain every original text line'})}catch(e){issues.push({code:e.code??'diagram-input',message:e.message})}
+  }
   for(const key of Object.keys(p.values))if(!l.slots.some(s=>s.id===key))issues.push({code:'unknown-slot',slotId:key,message:'Unknown slot'})
   for(const s of d.slots){const value=p.values[s.slotId];if(value===undefined){if(s.required)issues.push({code:'plan-required',slotId:s.slotId,message:'Required slot has no content'});continue}
    const slot=l.slots.find(x=>x.id===s.slotId),type=slot.type
-   const text=type==='text'?(typeof value==='string'?value:Array.isArray(value)?value.map(p=>p.runs?.map(r=>r.text??'').join('')??'').join('\n'):null):null
+   const text=type==='text'?planText(value):null
    const valid=type==='text'?text!==null:type==='image'?typeof value==='string':value&&typeof value==='object'&&!Array.isArray(value)
    if(!valid){issues.push({code:'slot-type',slotId:s.slotId,message:'Content does not match slot type'});continue}
    try{if(type==='chart')normalizeSceneChart(value);if(type==='table')normalizeSceneTable(value)}catch(error){issues.push({code:error.code??'slot-type',slotId:s.slotId,message:error.message});continue}
@@ -109,12 +130,20 @@ export function validateDeckPlan(plan,layouts,{pageSize=defaultPage,policy=GENER
   return issues.length===0
  }
  const rows=plan.map((p,i)=>{
-  object(p,'deckPlan['+i+']',['id','variantId','intent','structure','values','sources','evidence']);string(p.id,'id',128);if(seen.has(p.id))fail('duplicate-slide','id','Duplicate plan slide ID');seen.add(p.id);string(p.variantId,'variantId',128);string(p.intent,'intent',4096);if(!VISUAL_STRUCTURES.includes(p.structure))fail('generation-schema','structure','Unknown structure');object(p.values,'values',Object.keys(p.values??{}));if(p.sources!==undefined)strings(p.sources,'sources');if(p.evidence!==undefined){object(p.evidence,'evidence',['ordered','whole','additive','repeats']);for(const v of Object.values(p.evidence))if(typeof v!=='boolean')fail('generation-schema','evidence','Expected boolean')}
+  object(p,'deckPlan['+i+']',['id','variantId','intent','structure','values','sources','evidence','visual']);string(p.id,'id',128);if(seen.has(p.id))fail('duplicate-slide','id','Duplicate plan slide ID');seen.add(p.id);string(p.variantId,'variantId',128);string(p.intent,'intent',4096);if(!VISUAL_STRUCTURES.includes(p.structure))fail('generation-schema','structure','Unknown structure');object(p.values,'values',Object.keys(p.values??{}));if(p.sources!==undefined)strings(p.sources,'sources');if(p.visual!==undefined){object(p.visual,'visual',['slotId','diagram']);string(p.visual.slotId,'visual.slotId',128);object(p.visual.diagram,'visual.diagram',Object.keys(p.visual.diagram??{}))}if(p.evidence!==undefined){object(p.evidence,'evidence',['ordered','whole','additive','repeats']);for(const v of Object.values(p.evidence))if(typeof v!=='boolean')fail('generation-schema','evidence','Expected boolean')}
   const l=layouts.find(l=>l.id===p.variantId);if(!l){add('error','unknown-variant',p,'Unknown variant');return {p,eligible:[],signature:'',content:true,accent:false}}
   compatibility(p,l,true)
   // Alternative layouts must accept actual values by stable slot IDs; never remap them silently.
-  const eligible=layouts.filter(l=>compatibility(p,l,false)).map(l=>l.id)
-  return {p,eligible,signature:signatures.get(l.id),content:!['cover','section','closing'].includes(l.purpose),accent:descriptions.get(l.id).frequency==='accent'}
+  const bindings=[]
+  const eligible=layouts.filter(candidate=>{
+   if(candidate.id===l.id){if(!compatibility(p,l,false))return false;bindings.push({variantId:l.id,slots:Object.fromEntries(Object.keys(p.values).map(k=>[k,k]))});return true}
+   const values={},mapping={},used=new Set(),sourceDescriptions=descriptions.get(l.id).slots
+   for(const sourceSlot of l.slots.filter(s=>Object.hasOwn(p.values,s.id))){const role=sourceDescriptions.find(s=>s.slotId===sourceSlot.id).role,target=descriptions.get(candidate.id).slots.find(s=>!used.has(s.slotId)&&s.types[0]===sourceSlot.type&&s.role===role);if(!target)return false;used.add(target.slotId);values[target.slotId]=p.values[sourceSlot.id];mapping[target.slotId]=sourceSlot.id}
+   const visual=p.visual?{...p.visual,slotId:Object.keys(mapping).find(k=>mapping[k]===p.visual.slotId)}:undefined
+   if(!compatibility({...p,values,...(visual?{visual}:{})},candidate,false))return false
+   bindings.push({variantId:candidate.id,slots:mapping});return true
+  }).map(l=>l.id)
+  return {p,eligible,bindings,signature:signatures.get(l.id),content:!['cover','section','closing'].includes(l.purpose),accent:descriptions.get(l.id).frequency==='accent'||['quote','number'].includes(p.structure)}
  })
  const content=rows.filter(r=>r.content),structures=new Set(content.map(r=>r.p.structure)),used=new Set(content.map(r=>r.signature)),achievable=reachableDistinct(content.map(r=>new Set(r.eligible.map(id=>signatures.get(id)))))
  let maxVariantRun=0,maxStructureRun=0,vr=0,sr=0
@@ -129,5 +158,5 @@ export function validateDeckPlan(plan,layouts,{pageSize=defaultPage,policy=GENER
   if(used.size<target)add('warning','rhythm-variety',content[0].p,'Too few structural variants',{expected:target,actual:used.size})
   if(structures.size===1)add('warning','rhythm-uniform-content',content[0].p,'One visual structure; use other structures only if supported by the material')
  }
- return {version:1,policy:{...policy},valid:!diagnostics.some(d=>d.severity==='error'),diagnostics,metrics:{contentSlides:content.length,variants:used.size,structures:structures.size,reachableVariants:achievable,targetVariants:target,maxVariantRun,maxStructureRun},usedVariants:[...new Set(rows.map(r=>r.p.variantId))],usedStructures:[...structures],unusedVariants:layouts.filter(l=>!rows.some(r=>r.p.variantId===l.id)).map(l=>l.id)}
+ return {version:1,policy:{...policy},valid:!diagnostics.some(d=>d.severity==='error'),diagnostics,compatibleVariants:rows.map(r=>({slideId:r.p.id,proposals:r.bindings??[]})),metrics:{contentSlides:content.length,variants:used.size,structures:structures.size,reachableVariants:achievable,targetVariants:target,maxVariantRun,maxStructureRun},usedVariants:[...new Set(rows.map(r=>r.p.variantId))],usedStructures:[...structures],unusedVariants:layouts.filter(l=>!rows.some(r=>r.p.variantId===l.id)).map(l=>l.id)}
 }

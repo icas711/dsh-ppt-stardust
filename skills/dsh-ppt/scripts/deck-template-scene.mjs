@@ -1,6 +1,6 @@
 // Shared schema 3 template contract and addressable slot filling.
 import {normalizeSceneSlide,SCENE_LIMITS} from './deck-model.mjs'
-import {normalizeVariantDescription} from './deck-generation.mjs'
+import {normalizeVariantDescription,validateDeckPlan} from './deck-generation.mjs'
 const clone=value=>JSON.parse(JSON.stringify(value))
 function fail(code,path,message){const e=new Error(`dsh-ppt: ${code} at ${path}: ${message}`);e.code=code;e.path=path;throw e}
 const id=(x,p)=>{if(typeof x!=='string'||!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(x))fail('invalid-id',p,'Expected stable ID');return x}
@@ -72,4 +72,13 @@ export function remapSceneLayout(slide,from,to,{assets={}}={}){
  for(const e of unmatched){const copy=clone(e);let suffix=1;while(ids.has(copy.id))copy.id=e.id+'-preserved-'+suffix++;ids.add(copy.id);delete copy.slotId;copy.support={mode:'lossy',reason:'Content preserved outside matched slots; review its placement'};filled.slide.elements.push(copy);filled.diagnostics.push({code:'unmapped-content-preserved',elementId:copy.id})}
  filled.slide=normalizeSceneSlide(filled.slide,{assets})
  return filled
+}
+/** Shared full preflight: semantic/rhythm checks plus the actual scene slot normalizer. */
+export function validateSceneTemplatePlan(plan,layouts,options={}){
+ const report=validateDeckPlan(plan,layouts,options)
+ for(const p of plan){const layout=layouts.find(l=>l.id===p.variantId);if(!layout)continue
+  try{fillSceneLayout(layout,p.values,{assets:options.assets??{},slideId:p.id})}catch(error){report.diagnostics.push({severity:'error',code:error.code??'slot-values',slideId:p.id,variantId:p.variantId,message:error.message})}
+ }
+ report.valid=!report.diagnostics.some(d=>d.severity==='error')
+ return report
 }

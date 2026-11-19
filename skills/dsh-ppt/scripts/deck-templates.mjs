@@ -1,8 +1,9 @@
 import {createHash} from 'node:crypto'
-import {normalizeSceneTemplate,fillSceneLayout} from './deck-template-scene.mjs'
-import {validateDeckPlan} from './deck-generation.mjs'
+import {normalizeSceneTemplate,fillSceneLayout,validateSceneTemplatePlan} from './deck-template-scene.mjs'
+import {GENERATION_POLICY} from './deck-generation.mjs'
 import {variantSampleValues} from './deck-variant-editor.mjs'
-export function templatePlanReport(template,plan){const manifest=validateTemplateManifest(template);if(manifest.schemaVersion!==3)fail('Plan validation requires schema 3');return validateDeckPlan(plan,manifest.style.layouts,{pageSize:manifest.style.pageSize})}
+import {diagramToScene} from './deck-diagrams.mjs'
+export function templatePlanReport(template,plan,policy){const manifest=validateTemplateManifest(template);if(manifest.schemaVersion!==3)fail('Plan validation requires schema 3');return validateSceneTemplatePlan(plan,manifest.style.layouts,{pageSize:manifest.style.pageSize,assets:Object.fromEntries(Object.entries(manifest.assetMap??{}).map(([id,a])=>[id,a])),policy:{...GENERATION_POLICY,...policy}})}
 import {importPptxScenes} from './deck-pptx-scenes.mjs'
 import {imageInfo as sceneImageInfo} from './deck-image.mjs'
 import { normalizeTextZones } from './deck-model.mjs'
@@ -953,16 +954,27 @@ function sceneTemplateCreate(manifest,assets,options){
   const title=String(options.title??'').trim();if(!title)fail('Title is required')
   const bag={...sceneTemplateAssets(manifest,assets),...(options.assets??{})}
   if(options.deckPlan&&options.selections)fail('deckPlan and selections are mutually exclusive')
-  const generationReport=options.deckPlan?validateDeckPlan(options.deckPlan,manifest.style.layouts,{pageSize:manifest.style.pageSize}):undefined
+  const generationReport=options.deckPlan?validateSceneTemplatePlan(options.deckPlan,manifest.style.layouts,{assets:bag,pageSize:manifest.style.pageSize,policy:{...GENERATION_POLICY,...options.generationPolicy}}):undefined
   if(generationReport&&!generationReport.valid){const error=new Error('dsh-ppt: generation-plan-invalid: '+generationReport.diagnostics.filter(d=>d.severity==='error').map(d=>d.slideId+': '+d.message).join('; '));error.code='generation-plan-invalid';error.diagnostics=generationReport.diagnostics;throw error}
-  const selections=options.deckPlan?.map(p=>({layoutId:p.variantId,values:p.values,id:p.id,label:p.intent}))??options.selections??manifest.style.layouts.map(l=>({layoutId:l.id,values:{}}))
+  const selections=options.deckPlan?.map(p=>({layoutId:p.variantId,values:p.values,id:p.id,label:p.intent.slice(0,1024),visual:p.visual}))??options.selections??manifest.style.layouts.map(l=>({layoutId:l.id,values:{}}))
   const diagnostics=[]
   const slides=selections.map((selection,i)=>{
     const layout=manifest.style.layouts.find(l=>l.id===selection.layoutId);if(!layout)fail('Unknown layout '+selection.layoutId)
     const filled=fillSceneLayout(layout,selection.values??{},{assets:bag,slideId:selection.id??'slide-'+(i+1),label:selection.label})
+    if(selection.visual){
+      const slot=layout.slots.find(s=>s.id===selection.visual.slotId),target=filled.slide.elements.find(e=>e.id===slot.elementId),prototype=layout.elements.find(e=>e.id===slot.elementId),style={...prototype.textStyle,...prototype.paragraphs[0]?.runs.find(r=>r.style)?.style}
+      const generated=diagramToScene({diagram:selection.visual.diagram},{pageSize:manifest.style.pageSize,region:target.frame,textStyle:style,accent:manifest.style.brand?.primaryColor??resolveTheme(manifest.style.theme).palette.accent,background:layout.backgroundColor??manifest.style.brand?.backgroundColor??resolveTheme(manifest.style.theme).palette.bg})
+      const ids=new Map(generated.elements.map((e,n)=>[e.id,slot.elementId.slice(0,70)+'.visual.'+n]))
+      const elements=generated.elements.map(e=>({...e,id:ids.get(e.id),role:'content'}))
+      for(const e of elements)if(e.type==='text')e.paragraphs=e.paragraphs.map(p=>{const label=p.runs.map(r=>r.text??'').join(''),supplied=target.paragraphs.find(q=>q.runs.map(r=>r.text??'').join('')===label);return supplied?clone(supplied):p})
+      const at=filled.slide.elements.indexOf(target);filled.slide.elements.splice(at,1,...elements)
+      const original=selection.values[slot.id],originalText=typeof original==='string'?original:original.map(p=>p.runs.map(r=>r.text??'').join('')).join('\n')
+      filled.slide.semanticSource={...generated.semanticSource,elementIds:elements.map(e=>e.id),originalText,originalTextObject:Object.fromEntries(['paragraphs','textStyle','textFrame'].filter(k=>target[k]!==undefined).map(k=>[k,clone(target[k])]))}
+    }
     diagnostics.push(...filled.diagnostics.map(d=>({...d,slide:i+1})));return filled.slide
   })
-  return {create:{title,slides,assets:bag,...(generationReport?{generation:{version:1,plan:clone(options.deckPlan)}}:{}),theme:manifest.style.theme??'data',style:{pageSize:manifest.style.pageSize,themeFonts:manifest.style.themeFonts,...(manifest.style.fonts?.length?{fonts:manifest.style.fonts.map(f=>({family:f.family,variant:f.variant,src:assets[f.file].data}))}:{}),sceneLayouts:manifest.style.layouts}},lineage:{id:manifest.id,revision:manifest.revision},diagnostics:[...diagnostics,...(generationReport?.diagnostics??[])],...(generationReport?{generationReport}:{})}
+  const brand=Object.fromEntries(Object.entries(manifest.style.brand??{}).filter(([key])=>['primaryColor','backgroundColor','textColor','fontFamily','name','footer'].includes(key)))
+  return {create:{title,slides,assets:bag,...(Object.keys(brand).length?{brand}:{}),...(generationReport?{generation:{version:1,plan:clone(options.deckPlan),policy:generationReport.policy}}:{}),theme:manifest.style.theme??'data',style:{pageSize:manifest.style.pageSize,themeFonts:manifest.style.themeFonts,...(manifest.style.fonts?.length?{fonts:manifest.style.fonts.map(f=>({family:f.family,variant:f.variant,src:assets[f.file].data}))}:{}),sceneLayouts:manifest.style.layouts}},lineage:{id:manifest.id,revision:manifest.revision},diagnostics:[...diagnostics,...(generationReport?.diagnostics??[])],...(generationReport?{generationReport}:{})}
 }
 export function templateFromSceneManifest(project,options={}){
   const assets={},assetMap={},fonts=[]

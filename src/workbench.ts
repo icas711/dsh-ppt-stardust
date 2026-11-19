@@ -173,6 +173,8 @@ export class PptWorkbench {
         if (!Array.isArray(item) || item.length > 256 || Buffer.byteLength(JSON.stringify(item)) > 2*1024*1024) throw new Error('Invalid scene object list')
       } else if (key === 'label') {
         if (typeof item !== 'string' || item.length > 1024) throw new Error('Invalid scene label')
+      } else if(key==='restoreRepresentation') {
+        if(!['list','visual'].includes(String(item)))throw new Error('Unknown semantic representation')
       } else if (key === 'bullets') {
         if (!Array.isArray(item) || item.length > 50 || item.some(v => typeof v !== 'string' || v.length > 2000)) throw new Error('要点内容无效')
       } else if (key === 'image') {

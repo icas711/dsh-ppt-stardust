@@ -235,6 +235,7 @@ export interface PptCreateArgs {
     }>;
     /** Schema 3: explicit, validated generation plan with addressable content. */
     deckPlan?: Record<string, unknown>[];
+    generationPolicy?: Record<string, number>;
     templateSamples?: boolean;
     brand?: PptBrand;
     /** Optional explicit source facts, assumptions and safe arithmetic; bind slides with {{metricId}}. */

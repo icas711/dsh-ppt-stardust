@@ -86,6 +86,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       if (typeof args.title !== 'string' || args.title.trim() === '') throw new Error('dsh-ppt：title 不能为空')
       const hasContent = typeof args.content === 'string' && args.content.trim() !== ''
       const hasSlides = Array.isArray(args.slides) && args.slides.length > 0
+      if(args.generationPolicy&&!args.deckPlan)throw new Error('dsh-ppt: generationPolicy requires deckPlan')
       if(args.deckPlan&&(!args.templateId||hasContent||hasSlides||args.templateSelections||args.dataModel))throw new Error('dsh-ppt: deckPlan requires templateId and cannot be combined with content, slides, templateSelections or dataModel')
       if (!hasContent && !hasSlides && !args.template && !args.templateId) throw new Error('dsh-ppt：content 不能为空（或用 slides / template / templateId 传结构化幻灯片）')
       const engine = await loadEngine()
@@ -103,6 +104,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
           includeSamples: args.templateSamples !== false,
           selections: args.templateSelections,
           deckPlan: args.deckPlan,
+          generationPolicy:args.generationPolicy,
           assets:args.assets,
           lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || 'zh'),
         })
@@ -171,7 +173,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         case 'validate-plan': {
           if(!key)throw new Error('dsh-ppt: templateId is required')
           const record=await needStore().get(key,identity)
-          return {ok:true,generationReport:mod.templatePlanReport(record.manifest,args.deckPlan)}
+          return {ok:true,generationReport:mod.templatePlanReport(record.manifest,args.deckPlan,args.generationPolicy)}
         }
         case 'list': {
           const list = store ? await store.list(identity) : []

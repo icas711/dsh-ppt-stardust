@@ -1,5 +1,5 @@
 // @ts-expect-error Pure shared JavaScript contract is shipped with the skill.
-import {sceneInputProperties,generationInputProperties} from '../skills/dsh-ppt/scripts/deck-model.mjs'
+import {sceneInputProperties,generationInputProperties,semanticInputProperties} from '../skills/dsh-ppt/scripts/deck-model.mjs'
 import type { ResolvedPptConfig } from './config.js'
 import { createPptExecutors, type PptExecution, type ExecutorOptions } from './execution.js'
 import type { PptCreateResult, PptThemesResult, PptQualityResult, PptCheckResult, PptRenderResult } from './types.js'
@@ -223,7 +223,8 @@ const slideProperties = {
   title: { type: 'string' }, subtitle: { type: 'string' }, kicker: { type: 'string' }, text: { type: 'string' }, notes: { type: 'string' },
   bullets: { type: 'array', items: { type: 'string' } }, rows: { type: 'array', items: { type: 'array', items: { type: ['string', 'number'] } } },
   image: imageSchema, chart: chartSchema,
-  diagram: {type:'object',properties:{kind:{type:'string',enum:['process','timeline','comparison','hierarchy','relationship','chart']},items:{type:'array',maxItems:12,items:{type:'object',properties:{id:{type:'string'},label:{type:'string'},detail:{type:'string'},date:{type:'string'},parentId:{type:'string'}},required:['label'],additionalProperties:false}},links:{type:'array',items:{type:'object',properties:{from:{type:'string'},to:{type:'string'}},required:['from','to'],additionalProperties:false}},chart:{type:'object'}},required:['kind'],additionalProperties:false,description:'Explicit semantics for layout:diagram. Process/timeline preserve item order; hierarchy requires parentId; relationships require links; chart requires real numeric data. Never invent values or relationships from bullets.'},
+  diagram: semanticInputProperties(),
+  restoreRepresentation:{type:'string',enum:['list','visual'],description:'Edit only: explicitly rebuild a semantic-source scene as its original list or visual representation. Preserves family artwork; undo retains manual object edits.'},
 }
 const projectParameters = {
   deckPath: { type: 'string', required: true, description: 'Path to a dsh-ppt .json project, relative to this session cwd or absolute. Arbitrary external PPTX editing is not supported.' },

@@ -7,6 +7,7 @@ import { resolve, join } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import { sceneFixtures, legacyFixtureStates } from '../test/fixtures/pptx/scenes.mjs'
+import {semanticSceneFixtures} from '../test/fixtures/pptx/semantic-scenes.mjs'
 import { legacySlidesToScenes } from '../skills/dsh-ppt/scripts/deck-legacy.mjs'
 import { buildPptx, renderHtml, resolveTheme, resolveLanguage } from '../skills/dsh-ppt/scripts/deck-core.mjs'
 import { createFixtureConverter } from './golden-pptx-runtime.mjs'
@@ -17,7 +18,7 @@ export async function goldenScenes(out = resolve('.test-output/pptx-synthetic-re
   const {converter,version} = await createFixtureConverter()
   const run = {renderer:{backend:converter.backend,version},cases:[]}
   try {
-    const cases = sceneFixtures()
+    const cases = [...sceneFixtures(),...semanticSceneFixtures()]
     for (const f of nativeFixtures().filter(f => f.id !== 'objects')) {
       const imported = await importPptxScenes(f.bytes,{strict:true})
       const extracted=templateFromSceneManifest({...imported,style:{pageSize:imported.pageSize}},{templateId:'golden-'+f.id,name:'Imported fixture'})

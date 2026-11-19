@@ -4,9 +4,10 @@ import {readFileSync} from 'node:fs'
 import {runInNewContext} from 'node:vm'
 import {bundleClientModel} from '../scripts/bundle-client-model.mjs'
 import {resolve} from 'node:path'
+import * as DshDeckModel from '../skills/dsh-ppt/scripts/deck-client-model.mjs'
 function render(elements,selected){
  let changed
- const context={React:{useState:()=>[selected,()=>{}],useRef:value=>({current:value}),useEffect:()=>{}},h:(type,props,...children)=>({type,props:props??{},children:children.flat(Infinity)}),languageOf:()=> 'ru',elements,onChange:value=>changed=value}
+ const context={DshDeckModel,React:{useState:()=>[selected,()=>{}],useRef:value=>({current:value}),useEffect:()=>{}},h:(type,props,...children)=>({type,props:props??{},children:children.flat(Infinity)}),languageOf:()=> 'ru',elements,onChange:value=>changed=value}
  const source=readFileSync(new URL('../templates/panels/scene-objects.js',import.meta.url),'utf8')
  const tree=runInNewContext(source+'\nPptSceneObjects({elements,onChange,disabled:false})',context)
  const all=[];const walk=node=>{if(!node||typeof node!=='object')return;all.push(node);node.children?.forEach(walk)};walk(tree)
@@ -26,6 +27,13 @@ test('object inspector changes chart data by category and keeps the other series
  const ui=render([e],'chart'),input=ui.all.find(n=>n.type==='input'&&n.props.type==='number'&&n.props.value===12)
  input.props.onChange({target:{value:'18'}})
  assert.deepEqual(ui.changed[0].chart.series[0].values,[18,8]);assert.deepEqual(ui.changed[0].chart.series[1],e.chart.series[1])
+})
+test('chart inspector explicitly selects all confirmed variants while preserving source numeric data',()=>{
+ const chart={kind:'column',categories:['A','B'],series:[{name:'Facts',values:[12,8]}]},e={id:'chart',type:'chart',frame:{x:0,y:0,w:1000000,h:1000000},chart}
+ const ui=render([e],'chart'),select=ui.all.find(n=>n.type==='select'&&n.props.value==='column')
+ assert.equal(select.children.filter(c=>c?.type==='option').length,8)
+ select.props.onChange({target:{value:'stacked-column'}});assert.equal(ui.changed[0].chart.grouping,'stacked');assert.deepEqual(ui.changed[0].chart.series[0].values,[12,8])
+ assert.throws(()=>DshDeckModel.selectSceneChartVariant(chart,'scatter'),{code:'chart-unconfirmed'})
 })
 test('schema 3 template editor roundtrips through the actual shared browser graph',()=>{
  const graph=bundleClientModel(resolve('skills/dsh-ppt/scripts'),'deck-client-model.mjs')

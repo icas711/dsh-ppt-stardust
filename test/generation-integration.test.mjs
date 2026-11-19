@@ -4,6 +4,9 @@ import {mkdtempSync,rmSync,readFileSync,writeFileSync,existsSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {generationFixture} from './fixtures/generation.mjs'
+import {mixedGenerationFixture} from './fixtures/generation.mjs'
+import {createPptExecutors} from '../lib/execution.js'
+import {PptTemplateStore} from '../lib/templates.js'
 import {templateCreateOptions,buildTemplateBundle,readTemplateBundle} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {buildDeckAsync,editDeck,undoDeck,readDeckProject} from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 
@@ -27,4 +30,18 @@ test('invalid plans stop before artifact creation; legacy templates reject plan 
  assert.throws(()=>templateCreateOptions(fixture,{}, {title:'Invalid',deckPlan:plan}),error=>error.code==='generation-plan-invalid'&&error.diagnostics.some(d=>d.code==='slot-type'))
  assert.throws(()=>templateCreateOptions(fixture,{}, {title:'Mixed',deckPlan:plan,selections:[]}),/mutually exclusive/)
  assert.throws(()=>templateCreateOptions({schemaVersion:1,id:'legacy',name:'Legacy',outline:[{layout:'cover',title:'Test'}]}, {},{title:'Ignored?',deckPlan:plan}),/schema 3/)
+})
+test('real tools validate a mixed plan without writes and then generate twelve editable slides',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'generation-tools-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const engine=await import('../skills/dsh-ppt/scripts/deck-advanced.mjs'),mod=await import('../skills/dsh-ppt/scripts/deck-templates.mjs')
+ const store=new PptTemplateStore({root:join(dir,'library'),templatesModuleLoader:async()=>mod,admins:[]}),identity={login:'generation-user',admin:false,local:false},exec={agent:{session:{header:{owner:'generation-user'}}}}
+ const {plan,...manifest}=mixedGenerationFixture(8);await store.save({manifest,assets:{},identity})
+ const tools=createPptExecutors({outputDir:dir,maxSlides:60,defaultTheme:'data',defaultLang:'en',admins:[]},async()=>engine,{templateStore:store})
+ const report=await tools.template({operation:'validate-plan',templateId:'user:'+manifest.id,deckPlan:plan},exec)
+ assert.equal(report.generationReport.valid,true);assert.equal(report.generationReport.diagnostics.length,0)
+ const made=await tools.create({title:'Mixed public deck',templateId:'user:'+manifest.id,deckPlan:plan,outputDir:dir,lang:'en'},exec)
+ assert.equal(made.slideCount,12);assert.equal(made.generationReport.valid,true);assert.equal(made.generationReport.stale,false)
+ const project=readDeckProject({deckPath:made.jsonPath}).manifest;assert.equal(project.slides.filter(s=>s.semanticSource).length,10)
+ const zip=await import('fflate'),parts=zip.unzipSync(readFileSync(made.pptxPath));assert.ok(Object.keys(parts).some(k=>/^ppt\/charts\/chart\d+\.xml$/.test(k)))
+ await assert.rejects(tools.create({title:'Mixed inputs',templateId:'user:'+manifest.id,deckPlan:plan,content:'Do not ignore this'},exec),/cannot be combined/)
 })

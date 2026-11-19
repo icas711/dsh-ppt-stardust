@@ -1,4 +1,6 @@
 import {normalizeSceneChart, normalizeSceneTable} from './deck-structured.mjs'
+import {validateSemanticDiagram,semanticInputProperties} from './deck-semantic.mjs'
+export {semanticInputProperties} from './deck-semantic.mjs'
 export * from './deck-generation.mjs'
 // Shared browser/server model primitives. No Node, DOM or external imports.
 import { transformedBounds } from './deck-geometry.mjs'
@@ -370,7 +372,7 @@ function sceneGroups(elements, path) {
 }
 export function normalizeSceneSlide(input, { assets = {}, path = 'slide' } = {}) {
   validateSlideRepresentation(input, path)
-  record(input, path, ['id','layout','purpose','label','notes','designLayout','backgroundColor','backgroundAssetId','elements'])
+  record(input, path, ['id','layout','purpose','label','notes','designLayout','backgroundColor','backgroundAssetId','elements','semanticSource'])
   if (input.layout !== 'scene') sceneError('invalid-scene-layout', `${path}.layout`, 'Expected scene')
   if (!Array.isArray(input.elements) || input.elements.length > SCENE_LIMITS.elements) sceneError('element-limit', `${path}.elements`, 'Expected at most 256 objects')
   const budget = {images:0,runs:0,text:0}
@@ -380,6 +382,20 @@ export function normalizeSceneSlide(input, { assets = {}, path = 'slide' } = {})
   if (input.backgroundColor !== undefined) out.backgroundColor = sceneColor(input.backgroundColor, `${path}.backgroundColor`)
   if (input.backgroundAssetId !== undefined) {out.backgroundAssetId=sceneAsset(input.backgroundAssetId,path+'.backgroundAssetId',assets);if(++budget.images>SCENE_LIMITS.images)sceneError('image-limit',path,'Background counts toward image placements')}
   sceneGroups(out.elements, `${path}.elements`)
+  if(input.semanticSource!==undefined){
+    const source=input.semanticSource;record(source,path+'.semanticSource',['diagram','elementIds','originalText','originalTextObject'])
+    if(source.diagram?.version!==2)sceneError('diagram-input',path+'.semanticSource','Expected version 2 source')
+    validateSemanticDiagram(source.diagram)
+    if(!Array.isArray(source.elementIds)||!source.elementIds.length||new Set(source.elementIds).size!==source.elementIds.length||source.elementIds.some(id=>!out.elements.some(e=>e.id===id)))sceneError('diagram-input',path+'.semanticSource','Source must refer to existing distinct objects')
+    if(source.originalText!==undefined)sceneString(source.originalText,path+'.semanticSource.originalText',262144,true)
+    if(JSON.stringify(source).length>262144)sceneError('diagram-input',path+'.semanticSource','Source exceeds text budget')
+    out.semanticSource=JSON.parse(JSON.stringify(source))
+    if(source.originalTextObject!==undefined){
+      record(source.originalTextObject,path+'.semanticSource.originalTextObject',['paragraphs','textStyle','textFrame'])
+      const normalized=sceneElement({id:'source',type:'text',frame:{x:0,y:0,w:1,h:1},...source.originalTextObject},path+'.semanticSource.originalTextObject',assets,{images:0,runs:0,text:0})
+      out.semanticSource.originalTextObject=Object.fromEntries(['paragraphs','textStyle','textFrame'].filter(k=>normalized[k]!==undefined).map(k=>[k,normalized[k]]))
+    }
+  }
   return out
 }
 export function normalizeSceneSlides(input, {assets = {}, path = 'slides'} = {}) {
