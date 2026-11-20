@@ -31,5 +31,23 @@ export function composeTableCreate(value,{title,lang,template,maxSlides=120,sign
   const context={sources:structuredClone(value.sources)}
   const checked=validateGenerationSpec(spec,context)
   if(!checked.valid)fail(checked.diagnostics.map(d=>`${d.path}: ${d.message}`).join('; '),checked.diagnostics)
-  return composeGenerationSpec(spec,{template,context,allowMoreSlides:value.allowMoreSlides===true,maxSlides,signal})
+  const options={template,context,allowMoreSlides:value.allowMoreSlides===true,maxSlides,signal}
+  // Imported templates may classify a sparse title page as content. Choose a
+  // fitting content reference in this same template, never override an explicit ID.
+  for(const slide of spec.slides){
+    if(slide.designLayout)continue
+    let lastError
+    for(const layout of template?.manifest?.style?.layouts??[]){
+      if(layout.purpose!=='content')continue
+      try{
+        composeGenerationSpec({...spec,slides:[{...slide,designLayout:layout.id}]},options)
+        slide.designLayout=layout.id;break
+      }catch(e){
+        if(!['component-capacity','component-slide-limit'].includes(e.code))throw e
+        lastError=e
+      }
+    }
+    if(!slide.designLayout&&lastError)throw lastError
+  }
+  return composeGenerationSpec(spec,options)
 }

@@ -110,6 +110,41 @@ test('demo disclosures are visible on every output slide including continuation 
   for(const s of r.create.slides)assert.ok(s.elements.some(e=>e.id==='gen-disclosure'&&e.paragraphs[0].runs[0].text.includes('синтетические')))
 })
 
+test('demo disclosure fits beside a fixed page number and remains legible on picture backgrounds',()=>{
+  const t=template(),layout=t.manifest.style.layouts[1],page=t.manifest.style.pageSize
+  const number={id:'fixed-page-number',role:'decor',type:'text',frame:{x:page.width-2200000,y:page.height-500000,w:1800000,h:250000},textStyle:{size:9,fontFamily:'Arial',color:'#222222'},paragraphs:[{runs:[{text:'1'}]}]}
+  layout.elements.push(number)
+  const input=spec([{type:'table',sourceRefs,headers:['Project'],rows:Array.from({length:20},(_,i)=>['Row '+i])}]);input.mode='demo'
+  const context={sources:[{id:'source-1',text:'Synthetic facts',synthetic:true}]}
+  const clear=compose(input,{template:t,context,allowMoreSlides:true})
+  const overlaps=(a,b)=>a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h
+  for(const s of clear.create.slides){
+    const label=s.elements.find(e=>e.id==='gen-disclosure')
+    assert.ok(label);assert.ok(!overlaps(label.frame,number.frame))
+    assert.deepEqual(s.elements.find(e=>e.id===number.id).frame,number.frame)
+  }
+  const photo=picture();t.manifest.assetMap.wall={file:'wall.png',mime:photo.mime,width:photo.width,height:photo.height};t.assets['wall.png']={data:photo.data,bytes:Buffer.from(photo.data.split(',')[1],'base64')};layout.backgroundAssetId='wall'
+  const r=compose(input,{template:t,context,allowMoreSlides:true})
+  for(const s of r.create.slides){
+    const label=s.elements.find(e=>e.id==='gen-disclosure'),plate=s.elements.find(e=>e.id==='gen-disclosure-bg')
+    assert.ok(plate);assert.deepEqual(plate.frame,label.frame)
+    assert.ok(s.elements.indexOf(plate)<s.elements.indexOf(label))
+    assert.ok(!overlaps(label.frame,number.frame))
+    assert.equal(plate.fill.opacity??1,1)
+  }
+})
+
+test('table continuation pages prefer the wide content region beside header decoration',()=>{
+  const t=template(),layout=t.manifest.style.layouts[1]
+  layout.elements.push({id:'header-symbol',type:'shape',role:'decor',preset:'ellipse',frame:{x:4000000,y:100000,w:1200000,h:1600000},fill:{color:'#667788'}})
+  const v={type:'table',sourceRefs,headers:['Project','Status'],rows:Array.from({length:30},(_,i)=>['Row '+i,'Ready'])}
+  const r=compose(spec([v]),{template:t,allowMoreSlides:true})
+  assert.ok(r.create.slides.length>1)
+  const widths=r.create.slides.map(s=>s.elements.find(e=>e.type==='table').frame.w)
+  assert.ok(widths.every(w=>w>t.manifest.style.pageSize.width*.8))
+  assert.equal(new Set(widths).size,1)
+})
+
 test('reference selection, asset ownership and icon catalogue remain strict',()=>{
   const input=spec([visuals()[0]]),t=template();t.manifest.style.layouts.shift();input.slides[0].purpose='cover'
   assert.throws(()=>compose(input,{template:t}),{code:'composition-reference'})

@@ -38,6 +38,21 @@ test('normal table composition preserves all rows, unknowns, template geometry a
   assert.deepEqual(readRows(compose(formatted).create.slides)[0],formatted.tables[0].rows[0])
 })
 
+test('table creation selects a fitting content reference but honors an explicit layout',()=>{
+  const t=template(),good=structuredClone(t.manifest.style.layouts.find(l=>l.purpose==='content'))
+  good.id='table-reference'
+  const sparse=structuredClone(good);sparse.id='sparse-reference'
+  // A large fixed logo leaves no useful table area on this content reference.
+  sparse.elements.push({id:'blocked-logo',role:'decor',type:'shape',preset:'ellipse',frame:{x:0,y:0,w:t.manifest.style.pageSize.width,h:t.manifest.style.pageSize.height},fill:{color:'#112233'}})
+  t.manifest.style.layouts=[sparse,good]
+  const value=input(),before=structuredClone({value,t}),r=compose(value,{template:t})
+  assert.ok(r.create.slides.every(s=>s.designLayout===good.id))
+  assert.deepEqual(readRows(r.create.slides),value.tables[0].rows.map(row=>row.map(c=>c??'—')))
+  assert.deepEqual({value,t},before)
+  value.tables[0].designLayout=sparse.id
+  assert.throws(()=>compose(value,{template:t}),e=>e.code==='component-capacity')
+})
+
 test('table creation rejects malformed data, unknown fields and sources, synthetic factual mode and unapproved pagination',()=>{
   for(const mutate of [
     v=>v.tables[0].frame={x:0},v=>v.tables[0].rows[0].pop(),v=>v.tables[0].rows[0][1]=12,

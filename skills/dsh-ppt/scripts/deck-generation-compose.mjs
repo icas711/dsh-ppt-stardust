@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=3
+export const GENERATION_COMPONENT_VERSION=4
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -91,12 +91,23 @@ function setup(slide,layout,profile,manifest,demo,lang){
     }
     return true
   }).map(boxBounds)
-  const footerStyle=styled(styles.body,{size:14}),footerLabel=demo?(lang==='ru'?'Демонстрация · синтетические данные':lang==='zh'?'演示 · 合成数据':'Demo · synthetic data'):null
+  const footerStyle=styled(styles.body,{size:14,...(layout.backgroundAssetId?{color:ink(background)}:{})}),footerLabel=demo?(lang==='ru'?'Демонстрация · синтетические данные':lang==='zh'?'演示 · 合成数据':'Demo · synthetic data'):null
   let footer
   if(footerLabel){
     const h=estimateGenerationTextHeight(footerLabel,bounds.w,footerStyle)
     footer=frame(bounds.x,bounds.y+bounds.h-h,bounds.w,h)
-    if(blockers.some(b=>intersects(footer,b)))fail('component-capacity','No clear region for visible demo disclosure')
+    // A page number at the right must not exclude the entire footer strip.
+    // Search the remaining free rectangles, preferring a compact bottom label.
+    if(layout.backgroundAssetId||blockers.some(b=>intersects(footer,b))){
+      const naturalWidth=Math.ceil([...footerLabel].reduce((w,c)=>w+glyphWidth(c,footerStyle.size),0)+5*PT)
+      const candidates=freeRegions(bounds,blockers).map(r=>{
+        const w=Math.min(r.w,naturalWidth),height=estimateGenerationTextHeight(footerLabel,w,footerStyle)
+        const box=frame(r.x,r.y+r.h-height,w,height)
+        return inside(box,r)&&!blockers.some(b=>intersects(box,b))?box:null
+      }).filter(Boolean).sort((a,b)=>b.y+b.h-(a.y+a.h)||a.h-b.h||a.x-b.x)
+      if(!candidates.length)fail('component-capacity','No clear region for visible demo disclosure')
+      footer=candidates[0]
+    }
     blockers.push(footer)
   }
   const free=freeRegions(bounds,blockers),original=heading?.frame,transform=heading?.transform??IDENTITY_TRANSFORM
@@ -121,7 +132,8 @@ function setup(slide,layout,profile,manifest,demo,lang){
   }
   const regions=freeRegions(bounds,[...blockers,boxBounds(title)]).filter(r=>r.w>=EMU*1.4&&r.h>=EMU*.8).sort((a,b)=>area(b)-area(a))
   if(!regions.length)fail('component-capacity','Fixed artwork and title leave no content region')
-  return {styles,accent,background,surface:mix(background,accent,.08),regions:regions.slice(0,12),title,footer:footer?text('gen-disclosure',footerLabel,footer,footerStyle):null}
+  return {styles,accent,background,surface:mix(background,accent,.08),regions:regions.slice(0,12),title,footer:footer?text('gen-disclosure',footerLabel,footer,footerStyle):null,
+    footerBackdrop:footer&&layout.backgroundAssetId?shape('gen-disclosure-bg',footer,background,'rect'):null}
 }
 
 function stack(out,id,parts,b,gap=GAP){
@@ -311,9 +323,15 @@ export function composeGenerationSpec(input,{template,context,assets={},allowMor
       let start=0
       while(start<n){
         signal?.throwIfAborted();let chosen
-        for(let end=n;end>start;end--){
-          try{chosen={...render(slice(source.visual,start,end),s,input.lang,start),start,end};break}
-          catch(err){if(err.code!=='component-capacity')throw err}
+        // For tables prefer a broad readable region over squeezing one extra row
+        // into a narrow strip; continuation pages should use the same broad area.
+        const alternatives=source.visual.type==='table'?[...s.regions].sort((a,b)=>b.w-a.w||area(b)-area(a)).map(region=>({...s,regions:[region]})):[s]
+        for(const composition of alternatives){
+          for(let end=n;end>start;end--){
+            try{chosen={...render(slice(source.visual,start,end),composition,input.lang,start),start,end};break}
+            catch(err){if(err.code!=='component-capacity')throw err}
+          }
+          if(chosen)break
         }
         if(!chosen)fail('component-capacity','One source item cannot fit; no facts were removed',{slideId:source.id,path:`spec.slides[${index}].visual`,itemIndex:start})
         chunks.push(chosen);start=chosen.end
@@ -327,7 +345,7 @@ export function composeGenerationSpec(input,{template,context,assets={},allowMor
       if(part){let suffix=part+1;do{id=source.id.slice(0,90)+'-part-'+suffix++}while(reserved.has(id));reserved.add(id)}
       const sourceRefs=[...new Set([...source.visual.sourceRefs,...(source.visual.items??[]).flatMap(i=>i.sourceRefs??[])])]
       const notes=[source.notes,...sourceRefs.map(ref=>'Source: '+ref),...(chunks.length>1?[`Continuation ${part+1}/${chunks.length}; items ${chunk.start+1}–${chunk.end}/${count(source.visual)}`]:[])].filter(Boolean).join('\n')
-      const elements=[clone(s.title),...chunk.elements,...(s.footer?[clone(s.footer)]:[])]
+      const elements=[clone(s.title),...chunk.elements,...(s.footerBackdrop?[clone(s.footerBackdrop)]:[]),...(s.footer?[clone(s.footer)]:[])]
       slides.push(normalizeSceneSlide({id,layout:'scene',purpose:source.purpose,designLayout:layout.id,label:source.title,notes,elements},{assets}))
       placements.push({slideId:id,sourceSlideId:source.id,component:source.visual.type,composition:chunk.composition,region:clone(chunk.region),part:part+1,parts:chunks.length})
     })
