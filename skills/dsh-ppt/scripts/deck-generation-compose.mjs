@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=4
+export const GENERATION_COMPONENT_VERSION=5
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -27,15 +27,18 @@ function ink(bg){const channels=[1,3,5].map(i=>parseInt(bg.slice(i,i+2),16)/255)
 // Conservative approximation using glyph classes; no font discovery or auto-shrink.
 function glyphWidth(c,size){return size*(/\s/u.test(c)?.30:/[\u3000-\u9fff\uac00-\ud7af]/u.test(c)?1:/[MW@%]/u.test(c)?.88:/[ilI.,:;!'|]/u.test(c)?.30:/[A-ZА-ЯЁ]/u.test(c)?.68:.57)*PT}
 export function estimateGenerationTextHeight(text,width,style){
+  return estimateTextHeight(text,width,style,glyphWidth)
+}
+function estimateTextHeight(text,width,style,widthOf){
   const available=width-4*PT,size=style.size??18
   if(available<=0)return Infinity
   let lines=0
   for(const paragraph of String(text).split('\n')){
     let used=0;lines++
     for(const word of paragraph.split(/(\s+)/u)){
-      const wordWidth=[...word].reduce((sum,c)=>sum+glyphWidth(c,size),0)
+      const wordWidth=[...word].reduce((sum,c)=>sum+widthOf(c,size),0)
       if(wordWidth<=available){if(used&&used+wordWidth>available){lines++;used=0}used+=wordWidth}
-      else for(const c of word){const w=glyphWidth(c,size);if(w>available)return Infinity;if(used&&used+w>available){lines++;used=0}used+=w}
+      else for(const c of word){const w=widthOf(c,size);if(w>available)return Infinity;if(used&&used+w>available){lines++;used=0}used+=w}
     }
   }
   return Math.ceil(lines*size*PT*1.35+4*PT)
@@ -94,14 +97,18 @@ function setup(slide,layout,profile,manifest,demo,lang){
   const footerStyle=styled(styles.body,{size:14,...(layout.backgroundAssetId?{color:ink(background)}:{})}),footerLabel=demo?(lang==='ru'?'Демонстрация · синтетические данные':lang==='zh'?'演示 · 合成数据':'Demo · synthetic data'):null
   let footer
   if(footerLabel){
-    const h=estimateGenerationTextHeight(footerLabel,bounds.w,footerStyle)
+    // Imported fonts may be substituted by the PDF backend. Reserve an em for
+    // non-Latin glyphs plus headroom, rather than tightly fitting the caption.
+    const disclosureWidth=(c,size)=>Math.max(glyphWidth(c,size),/[^\x00-\xff]/u.test(c)?size*PT:0)*1.1
+    const disclosureHeight=w=>estimateTextHeight(footerLabel,w,footerStyle,disclosureWidth)
+    const h=disclosureHeight(bounds.w)
     footer=frame(bounds.x,bounds.y+bounds.h-h,bounds.w,h)
     // A page number at the right must not exclude the entire footer strip.
     // Search the remaining free rectangles, preferring a compact bottom label.
     if(layout.backgroundAssetId||blockers.some(b=>intersects(footer,b))){
-      const naturalWidth=Math.ceil([...footerLabel].reduce((w,c)=>w+glyphWidth(c,footerStyle.size),0)+5*PT)
+      const naturalWidth=Math.ceil([...footerLabel].reduce((w,c)=>w+disclosureWidth(c,footerStyle.size),0)+5*PT)
       const candidates=freeRegions(bounds,blockers).map(r=>{
-        const w=Math.min(r.w,naturalWidth),height=estimateGenerationTextHeight(footerLabel,w,footerStyle)
+        const w=Math.min(r.w,naturalWidth),height=disclosureHeight(w)
         const box=frame(r.x,r.y+r.h-height,w,height)
         return inside(box,r)&&!blockers.some(b=>intersects(box,b))?box:null
       }).filter(Boolean).sort((a,b)=>b.y+b.h-(a.y+a.h)||a.h-b.h||a.x-b.x)

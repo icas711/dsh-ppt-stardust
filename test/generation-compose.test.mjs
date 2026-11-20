@@ -145,6 +145,25 @@ test('table continuation pages prefer the wide content region beside header deco
   assert.equal(new Set(widths).size,1)
 })
 
+test('demo label reserves enough room for native renderer font substitution',async t=>{
+  const root=mkdtempSync(join(tmpdir(),'disclosure-fit-'));t.after(()=>rmSync(root,{recursive:true,force:true}))
+  const templateRecord=template(),layout=templateRecord.manifest.style.layouts[1],photo=picture()
+  templateRecord.manifest.assetMap.wall={file:'wall.png',mime:photo.mime,width:photo.width,height:photo.height}
+  templateRecord.assets['wall.png']={data:photo.data,bytes:Buffer.from(photo.data.split(',')[1],'base64')}
+  layout.backgroundAssetId='wall'
+  const input=spec([{type:'table',sourceRefs,headers:['Проект'],rows:[['Проект 01']]}]);input.mode='demo'
+  const r=compose(input,{template:templateRecord,context:{sources:[{id:'source-1',text:'Synthetic facts',synthetic:true}]}})
+  const label=r.create.slides[0].elements.find(e=>e.id==='gen-disclosure')
+  assert.equal(label.textStyle.size,14)
+  const caption=label.paragraphs[0].runs[0].text
+  // An em per Cyrillic character is deliberately more conservative than the
+  // normal component estimator; the old tight plate failed this real export.
+  const conservativeWidth=[...caption].reduce((sum,c)=>sum+(/[^\x00-\xff]/u.test(c)?1:.55)*14*12700,4*12700)
+  assert.ok(label.frame.w>=conservativeWidth)
+  const made=await buildDeckAsync({...r.create,outputDir:root})
+  assert.ok(!made.quality.issues.some(i=>i.elementId==='gen-disclosure'&&i.code==='body-overflow'))
+})
+
 test('reference selection, asset ownership and icon catalogue remain strict',()=>{
   const input=spec([visuals()[0]]),t=template();t.manifest.style.layouts.shift();input.slides[0].purpose='cover'
   assert.throws(()=>compose(input,{template:t}),{code:'composition-reference'})
