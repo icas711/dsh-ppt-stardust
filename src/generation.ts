@@ -174,7 +174,13 @@ export class PptGenerationService {
         atomicJson(join(out, 'state.json'), state); atomicJson(active, { runId })
         return this.view(state)
       }
-      const state = this.read(dir, args.runId), out = this.file(dir, args.runId)
+      let runId = args.runId
+      if (args.operation === 'status' && runId === undefined) {
+        const active = join(dir, 'active.json')
+        if (!existsSync(active)) throw new Error('No active experiment in this user/session; use operation:start first')
+        runId = readJson(active).runId
+      }
+      const state = this.read(dir, runId), out = this.file(dir, runId)
       this.recover(out, state)
       const responses = this.responses(out, state)
       if (args.operation === 'status') return this.view(state)

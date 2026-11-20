@@ -111,7 +111,7 @@ export function buildGenerationTemplateProfile(manifest,{assets={},importReport,
   if(!defaultReferences.content)add('warning','content-reference-required','template.style.layouts','No content reference; explicit designLayout is required for unmatched purposes')
   const embedded=style.fonts??[]
   const profile={version:GENERATION_PROFILE_VERSION,importerVersion,template:{id:normalized.id,name:normalized.name,revision:normalized.revision},
-    pageSize:clone(size),theme:style.theme,...(style.brand?{brand:clone(style.brand)}:{}),
+    pageSize:clone(size),...(style.theme!==undefined?{theme:style.theme}:{}),...(style.brand?{brand:clone(style.brand)}:{}),
     defaultReferences,palette:[...palette].sort(),themeFonts:clone(style.themeFonts??{}),
     fonts:[...fontFamilies].sort().map(family=>({family,availability:'not-verified',embeddedVariants:embedded.filter(f=>f.family.toLowerCase()===family.toLowerCase()).map(f=>f.variant)})),
     layouts,limits:{visualAcceptance:'not-verified',safeAreas:'reference-only',fidelity:'import-limitations-apply'}}

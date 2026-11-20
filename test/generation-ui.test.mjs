@@ -22,6 +22,41 @@ function fixture(t,loader){
   return {root,e:exec(root),tools:createPptExecutors(config,engine,{generationRoot:join(root,'state')}),get exports(){return exports}}
 }
 const submit=(r,value)=>({operation:'submit',runId:r.runId,expectedTurn:r.expectedTurn,responseText:typeof value==='string'?value:JSON.stringify(value)})
+const lossless=value=>assert.deepEqual(JSON.parse(JSON.stringify(value)),value)
+const assertOutput=(definition,args,value)=>{
+  lossless(value)
+  const blocks=definition.output.render(args,value)
+  lossless(blocks)
+  assert.ok(blocks.length>0)
+  for(const block of blocks)assert.equal(typeof block.text,'string')
+  return blocks.map(block=>block.text).join('\n')
+}
+
+test('every pilot mode/template has lossless first and repeated outputs, status and report',async t=>{
+  const f=fixture(t),definition=buildPptTools(config).find(d=>d.name==='ppt_generation')
+  assertOutput(definition,{},await f.tools.generation({operation:'list'},f.e))
+  for(const mode of ['A','B','C'])for(const templateKey of ['light','dark','decor','portrait']){
+    const e=exec(f.root,mode+'-'+templateKey),args={...start,mode,templateKey}
+    const r=await f.tools.generation(args,e)
+    assertOutput(definition,args,r)
+    const repeated=await f.tools.generation(args,e)
+    assertOutput(definition,args,repeated)
+    assert.equal(repeated.runId,r.runId)
+    const recovered=await f.tools.generation({operation:'status'},e)
+    assertOutput(definition,{operation:'status'},recovered)
+    assert.deepEqual(recovered,r)
+    const report=await f.tools.generation({operation:'report',runId:r.runId},e)
+    assert.deepEqual(JSON.parse(assertOutput(definition,{operation:'report'},report)),report)
+  }
+})
+
+test('status without runId only recovers the current trusted session',async t=>{
+  const f=fixture(t),r=await f.tools.generation(start,f.e)
+  for(const e of [exec(f.root,'chat-2'),exec(f.root,'chat-1','bob')])
+    await assert.rejects(f.tools.generation({operation:'status'},e),/No active experiment/)
+  await assert.rejects(f.tools.generation({operation:'submit',expectedTurn:1,responseText:'{}'},f.e),/Invalid experiment runId/)
+  assert.equal((await f.tools.generation({operation:'status'},f.e)).runId,r.runId)
+})
 
 test('UI tool is registered with explicit opt-in, a public pilot list and no model SDK',async t=>{
   const f=fixture(t),definition=buildPptTools(config,{generationRoot:join(f.root,'state')}).find(d=>d.name==='ppt_generation')
@@ -48,6 +83,10 @@ test('UI B exports editable input via the existing engine; duplicate start/submi
   await assert.rejects(f.tools.generation({...submit(r,spec()),responseText:'different'},f.e),/Conflicting/)
   await assert.rejects(f.tools.generation({...start,mode:'C'},f.e),/fresh DSH chat/)
   const report=await f.tools.generation({operation:'report',runId:r.runId},f.e),saved=JSON.parse(readFileSync(report.reportPath))
+  const definition=buildPptTools(config).find(d=>d.name==='ppt_generation')
+  for(const value of [r,again,made,duplicate,await f.tools.generation({operation:'status'},f.e)])assertOutput(definition,{},value)
+  const reportText=assertOutput(definition,{operation:'report'},report)
+  assert.deepEqual(JSON.parse(reportText),report)
   assert.equal(saved.responses[0].text,JSON.stringify(spec()));assert.equal(saved.input.rubric,undefined)
   assert.equal(saved.acceptance,'not-verified');assert.equal(saved.capture.includes('tool argument'),true)
 })
@@ -146,6 +185,7 @@ test('UI A preserves manually composed native elements and C completes scenario 
       r=await f.tools.generation(submit(r,spec()),f.e)
     }
     assert.equal(r.status,'exported');assert.equal(r.corrections,0);assert.equal(r.calls,mode==='C'?2:1)
+    assertOutput(buildPptTools(config).find(d=>d.name==='ppt_generation'),{},r)
   }
 })
 
