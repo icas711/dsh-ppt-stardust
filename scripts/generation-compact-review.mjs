@@ -47,6 +47,8 @@ function combinedVisual(visuals){
   return base
 }
 export function compactPlanningConstraints(task,rubric){
+  // One source register is one semantic table; the engine splits physical pages.
+  if(rubric.visual?.type==='table')return {visualType:'table',maxPlannedSlides:1,purpose:'content',enginePagination:true}
   if(rubric.visual?.type!=='cards')return undefined
   return {visualType:'cards',maxPlannedSlides:task.brief.allowMoreSlides?Math.floor(rubric.visual.items.length/2):task.brief.slideCount??1,purpose:'content',enginePagination:true}
 }

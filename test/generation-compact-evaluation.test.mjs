@@ -155,6 +155,34 @@ test('C rejects an impossible long-text scenario before spec and repairs it with
   assert.equal(valid.status,'composed');assert.equal(valid.corrections,0)
 })
 
+test('C repairs a register outline before spec, then paginates every row exactly once',async()=>{
+  const c=compactCases().find(c=>c.id==='overload'),loaded=task('overload--portrait')
+  const bad={version:1,slides:['cover','registry-part1','registry-part2'].map((id,i)=>({id,purpose:i?'content':'cover',title:'Полный реестр',sourceRefs:['material']}))}
+  const first=await processCompactRecording({mode:'C',...loaded,recording:{version:1,responses:[]}})
+  assert.deepEqual(first.pending.planningConstraints,{visualType:'table',maxPlannedSlides:1,purpose:'content',enginePagination:true})
+  const rejected=await processCompactRecording({mode:'C',...loaded,recording:{version:1,responses:[response(bad,'scenario')]}})
+  assert.equal(rejected.pending.stage,'scenario');assert.equal(rejected.pending.kind,'repair')
+  assert.ok(rejected.pending.diagnostics.some(d=>d.code==='scenario-feasibility'))
+  assert.equal(rejected.pending.slideIds,undefined)
+  const input=specification(c),fixed={version:1,slides:[{id:'slide-1',purpose:'content',title:c.title,sourceRefs:['material']}]}
+  let exported
+  const result=await processCompactRecording({mode:'C',...loaded,recording:{version:1,responses:[response(bad,'scenario'),response(fixed,'scenario','repair'),response(input)]},exportDeck:async create=>{exported=create;return {ok:true}}})
+  assert.equal(result.status,'exported');assert.equal(result.corrections,1);assert.equal(result.calls,3)
+  assert.ok(exported.slides.length>1)
+  const rows=[]
+  for(const slide of exported.slides){
+    const table=slide.elements.find(e=>e.type==='table').table
+    const cellText=(row,col)=>table.cells.find(c=>c.row===row&&c.col===col).paragraphs.flatMap(p=>p.runs.map(r=>r.text??'')).join('')
+    assert.deepEqual([cellText(0,0),cellText(0,1)],c.rubric.visual.headers)
+    for(let row=1;row<table.rows.length;row++)rows.push([cellText(row,0),cellText(row,1)])
+  }
+  assert.deepEqual(rows,c.rubric.visual.rows)
+  const duplicate=structuredClone(input);duplicate.slides.push({...structuredClone(input.slides[0]),id:'duplicate'})
+  assert.ok(reviewCompactSpec(duplicate,loaded.task,loaded.rubric).some(d=>d.code==='source-semantics'))
+  const valid=await processCompactRecording({mode:'C',...loaded,recording:{version:1,responses:[response(fixed,'scenario'),response(input)]}})
+  assert.equal(valid.status,'composed');assert.equal(valid.corrections,0)
+})
+
 test('manual C emits scenario/spec and exact repair prompts with a shared budget, preserving evidence',async()=>{
   const id='pilot-1-chart--dark-C',c=compactCases().find(c=>c.id==='chart')
   const first=await advanceCompactEvaluation(kitDir,id)
