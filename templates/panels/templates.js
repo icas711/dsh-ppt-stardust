@@ -133,12 +133,13 @@ function TemplatesPanel({ onCreated }) {
         const swatches = [tpl.brand?.primaryColor, tpl.brand?.backgroundColor, tpl.brand?.textColor].filter(Boolean);
         const key = tpl.key ?? (tpl.scope + ':' + tpl.id);
         const canEdit = tpl.scope === 'user' || isAdmin;
-        const canDelete = tpl.scope === 'user' || (tpl.scope === 'public' && isAdmin);
+        const canDelete = tpl.scope === 'user' || isAdmin;
         return h('div', { className: 'ppt-template-card', key },
             h('div', { className: 'tpl-swatch' }, swatches.map((color, i) => h('i', { key: i, style: { background: color } }))),
             h('h3', null, tpl.name),
             h('div', { className: 'tpl-meta' },
                 h('span', { className: 'w-tag' }, scopeLabel(tpl.scope)),
+                tpl.hidden ? h('span', { className: 'w-tag' }, tplTr('Скрыт от пользователей', 'Hidden from users')) : null,
                 tpl.overridesBuiltin ? h('span', { className: 'w-tag' }, tplTr('заменяет встроенный', 'overrides built-in')) : null,
                 tpl.theme ? h('span', null, tplTr('тема ', 'theme ') + tpl.theme) : null,
                 tpl.outlineCount ? h('span', null, tplTr('каркас ', 'outline ') + tpl.outlineCount) : null,
@@ -151,11 +152,12 @@ function TemplatesPanel({ onCreated }) {
                 h(W.Button, { icon: 'copy', disabled: busy, onClick: () => { setCopyOf(key); setCopyId(''); setCopyName(tpl.name + (languageOf() === 'ru' ? ' (копия)' : ' (copy)')); } }, tplTr('Дублировать', 'Duplicate')),
                 h(W.Button, { icon: 'download', disabled: busy, onClick: () => downloadBundle(tpl) }, tplTr('Экспорт', 'Export')),
                 tpl.scope === 'user' && isAdmin ? h(W.Button, { disabled: busy, onClick: () => run({ operation: 'template-publish', templateId: key, owner: tpl.author }, tplTr('Шаблон опубликован в общие', 'Template published')) }, tplTr('Опубликовать', 'Publish')) : null,
+                isAdmin && tpl.scope !== 'user' ? h(W.Button, { disabled: busy, onClick: () => run({ operation: 'template-visibility', templateId: key, hidden: !tpl.hidden }, tpl.hidden ? tplTr('Шаблон виден пользователям', 'Template visible to users') : tplTr('Шаблон скрыт от пользователей', 'Template hidden from users')) }, tpl.hidden ? tplTr('Показать пользователям', 'Show to users') : tplTr('Скрыть от пользователей', 'Hide from users')) : null,
                 tpl.overridesBuiltin && isAdmin ? h(W.Button, { disabled: busy, onClick: async () => {
                     if (!window.confirm(tplTr('Удалить общую копию и вернуть встроенный шаблон?', 'Delete the public copy and restore the built-in template?'))) return;
-                    await run({ operation: 'template-delete', templateId: key }, tplTr('Встроенный шаблон восстановлен', 'Built-in template restored'));
+                    await run({ operation: 'template-reset', templateId: key }, tplTr('Встроенный шаблон восстановлен', 'Built-in template restored'));
                 } }, tplTr('Сбросить к встроенному', 'Reset to built-in')) : null,
-                canDelete && !tpl.overridesBuiltin ? h(W.Button, { icon: 'trash', variant: 'danger', disabled: busy, onClick: async () => {
+                canDelete ? h(W.Button, { icon: 'trash', variant: 'danger', disabled: busy, onClick: async () => {
                     if (!window.confirm(tplTr('Удалить шаблон «', 'Delete template “') + tpl.name + tplTr('»?', '”?'))) return;
                     await run({ operation: 'template-delete', templateId: key }, tplTr('Шаблон удалён', 'Template deleted'));
                 } }, tplTr('Удалить', 'Delete')) : null));

@@ -11,6 +11,18 @@ export interface LibraryFont {
 }
 const hash = (text: string | Buffer): string => createHash('sha256').update(text).digest('hex')
 export const fontKey = (face: { family: string; variant?: string }): string => face.family.toLowerCase() + ':' + (face.variant ?? 'regular')
+/** Validate a portable upload without storing it or changing other templates. */
+export function prepareTemplateFont(input: { family: unknown; variant: unknown; data: unknown }): Omit<LibraryFont, 'owner'> {
+  const face = normalizeFontRefs([{ family: input.family, variant: input.variant, file: 'upload.ttf' }])[0]
+  const bytes = fontBytesFromUri(input.data), info = fontInfo(bytes)
+  if (!['font/ttf', 'font/otf'].includes(info.mime)) throw new Error('Загрузите шрифт в формате TTF или OTF')
+  return {
+    id: hash(fontKey(face)), family: face.family, variant: face.variant,
+    file: 'font-' + hash(bytes).slice(0, 24) + (info.mime === 'font/otf' ? '.otf' : '.ttf'),
+    data: input.data as string, size: bytes.length,
+    warnings: info.fsType ? [`Шрифт «${face.family}»: ограничения встраивания fsType=0x${info.fsType.toString(16)}.`] : [],
+  }
+}
 export function templateFontFamilies(manifest: Record<string, any>): Set<string> {
   const style = manifest.style ?? {}, families = new Set<string>()
   const add = (name: unknown) => { if (typeof name === 'string' && name.trim() && !name.startsWith('+')) families.add(name.trim().toLowerCase()) }
@@ -47,15 +59,7 @@ export class PptFontLibrary {
   }
   prepare(input: { family: unknown; variant: unknown; data: unknown }, identity: CallerIdentity): LibraryFont {
     const owner = this.owner(identity)
-    const face = normalizeFontRefs([{ family: input.family, variant: input.variant, file: 'upload.ttf' }])[0]
-    const bytes = fontBytesFromUri(input.data), info = fontInfo(bytes)
-    if (!['font/ttf', 'font/otf'].includes(info.mime)) throw new Error('Загрузите шрифт в формате TTF или OTF')
-    const entry: LibraryFont = {
-      id: hash(fontKey(face)), owner, family: face.family, variant: face.variant,
-      file: 'font-' + hash(bytes).slice(0, 24) + (info.mime === 'font/otf' ? '.otf' : '.ttf'),
-      data: input.data as string, size: bytes.length,
-      warnings: info.fsType ? [`Шрифт «${face.family}»: ограничения встраивания fsType=0x${info.fsType.toString(16)}.`] : [],
-    }
+    const entry: LibraryFont = { ...prepareTemplateFont(input), owner }
     const next = [...this.list(identity).filter(font => font.id !== entry.id), entry]
     if (next.length > 64 || next.reduce((sum, font) => sum + font.size, 0) > 32 * 1024 * 1024) throw new Error('Личная библиотека: не больше 64 начертаний и 32 MiB')
     return entry

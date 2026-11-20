@@ -15,6 +15,7 @@ import { workbenchIdentity } from './web-owner.js'
 import { resolveToolIdentity } from './identity.js'
 import { loadTemplatesModule } from './execution.js'
 import type { PptTemplateStore } from './templates.js'
+import { prepareTemplateFont } from './font-library.js'
 import type { WorkbenchIdentity } from './web-owner.js'
 // @ts-ignore Shared bundled ESM helpers.
 import { storedProjectPaths, touchRenderCache } from '../skills/dsh-ppt/scripts/deck-storage.mjs'
@@ -220,6 +221,13 @@ export class PptWorkbench {
           return { ok: true }
         case 'template-font-upload':
           return { ok: true, ...await store.uploadFont({ family: body.family, variant: body.variant, data: body.data }, identity) }
+        case 'template-font-prepare': {
+          if (key) {
+            const record = await store.get(requireTemplateKey(key), identity)
+            if (!store.access(record, identity).canEdit) throw new Error('Нет прав на редактирование шаблона')
+          }
+          return { ok: true, font: prepareTemplateFont({ family: body.family, variant: body.variant, data: body.data }) }
+        }
         case 'template-import': {
           const data = typeof body.data === 'string' ? body.data : ''
           if (!data) throw new Error('Загрузите файл шаблона (.zip или template.json)')
@@ -272,6 +280,11 @@ export class PptWorkbench {
         }
         case 'template-delete':
           return await store.delete(requireTemplateKey(key), identity)
+        case 'template-reset':
+          return await store.delete(requireTemplateKey(key), identity, true)
+        case 'template-visibility':
+          if (typeof body.hidden !== 'boolean') throw new Error('Нужно указать hidden: true или false')
+          return await store.setVisibility(requireTemplateKey(key), body.hidden, identity)
         case 'template-publish': {
           const saved = await store.publish({ key: requireTemplateKey(key), identity })
           return { ok: true, key: saved.key, template: saved.manifest }

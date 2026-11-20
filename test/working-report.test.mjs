@@ -11,6 +11,7 @@ import {buildDeckAsync,readDeckProject,editDeck,undoDeck,checkDeck} from '../ski
 import {restoreSemanticRepresentation} from '../skills/dsh-ppt/scripts/deck-diagrams.mjs'
 import {PptTemplateStore} from '../lib/templates.js'
 import {PptWorkbench} from '../lib/workbench.js'
+import * as DshDeckModel from '../skills/dsh-ppt/scripts/deck-client-model.mjs'
 const text=e=>e.paragraphs?.flatMap(p=>p.runs.map(r=>r.text??'')).join('\n')??''
 
 test('working template keeps separate headings, explicit KPI hierarchy and shared comparison criteria',()=>{
@@ -72,7 +73,7 @@ test('working template edits through panel save/preview, ZIP and project undo wi
 test('typography editor changes a role and roundtrips through the shared template contract',()=>{
  const {template}=workingReportFixture(),draft={textStyles:template.style.textStyles};let changed
  const h=(type,props,...children)=>({type,props:props??{},children:children.flat(Infinity)})
- const context=vm.createContext({h,languageOf:()=> 'ru',tplClone:structuredClone,W:{Button:'button'},TplColorField:'color'})
+ const context=vm.createContext({h,languageOf:()=> 'ru',tplClone:structuredClone,W:{Button:'button'},TplColorField:'color',DshDeckModel})
  vm.runInContext(readFileSync('templates/panels/template-editor.js','utf8'),context)
  context.input={draft,disabled:false,set:patch=>changed=patch}
  const tree=vm.runInContext('TplSemanticTypography(input)',context),nodes=[]

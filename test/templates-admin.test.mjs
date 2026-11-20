@@ -127,7 +127,11 @@ test('store: admin-only public delete; builtin import blocked; builtin dir liste
   assert.equal(builtin.id, 'built-one')
   const record = await builtinStore.get('builtin:built-one', alice)
   assert.equal(record.readonly, true)
-  await assert.rejects(() => builtinStore.delete('builtin:built-one', admin), /удалить нельзя/)
+  await assert.rejects(() => builtinStore.delete('builtin:built-one', alice), /администратор/)
+  await builtinStore.delete('builtin:built-one', admin)
+  assert.ok(existsSync(join(builtinDir, 'built-one', 'template.json')))
+  assert.equal((await builtinStore.list(admin)).some(t => t.id === 'built-one'), false)
+  await assert.rejects(() => builtinStore.get('builtin:built-one', admin), /не найден/)
 }))
 
 test('store: import from bundle bytes; scope public requires admin', () => withTmp(async dir => {

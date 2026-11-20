@@ -15,6 +15,14 @@ function tplFontFamilies(draft) {
     for (const face of draft.fonts ?? []) add(face.family);
     for (const styles of [draft.textStyles, ...(draft.layouts ?? []).map(layout => layout.textStyles)])
         for (const style of Object.values(styles ?? {})) add(style.fontFamily);
+    for (const name of Object.values(draft.themeFonts ?? {})) add(name);
+    for (const layout of draft.layouts ?? []) for (const element of layout.elements ?? []) {
+        for (const text of [element, ...(element.table?.cells ?? [])]) {
+            add(text.textStyle?.fontFamily);
+            for (const paragraph of text.paragraphs ?? []) for (const run of paragraph.runs ?? []) add(run.style?.fontFamily);
+        }
+        for (const style of [element.chart?.titleStyle, element.chart?.categoryAxisLabelStyle, element.chart?.valueAxisLabelStyle, element.chart?.legend?.textStyle, element.chart?.dataLabels?.textStyle]) add(style?.font);
+    }
     return [...families.values()];
 }
 function tplAttachFont(draft, face) {
@@ -24,7 +32,7 @@ function TplFontUploads({ draft, disabled, onPick }) {
     const families = tplFontFamilies(draft);
     return h('div', null,
         h('h3', null, tplTr('Файлы шрифтов', 'Font files')),
-        h('p', { className: 'tpe-hint' }, tplTr('TTF или OTF: до 12 MiB на файл, до 32 MiB в библиотеке. Загрузка обновляет ваши личные и созданные вами общие шаблоны. Готовые презентации не меняются.', 'TTF or OTF: up to 12 MiB per file, 32 MiB per library. Uploading updates your private templates and public templates you authored. Existing presentations stay unchanged.')),
+        h('p', { className: 'tpe-hint' }, tplTr('TTF или OTF: до 12 MiB на файл, до 32 MiB в шаблоне. Файлы добавляются только в этот шаблон после сохранения.', 'TTF or OTF: up to 12 MiB per file, 32 MiB per template. Files are added only to this template when saved.')),
         families.length ? families.map(family => h('div', { className: 'tpe-bg', key: family },
             h('h4', null, family),
             TPL_FONT_VARIANTS.map(variant => {
@@ -210,26 +218,125 @@ function tplAssetBytes(draft, images) {
     return total;
 }
 
-function TplColorField({ label, value, fallback, disabled, onChange }) {
+function TplColorField({ label, value, fallback, mixed, disabled, onChange }) {
     const shown = TPL_HEX.test(value) ? value : TPL_HEX.test(fallback ?? '') ? fallback : '#000000';
+    const unknown = mixed || (!value && !fallback);
     return h('div', { className: 'tpe-color' }, h('span', null, label),
         h('div', { className: 'tpe-color-row' },
-            h('input', { type: 'color', value: shown.toLowerCase(), disabled, 'aria-label': label, onChange: e => onChange(e.target.value.toUpperCase()) }),
-            h('input', { type: 'text', value, maxLength: 7, disabled, placeholder: fallback || '#RRGGBB', 'aria-label': label + ' (hex)', onChange: e => onChange(e.target.value.trim()) }),
+            unknown ? h('label', {style:{position:'relative',border:'1px dashed var(--w-border)',padding:'4px',overflow:'hidden'}}, tplTr('Выбрать','Choose'), h('input', {type:'color',value:shown,disabled,'aria-label':label,style:{position:'absolute',inset:0,opacity:0,width:'100%',height:'100%'},onChange:e=>onChange(e.target.value.toUpperCase())})) : h('input', { type: 'color', value: shown.toLowerCase(), disabled, 'aria-label': label, onChange: e => onChange(e.target.value.toUpperCase()) }),
+            h('input', { type: 'text', value, maxLength: 7, disabled, placeholder: mixed ? tplTr('Разные значения','Mixed values') : fallback || '#RRGGBB', 'aria-label': label + ' (hex)', onChange: e => onChange(e.target.value.trim()) }),
             value ? h(W.IconButton, { icon: 'close', label: tplTr('Вернуть цвет темы', 'Reset to the theme colour'), disabled, onClick: () => onChange('') }) : null));
 }
 
-function TplSemanticTypography({draft,disabled,set}) {
+// Scene objects have content/decor roles, not semantic text roles. Prefer slot
+// descriptions/names, then use the same topmost heading convention as composition.
+function tplTypographyTargets(draft) {
+    const result = [];
+    const roles = ['title', 'subtitle', 'body', 'caption', 'footer', 'kicker', 'quote', 'attribution', 'table'];
+    for (const layout of draft.layouts ?? []) {
+        const texts = (layout.elements ?? []).filter(e => e.type === 'text' && e.role !== 'decor' && !e.hidden);
+        const heading = [...texts].sort((a,b) => a.frame.y - b.frame.y)[0];
+        for (const element of layout.elements ?? []) {
+            if (element.hidden) continue;
+            if (element.type === 'table') {
+                for (const cell of element.table?.cells ?? []) result.push({layout, element: cell, ownerId: element.id, role: 'table', name: element.name ?? element.id});
+                continue;
+            }
+            if (element.type !== 'text') continue;
+            const slot = layout.slots?.find(s => s.elementId === element.id);
+            const described = layout.description?.slots?.find(s => s.slotId === slot?.id)?.role;
+            const name = [slot?.name, slot?.id, element.name, element.id].filter(Boolean).join(' ').toLowerCase();
+            let role = roles.includes(described) ? described :
+                /subtitle|sub[-_ ]?title|подзаголов/.test(name) ? 'subtitle' :
+                /caption|примечан|подпис/.test(name) ? 'caption' :
+                /footer|футер|колонтитул/.test(name) ? 'footer' :
+                /body|основной|содержан/.test(name) ? 'body' :
+                /title|heading|заголов/.test(name) ? 'title' : undefined;
+            if (!role && element.role === 'decor') continue;
+            role ??= element === heading ? 'title' : 'body';
+            result.push({layout, element, ownerId: element.id, role, name: element.name ?? element.id});
+        }
+    }
+    return result;
+}
+function tplEffectiveTypography(draft, role, theme = {}) {
+    const targets = tplTypographyTargets(draft).filter(t => t.role === role), samples = [];
+    const defaults = {
+        ...(draft.fontFamily || draft.themeFonts?.[role === 'title' ? 'majorLatin' : 'minorLatin'] ? {fontFamily: draft.fontFamily || draft.themeFonts[role === 'title' ? 'majorLatin' : 'minorLatin']} : {}),
+        ...(draft.textColor || theme.palette?.fg ? {color: draft.textColor || theme.palette.fg} : {}),
+        ...draft.textStyles?.[role],
+    };
+    for (const {layout, element} of targets) {
+        const base = DshDeckModel.mergeSceneTextStyles(defaults, layout.textStyles?.[role], element.textStyle);
+        const runs = (element.paragraphs ?? []).flatMap(p => p.runs ?? []).filter(r => !r.break && r.text?.trim());
+        if (runs.length) for (const run of runs) samples.push(DshDeckModel.mergeSceneTextStyles(base, run.style));
+        else samples.push(base);
+    }
+    if (!samples.length) {
+        for (const layout of draft.layouts ?? []) if (layout.textStyles?.[role]) samples.push({...defaults, ...layout.textStyles[role]});
+    }
+    if (!samples.length) samples.push(defaults);
+    for (const sample of samples) if (sample.colorSpec) sample.color = DshDeckModel.sceneTextColor(sample).color;
+    const style = {}, mixed = [];
+    for (const key of ['fontFamily','size','color','bold','italic']) {
+        const values = new Set(samples.map(s => s[key]));
+        if (values.size > 1) mixed.push(key);
+        else if (samples[0][key] !== undefined) style[key] = samples[0][key];
+    }
+    return {style, mixed, targets};
+}
+function tplUpdateTypography(draft, role, key, value) {
+    const next = tplClone(draft), targets = tplTypographyTargets(next).filter(t => t.role === role);
+    const patch = style => {
+        if (value === undefined) delete style[key]; else style[key] = value;
+        if (key === 'color') delete style.colorSpec;
+        if (key === 'fontFamily') { delete style.sourceTypeface; delete style.scriptFonts; delete style.fontHints; }
+    };
+    next.textStyles ??= {}; next.textStyles[role] ??= {}; patch(next.textStyles[role]);
+    for (const layout of next.layouts ?? []) if (layout.textStyles?.[role]) patch(layout.textStyles[role]);
+    for (const {element} of targets) {
+        element.textStyle ??= {}; patch(element.textStyle);
+        for (const paragraph of element.paragraphs ?? []) for (const run of paragraph.runs ?? []) if (!run.break) {
+            run.style ??= {}; patch(run.style);
+        }
+    }
+    return {textStyles: next.textStyles, ...(next.layouts ? {layouts: next.layouts} : {})};
+}
+function tplResetTypography(draft, original, role) {
+    const next = tplClone(draft), baseline = tplTypographyTargets(original);
+    const keys = ['fontFamily','size','color','bold','italic','sourceTypeface','scriptFonts','fontHints','colorSpec'];
+    const restore = (target, source) => {
+        const style = {...target};
+        for (const key of keys) { if (source?.[key] === undefined) delete style[key]; else style[key] = source[key]; }
+        return style;
+    };
+    next.textStyles ??= {};
+    if (original.textStyles?.[role]) next.textStyles[role] = tplClone(original.textStyles[role]);
+    else delete next.textStyles[role];
+    for (const layout of next.layouts ?? []) if (layout.textStyles?.[role]) {
+        const source = original.layouts?.find(l => l.id === layout.id)?.textStyles?.[role];
+        if (source) layout.textStyles[role] = tplClone(source); else delete layout.textStyles[role];
+    }
+    for (const target of tplTypographyTargets(next).filter(t => t.role === role)) {
+        const source = baseline.find(t => t.layout.id === target.layout.id && t.ownerId === target.ownerId && t.element.row === target.element.row && t.element.col === target.element.col)?.element;
+        target.element.textStyle = restore(target.element.textStyle, source?.textStyle);
+        for (const [pi, paragraph] of (target.element.paragraphs ?? []).entries()) for (const [ri, run] of (paragraph.runs ?? []).entries()) if (!run.break)
+            run.style = restore(run.style, source?.paragraphs?.[pi]?.runs?.[ri]?.style);
+    }
+    return {textStyles: next.textStyles, ...(next.layouts ? {layouts: next.layouts} : {})};
+}
+function TplSemanticTypography({draft,disabled,set,theme,original}) {
     const labels={title:tplTr('Заголовок','Title'),subtitle:tplTr('Подзаголовок','Subtitle'),body:tplTr('Основной текст','Body text'),caption:tplTr('Подписи и примечания','Captions and notes')};
-    const update=(role,key,value)=>{const textStyles=tplClone(draft.textStyles??{}),style={...textStyles[role]};if(value===undefined)delete style[key];else style[key]=value;if(Object.keys(style).length)textStyles[role]=style;else delete textStyles[role];set({textStyles});};
+    const update=(role,key,value)=>set(tplUpdateTypography(draft,role,key,value));
     return h('fieldset',null,h('legend',null,tplTr('Стили текста','Text styles')),
-      h('p',null,tplTr('Общие настройки для нового текста. Индивидуальное оформление объектов можно изменить в «Макетах».','Defaults for new text. Edit individual object formatting under Layouts.')),
-      ...Object.entries(labels).map(([role,label])=>{const style=draft.textStyles?.[role]??{};return h('fieldset',{key:role},h('legend',null,label),
-        h('label',null,tplTr('Шрифт','Font'),h('input',{value:style.fontFamily??'',disabled,placeholder:tplTr('Из области шаблона','From template region'),onChange:e=>update(role,'fontFamily',e.target.value||undefined)})),
-        h('label',null,tplTr('Размер, пт','Size, pt'),h('input',{type:'number',min:1,max:400,disabled,value:style.size??'',onChange:e=>update(role,'size',e.target.value===''?undefined:Number(e.target.value))})),
-        h(TplColorField,{label:tplTr('Цвет','Colour'),value:style.color??'',disabled,onChange:v=>update(role,'color',v||undefined)}),
-        h('label',null,tplTr('Начертание','Weight'),h('select',{value:style.bold===undefined?'inherit':String(style.bold),disabled,onChange:e=>update(role,'bold',e.target.value==='inherit'?undefined:e.target.value==='true')},h('option',{value:'inherit'},tplTr('Из области шаблона','From template region')),h('option',{value:'true'},tplTr('Жирный','Bold')),h('option',{value:'false'},tplTr('Обычный','Regular')))),
-        h(W.Button,{disabled,onClick:()=>{const textStyles={...draft.textStyles};delete textStyles[role];set({textStyles});}},tplTr('Сбросить стиль','Reset style')));})
+      h('p',null,tplTr('Фактическое оформление текста во всех макетах. Изменение применяется ко всем объектам выбранной роли. Различия отмечены как «Разные значения». Для объектов без названной роли верхний текст считается заголовком, остальной — основным.','Actual text formatting across layouts. Changes apply to all objects of the selected role. Differences are marked as “Mixed values”. For unnamed roles, the topmost text is treated as a title and the rest as body text.')),
+      ...Object.entries({...labels,footer:tplTr('Футер','Footer'),kicker:tplTr('Надзаголовок','Kicker'),quote:tplTr('Цитата','Quote'),attribution:tplTr('Автор цитаты','Attribution'),table:tplTr('Таблицы','Tables')}).map(([role,label])=>{const {style,mixed,targets}=tplEffectiveTypography(draft,role,theme);const hint=key=>mixed.includes(key)?tplTr('Разные значения','Mixed values'):tplTr('Не задано','Unspecified');return h('fieldset',{key:role},h('legend',null,label),
+        h('label',null,tplTr('Шрифт','Font'),h('input',{value:style.fontFamily??'',disabled,placeholder:hint('fontFamily'),onChange:e=>update(role,'fontFamily',e.target.value||undefined)})),
+        h('label',null,tplTr('Размер, пт','Size, pt'),h('input',{type:'number',min:1,max:400,disabled,value:style.size??'',placeholder:hint('size'),onChange:e=>update(role,'size',e.target.value===''?undefined:Number(e.target.value))})),
+        h(TplColorField,{label:tplTr('Цвет','Colour'),value:style.color??'',mixed:mixed.includes('color'),disabled,onChange:v=>update(role,'color',v||undefined)}),
+        h('label',null,tplTr('Начертание','Weight'),h('select',{value:style.bold===undefined?'inherit':String(style.bold),disabled,onChange:e=>update(role,'bold',e.target.value==='inherit'?undefined:e.target.value==='true')},h('option',{value:'inherit'},hint('bold')),h('option',{value:'true'},tplTr('Жирный','Bold')),h('option',{value:'false'},tplTr('Обычный','Regular')))),
+        targets.length ? h('p',{className:'tpe-hint'},tplTr('Объекты: ','Objects: ')+targets.map(t=>(t.layout.name??t.layout.id)+' / '+t.name).join('; ')) : null,
+        h(W.Button,{disabled,onClick:()=>set(tplResetTypography(draft,original??tplNewDraft(),role))},tplTr('Сбросить стиль','Reset style')));})
     );
 }
 
@@ -465,7 +572,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
                 reader.readAsDataURL(file);
             });
             const mime = /\.otf$/i.test(file.name) ? 'font/otf' : 'font/ttf';
-            const value = await action({ operation: 'template-font-upload', family, variant, data: 'data:' + mime + ';base64,' + bytes });
+            const value = await action({ operation: 'template-font-prepare', templateId: templateKey || undefined, family, variant, data: 'data:' + mime + ';base64,' + bytes });
             const face = value.font;
             setUploads(previous => {
                 const next = { ...previous, [face.file]: face.data };
@@ -474,9 +581,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
                 return next;
             });
             setDraft(previous => tplAttachFont(previous, face)); setDirty(true);
-            const updated = (value.updated ?? []).find(item => item.key === base?.key);
-            if (updated) setBase(previous => previous?.revision === updated.previousRevision ? { ...previous, revision: updated.revision } : previous);
-            setFontMessage([tplTr('Шрифт сохранён. Обновлено шаблонов: ', 'Font saved. Templates updated: ') + (value.updated?.length ?? 0), ...(face.warnings ?? [])].join(' '));
+            setFontMessage([tplTr('Шрифт добавлен в черновик. Сохраните шаблон.', 'Font added to the draft. Save the template.'), ...(face.warnings ?? [])].join(' '));
         } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
         finally { setBusy(false); }
     }
@@ -573,7 +678,7 @@ function TemplateEditor({ templateKey, themes, isAdmin, onClose, onSaved }) {
             h('div', { className: 'tpe-form' },
                 h('div', { className: 'tpe-nav', role: 'group', 'aria-label': tplTr('Разделы шаблона', 'Template sections') },
                     sections.map(([id, label]) => h(W.Button, { key: id, 'aria-pressed': section === id, onClick: () => setSection(id) }, label))),
-                section === 'main' ? main : section === 'style' ? (draft.schemaVersion===3?h('div',null,h('p',null,tplTr('Оформление объектов изменяйте в разделе «Макеты».','Edit object formatting under Layouts.')),h(TplFontUploads,{draft,disabled,onPick:pickFont}),h(TplSemanticTypography,{draft,disabled,set})):style)
+                section === 'main' ? main : section === 'style' ? (draft.schemaVersion===3?h('div',null,h(TplFontUploads,{draft,disabled,onPick:pickFont}),h(TplSemanticTypography,{draft,disabled,set,theme:themes.find(item=>item.id===draft.theme),original:base?tplDraftFrom(base):undefined})):style)
                     : section === 'layouts' ? h(TplLayoutsEditor, { draft, images, disabled, set, pickImage,sampleLength,onSampleLength:setSampleLength,onSceneAsset:attachSceneAsset,onImagePending:setBusy })
                     : section === 'outline' ? h(TplSlideList, { designLayouts: draft.layouts, slides: draft.outline, limit: 120, disabled, hint: tplTr('Каркас — страницы-заготовки нового дека. {{deck.title}} подставит название презентации; строки «Заполнить: …» помечают места для ввода, дек остаётся черновиком, пока они не заполнены.', 'The outline is the skeleton of a new deck. {{deck.title}} is replaced with the deck title; “To fill: …” lines mark spots to complete and keep the deck a draft until they are replaced.'), onChange: outline => set({ outline }) })
                         : h(TplSlideList, { designLayouts: draft.layouts, slides: draft.samples, limit: 5, disabled, hint: tplTr('Образцы — до 5 готовых страниц с реальным содержанием: показывают, как должен выглядеть заполненный дек.', 'Samples are up to 5 finished slides with real content that show what a completed deck should look like.'), onChange: samples => set({ samples }) })),

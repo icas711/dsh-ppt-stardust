@@ -57,6 +57,11 @@ export declare class PptTemplateStore {
     isAdmin(identity: CallerIdentity): boolean;
     private usersRoot;
     private publicRoot;
+    private adminState;
+    private writeAdminState;
+    setVisibility(key: string, hidden: boolean, identity: CallerIdentity): Promise<{
+        ok: true;
+    }>;
     private userDir;
     private dirOf;
     private builtinIds;
@@ -124,7 +129,7 @@ export declare class PptTemplateStore {
         identity: CallerIdentity;
         owner?: string;
     }): Promise<TemplateRecord>;
-    delete(key: string, identity: CallerIdentity): Promise<{
+    delete(key: string, identity: CallerIdentity, resetBuiltin?: boolean): Promise<{
         ok: true;
     }>;
     /** Write a template bundle into a session workspace directory. */

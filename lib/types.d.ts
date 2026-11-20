@@ -343,6 +343,8 @@ export interface PptTemplateSummary {
     /** `<scope>:<id>` key used by every template operation. */
     key?: string;
     readonly?: boolean;
+    /** Hidden shared templates are available only to administrators. */
+    hidden?: boolean;
     /** A public template that overrides the built-in template of the same id. */
     overridesBuiltin?: boolean;
     theme?: string | null;

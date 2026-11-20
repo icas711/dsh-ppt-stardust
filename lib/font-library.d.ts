@@ -13,6 +13,12 @@ export declare const fontKey: (face: {
     family: string;
     variant?: string;
 }) => string;
+/** Validate a portable upload without storing it or changing other templates. */
+export declare function prepareTemplateFont(input: {
+    family: unknown;
+    variant: unknown;
+    data: unknown;
+}): Omit<LibraryFont, 'owner'>;
 export declare function templateFontFamilies(manifest: Record<string, any>): Set<string>;
 /** Only canonical, validated font data is persisted; browser-supplied paths are never read. */
 export declare class PptFontLibrary {

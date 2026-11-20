@@ -5,14 +5,14 @@
  *   templates/public/<id>/template.json + assets/*
  *   templates/users/<login>/<id>/template.json + assets/*
  * Built-in templates ship inside the plugin package (assets/templates) and are
- * listed read-only.
+ * edited through public overrides; admin visibility/deletion lives in host storage.
  *
  * Keys: `builtin:<id>`, `public:<id>`, `user:<id>` — a `user:` key always
  * resolves against the calling user's own directory; users never see or touch
  * other users' private templates. All methods are async: the shared template
  * implementation lives in the skill scripts and loads lazily.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, renameSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import type { CallerIdentity } from './identity.js'
@@ -126,6 +126,28 @@ export class PptTemplateStore {
 
   private usersRoot(): string { return join(this.root, 'users') }
   private publicRoot(): string { return join(this.root, SCOPE_PUBLIC) }
+  private adminState(key: string): { hidden?: boolean; deleted?: boolean } {
+    const [scope, id] = parseKey(key)
+    if (scope === SCOPE_USER) return {}
+    const file = join(this.root, 'admin-state', id + '.json')
+    return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {}
+  }
+
+  private writeAdminState(key: string, state: { hidden?: boolean; deleted?: boolean }): void {
+    const [, id] = parseKey(key), dir = join(this.root, 'admin-state')
+    mkdirSync(dir, { recursive: true })
+    const file = join(dir, id + '.json'), temp = file + '.tmp'
+    writeFileSync(temp, JSON.stringify(state))
+    renameSync(temp, file)
+  }
+
+  async setVisibility(key: string, hidden: boolean, identity: CallerIdentity): Promise<{ ok: true }> {
+    if (!this.isAdmin(identity)) throw new Error('Менять видимость шаблонов может только администратор')
+    if (parseKey(key)[0] === SCOPE_USER) throw new Error('Видимость личного шаблона определяется его владельцем; опубликуйте его в общие')
+    await this.get(key, identity)
+    this.writeAdminState(key, { ...this.adminState(key), hidden })
+    return { ok: true }
+  }
   private userDir(login: string): string { return join(this.usersRoot(), sanitizeLogin(login)) }
 
   private dirOf(scope: string, id: string, identity: CallerIdentity): string {
@@ -183,10 +205,13 @@ export class PptTemplateStore {
       for (const id of this.scopeIds(scope, identity)) {
         // A public copy with the same id overrides the built-in one: only the override is listed.
         if (scope === SCOPE_BUILTIN && publicIds.has(id)) continue
+        const state = this.adminState(`${scope}:${id}`)
+        if (state.deleted || (state.hidden && !this.isAdmin(identity))) continue
         try {
           const record = await this.load(`${scope}:${id}`, identity)
           items.push({
             ...m.summarizeTemplate(record.manifest), scope, key: `${scope}:${id}`, readonly: record.readonly,
+            hidden: state.hidden === true,
             ...(scope === SCOPE_PUBLIC && builtinIds.has(id) ? { overridesBuiltin: true } : {}),
           } as PptTemplateSummary)
         } catch { /* A broken template must not break the whole list. */ }
@@ -198,6 +223,8 @@ export class PptTemplateStore {
   /** Resolve a template with assets for apply/restyle. */
   async get(key: string, identity: CallerIdentity): Promise<TemplateRecord> {
     const [scope, id] = parseKey(key)
+    const state = this.adminState(key)
+    if (state.deleted || (state.hidden && !this.isAdmin(identity))) throw new Error(`dsh-ppt：шаблон не найден：${key}`)
     if (scope === SCOPE_USER && identity?.login === undefined) throw new Error('dsh-ppt：личные шаблоны доступны только вошедшим пользователям')
     // An admin's public copy overrides the built-in template of the same id everywhere (list, apply, restyle).
     if (scope === SCOPE_BUILTIN && ordinaryDir(this.dirOf(SCOPE_PUBLIC, id, identity))) return this.load(`${SCOPE_PUBLIC}:${id}`, identity)
@@ -245,7 +272,10 @@ export class PptTemplateStore {
     }
     manifest.updatedAt = new Date().toISOString()
     m.writeTemplateDir(dir, manifest, assets)
-    this.cache.delete(cacheKey(`${scope}:${manifest.id}`, identity?.login))
+    if (scope === SCOPE_PUBLIC && this.adminState(`public:${manifest.id}`).deleted) {
+      this.writeAdminState(`public:${manifest.id}`, { ...this.adminState(`public:${manifest.id}`), deleted: false })
+    }
+    this.invalidate()
     return this.load(`${scope}:${manifest.id}`, identity)
   }
 
@@ -328,15 +358,16 @@ export class PptTemplateStore {
     return this.save({ manifest, assets: record.assets, scope: SCOPE_PUBLIC, identity: input.identity })
   }
 
-  async delete(key: string, identity: CallerIdentity): Promise<{ ok: true }> {
+  async delete(key: string, identity: CallerIdentity, resetBuiltin = false): Promise<{ ok: true }> {
     const [scope, id] = parseKey(key)
-    if (scope === SCOPE_BUILTIN) throw new Error('dsh-ppt：встроенные шаблоны удалить нельзя')
-    if (scope === SCOPE_PUBLIC && !this.isAdmin(identity)) throw new Error('dsh-ppt：удалять общие шаблоны может только администратор')
+    if (scope !== SCOPE_USER && !this.isAdmin(identity)) throw new Error('dsh-ppt：удалять общие и встроенные шаблоны может только администратор')
     if (scope === SCOPE_USER && identity?.login === undefined) throw new Error('dsh-ppt：личный шаблон не найден')
+    if (resetBuiltin && (scope !== SCOPE_PUBLIC || !this.builtinIds().includes(id))) throw new Error('Нет встроенного шаблона для восстановления')
     const dir = this.dirOf(scope, id, identity)
     if (!ordinaryDir(dir)) throw new Error(`dsh-ppt：шаблон не найден：${key}`)
-    rmSync(dir, { recursive: true, force: true })
-    this.cache.delete(cacheKey(key, identity?.login))
+    if (scope !== SCOPE_BUILTIN) rmSync(dir, { recursive: true, force: true })
+    if (scope !== SCOPE_USER) this.writeAdminState(key, { ...this.adminState(key), deleted: !resetBuiltin })
+    this.invalidate()
     return { ok: true }
   }
 

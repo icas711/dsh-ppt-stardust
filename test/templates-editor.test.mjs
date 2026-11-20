@@ -58,7 +58,7 @@ test('previewDeckHtml rejects a broken colour instead of rendering it', () => {
   assert.throws(() => templates.templatePreviewOptions(draft, {}, { lang: 'ru' }))
 })
 
-test('an admin copy overrides the built-in template of the same id; deleting it restores the original', () => withTmp(async dir => {
+test('an admin copy overrides the built-in template of the same id; resetting it restores the original', () => withTmp(async dir => {
   const store = makeStore(dir, { builtin: ['corp'] })
   const before = await store.list(alice)
   assert.deepEqual(before.map(t => [t.key, t.readonly]), [['builtin:corp', true]])
@@ -81,7 +81,7 @@ test('an admin copy overrides the built-in template of the same id; deleting it 
   // Старый ключ builtin:corp везде ведёт на перекрытие (apply / restyle)
   assert.equal((await store.get('builtin:corp', alice)).manifest.name, 'Корпоративный v2')
 
-  await store.delete('public:corp', admin)
+  await store.delete('public:corp', admin, true)
   const restored = await store.list(alice)
   assert.deepEqual(restored.map(t => [t.key, t.name]), [['builtin:corp', 'Встроенный corp']])
   assert.equal((await store.get('builtin:corp', alice)).manifest.name, 'Встроенный corp')
