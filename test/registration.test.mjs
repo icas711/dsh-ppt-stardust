@@ -33,10 +33,10 @@ test('parseSkillFile 兼容 CRLF 与带引号的单行 frontmatter', () => {
   assert.match(parsed.content, /^# Body/)
 })
 
-test('apply 空配置即可注册 9 个工具与 1 个技能（加载不失败）', () => {
+test('apply 空配置即可注册 10 个工具与 1 个技能（加载不失败）', () => {
   const ctx = fakeCtx()
   apply(ctx, {})
-  assert.deepEqual(ctx.tools.defs.map((def) => def.name).sort(), ['ppt_check', 'ppt_create', 'ppt_data', 'ppt_edit', 'ppt_render', 'ppt_template', 'ppt_templates', 'ppt_themes', 'ppt_undo'])
+  assert.deepEqual(ctx.tools.defs.map((def) => def.name).sort(), ['ppt_check', 'ppt_create', 'ppt_data', 'ppt_edit', 'ppt_generation', 'ppt_render', 'ppt_template', 'ppt_templates', 'ppt_themes', 'ppt_undo'])
   assert.equal(ctx.skills.defs.length, 1)
   assert.equal(ctx.skills.defs[0].name, 'dsh-ppt')
   assert.ok(ctx.skills.defs[0].content.length > 500)

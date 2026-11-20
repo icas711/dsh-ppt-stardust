@@ -1,5 +1,6 @@
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
+import { PptGenerationService } from './generation.js'
 import type { ResolvedPptConfig } from './config.js'
 import type { DeckEngine, PptCreateArgs, PptThemesResult } from './types.js'
 import { PptTemplateStore } from './templates.js'
@@ -12,6 +13,8 @@ export interface PptExecution {
 }
 
 export interface ExecutorOptions {
+  /** Test override; production uses the plugin's session-scoped experiment storage. */
+  generationRoot?: string
   /** Template library; when absent, library template features degrade gracefully. */
   templateStore?: PptTemplateStore
   /** Host webAuth bridge for admin verdicts (optional). */
@@ -73,9 +76,20 @@ export function loadTemplatesModule(): Promise<Record<string, any>> {
 
 /** Build executors with a shared engine loader; resolve paths separately for each call. */
 export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => Promise<DeckEngine> = getEngine, options: ExecutorOptions = {}) {
+  const generation = new PptGenerationService({ root: options.generationRoot, loadEngine, maxSlides: config.maxSlides })
   const identityOf = (exec?: PptExecution): CallerIdentity =>
     resolveToolIdentity(exec, { admins: config.admins, webAuth: options.webAuth })
   return {
+    async generation(rawArgs: unknown, exec?: PptExecution) {
+      exec?.signal?.throwIfAborted()
+      const scope = executionScope(exec)
+      if (!scope) throw new Error('ppt_generation requires a trusted DSH chat/session ID')
+      const cwd = exec?.agent?.session.header.cwd ?? process.cwd()
+      let route = exec?.agent?.session.requestContext?.()
+      if (!route?.provider || !route?.model) route = exec?.agent?.session.requestHeader?.()?.config
+      return generation.execute(asRecord(rawArgs), { scope, outputDir: deliveryDirectory(cwd, config.outputDir, exec), signal: exec?.signal,
+        route: typeof route?.provider === 'string' && typeof route?.model === 'string' ? { provider: route.provider, model: route.model } : null })
+    },
     async themes(rawArgs: unknown, exec?: PptExecution): Promise<PptThemesResult> {
       exec?.signal?.throwIfAborted()
       const args = asRecord(rawArgs)

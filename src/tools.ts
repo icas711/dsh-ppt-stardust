@@ -296,6 +296,25 @@ export function buildPptTools(config: ResolvedPptConfig, options: ExecutorOption
   const executors = createPptExecutors(config, undefined, options)
   return [
     {
+      name: 'ppt_generation',
+      description: 'EXPERIMENTAL A/B/C controlled pilot, ONLY when the user explicitly requests the experiment. Never use for ordinary presentation creation. list returns public demo tasks/templates/pilot order. start requires experimental:true, mode A|B|C, caseId and templateKey; one experiment per fresh DSH chat. The server returns nextRequest with exact schema/sources. Generate that strict JSON and submit its exact text via responseText with returned runId/expectedTurn. Repeat only when waiting-for-response; maximum two corrections across the entire task, C has scenario then spec. Do not call ppt_create or start over to bypass a failure/budget. status recovers after transport uncertainty; repeating an identical submit is idempotent. report exports this chat experiment log. The tool makes NO model calls; the current DSH model generates answers. Clarify missing requirements/attachment roles via ask_user_question; already specified controlled sources are content and template is style. Exports remain acceptance:not-verified; preserve real warnings, rendering and editability require human review. Model output captured here is the submitted tool argument, not the full provider transcript; never self-report tokens or billing.',
+      parameters: compileParameters({
+        operation: { type: 'string', required: true, enum: ['list', 'start', 'submit', 'status', 'report'] },
+        experimental: { type: 'boolean', description: 'start only: explicit true for a user-requested controlled pilot.' },
+        mode: { type: 'string', enum: ['A', 'B', 'C'] },
+        caseId: { type: 'string', description: 'start only: exact ID returned by list, e.g. cards.' },
+        templateKey: { type: 'string', enum: ['light', 'dark', 'decor', 'portrait'] },
+        runId: { type: 'string', description: 'Returned run ID from this exact chat; cannot access another user/session.' },
+        expectedTurn: { type: 'integer', description: 'submit only: use the exact number returned with nextRequest; never invent or increment it locally.' },
+        responseText: { type: 'string', description: 'submit only: exact strict JSON generated for nextRequest, as a string. No code, Markdown or manual corrections. Bad responses are retained and consume their attempt.' },
+      }),
+      output: { schema: { type: 'object', additionalProperties: true }, render: (_args, value) => {
+        const result = value as any
+        return result.status === 'exported' ? [...renderCreate(result), ...oneText(JSON.stringify(result.experiment))] : oneText(JSON.stringify(value, null, 2))
+      } },
+      execute: executors.generation,
+    },
+    {
       name: 'ppt_themes',
       description: 'List the built-in visual themes of dsh-ppt (id, name, mood, best-for, light/dark palette) before building a deck. Pass preview: true with outputDir to also write a self-contained theme gallery HTML plus one SVG palette card per theme (ready for README/npm screenshots). Use a theme id as the theme argument of ppt_create. 中文：列出 dsh-ppt 内置视觉主题（id、名称、情绪、适用场景、明暗色板）；传 preview: true + outputDir 会额外生成主题对比页和每套主题的 SVG 色板卡（可直接放 README/npm 首屏），用于选择 ppt_create 的 theme 参数。',
       parameters: compileParameters({

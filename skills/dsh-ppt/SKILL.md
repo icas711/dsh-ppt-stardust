@@ -13,6 +13,16 @@ Turn one sentence or a document into a complete presentation: **standalone HTML 
 
 The user wants to create a PPT / slides / presentation / deck / report / proposal / pitch deck / roadshow / training materials, or wants to turn a single sentence, a snippet of text, or a Markdown file into a playable presentation.
 
+## Explicit experimental A/B/C pilot
+
+Only when the user explicitly asks for the experimental A/B/C pilot, use `ppt_generation` instead of the normal creation pipeline below. This is a separate controlled-demo protocol, not the default presentation workflow. The current DSH chat model must be `glm-5.3-flash`; the tool does not call or switch models.
+
+- Call `ppt_generation {operation:"list"}` to see case IDs, templates and pilot order. For a specified test, call `{operation:"start",experimental:true,mode:"A"|"B"|"C",caseId,templateKey}`. One experiment per fresh DSH chat; run only the requested experiment.
+- Follow the returned `nextRequest` schema, instructions and external sources. Generate its strict JSON and immediately submit that exact text through `ppt_generation {operation:"submit",runId,expectedTurn,responseText}`. The tool handles validation, native composition and export. Do not call `ppt_create`, run shell scripts, create answer.txt or ask the user to transfer JSON files for this UI path.
+- Use each returned `expectedTurn` exactly. Continue only on `waiting-for-response`. C first produces scenario, then spec; at most two corrections are shared by the entire task. Bad responses stay in the journal. A terminal failure must be reported; starting over or changing mode in the same chat cannot reset the limit. After transport uncertainty use `status`; an identical resubmission is idempotent.
+- Sources are explicitly demo content and the chosen synthetic template is explicitly style. Clarify genuinely missing requirements/attachment roles via `ask_user_question`; do not repeat supplied answers. The tool cannot verify DSH question history. New private materials are outside this controlled UI pilot; never claim they were tested.
+- On export deliver the returned HTML/PPTX/PDF and relevant warnings. `report` exports this experiment's log for the pilot; include it when requested. State `acceptance:not-verified`: render, factual/visual inspection and editability need human review. Provider usage is unavailable; never fill token/cost values from self-report. The saved response is the submitted tool argument, not the complete raw model/provider transcript.
+
 ## Execution Rules (Must Always Be Followed)
 
 - Default workflow: clarify, prepare content, create, deliver the returned files and relevant warnings. The plugin already validates inputs, saves and revision conflicts internally. A successful operation does not require a separate ppt_check, render, image inspection, pixel/metric script or repair loop. Warnings alone are advisory, not permission to change content, fonts or geometry. Fix a concrete blocking error within the agreed task, or a defect the user asked to fix; do not start an autonomous quality-improvement cycle. Extended visual/metric review is opt-in and limited to the user's requested scope.

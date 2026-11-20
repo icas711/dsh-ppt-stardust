@@ -10,13 +10,14 @@ const pendingMessage='compact-offline-awaiting-response'
 const plain=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)
 const clone=v=>structuredClone(v)
 
-async function replayScene({task,template,rubric,complete,onEvent,exportDeck}){
+async function replayScene({task,template,rubric,complete,onEvent,exportDeck,signal}){
   const journal=[],initial=sceneRequest(task,template)
   let current=null,diagnostics=[],ids=null,corrections=0,calls=0,artifacts=null,create=null
   const emit=async(type,data={})=>{const e={version:1,seq:journal.length+1,type,...data};journal.push(e);await onEvent(e)}
   const finish=async status=>{await emit('finished',{status,calls,corrections,diagnostics,acceptance:'not-verified'});return {status,calls,corrections,final:current,artifacts,journal,diagnostics,acceptance:'not-verified'}}
   await emit('started',{mode:'A',brief:task.brief,context:task.context,limits:{corrections:2}})
   for(let attempt=0;attempt<3;attempt++){
+    if(signal?.aborted){diagnostics=[finding('aborted','scene','Run cancelled')];return finish('cancelled')}
     const request={...initial,call:++calls,correctionsUsed:corrections,kind:attempt?'repair':'initial',diagnostics,
       ...(attempt?{current:ids?{slides:current.slides.filter(s=>ids.includes(s.id))}:current,...(ids?{slideIds:ids,schema:{type:'object',required:['slides'],additionalProperties:false,properties:{slides:initial.schema.properties.slides}}}:{})}:{}),
       instructions:initial.instructions+(ids?' Return {slides:[...]} replacing exactly the requested slide IDs; preserve every other slide.':'')}
@@ -42,7 +43,8 @@ async function replayScene({task,template,rubric,complete,onEvent,exportDeck}){
     await emit('validation',{stage:'scene',valid:!diagnostics.length,diagnostics})
     if(!diagnostics.length){
       if(!exportDeck)return finish('composed')
-      try{artifacts=await exportDeck(create)}catch(e){diagnostics=[finding('export-error','export',e.message)];return finish('export-error')}
+      try{signal?.throwIfAborted();artifacts=await exportDeck(create)}catch(e){diagnostics=[finding('export-error','export',e.message)];return finish(signal?.aborted?'cancelled':'export-error')}
+      if(signal?.aborted){diagnostics=[finding('aborted','export','Run cancelled; inspect recorded artifacts')];return finish('cancelled')}
       await emit('artifacts',{artifacts});return finish('exported')
     }
     if(attempt===2)return finish('budget-exhausted')
@@ -55,7 +57,7 @@ async function replayScene({task,template,rubric,complete,onEvent,exportDeck}){
 }
 
 /** Re-execute local validation, not LLM calls; missing recording yields a prompt. */
-export async function processCompactRecording({mode,task,template,rubric,recording,manualInterventions=[],exportDeck}){
+export async function processCompactRecording({mode,task,template,rubric,recording,manualInterventions=[],exportDeck,signal}){
   if(recording.version!==1||!Array.isArray(recording.responses))throw new Error('Expected recording {version:1,responses:[]}')
   const adapter=recordedGenerationAdapter(recording.responses),journal=[]
   let cursor=0,pending=null
@@ -64,9 +66,9 @@ export async function processCompactRecording({mode,task,template,rubric,recordi
     cursor++;return adapter(request)
   }
   let result
-  if(mode==='A')result=await replayScene({task,template,rubric,complete,onEvent:e=>journal.push(clone(e)),exportDeck})
+  if(mode==='A')result=await replayScene({task,template,rubric,complete,onEvent:e=>journal.push(clone(e)),exportDeck,signal})
   else{
-    const raw=await runCompactGeneration({mode,brief:task.brief,context:task.context,template,assets:task.assets,dataMode:task.dataMode,manualInterventions,complete,onEvent:e=>journal.push(clone(e)),reviewSpec:spec=>reviewCompactSpec(spec,task,rubric),exportDeck})
+    const raw=await runCompactGeneration({mode,brief:task.brief,context:task.context,template,assets:task.assets,dataMode:task.dataMode,manualInterventions,complete,onEvent:e=>journal.push(clone(e)),reviewSpec:spec=>reviewCompactSpec(spec,task,rubric),exportDeck,signal})
     const {composition,journal:ignored,...other}=raw
     result={...other,final:raw.spec,compositionReport:composition?.report??null,compositionDiagnostics:composition?.diagnostics??[]}
   }

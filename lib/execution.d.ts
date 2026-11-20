@@ -18,6 +18,8 @@ export interface PptExecution {
     };
 }
 export interface ExecutorOptions {
+    /** Test override; production uses the plugin's session-scoped experiment storage. */
+    generationRoot?: string;
     /** Template library; when absent, library template features degrade gracefully. */
     templateStore?: PptTemplateStore;
     /** Host webAuth bridge for admin verdicts (optional). */
@@ -30,6 +32,9 @@ export declare function executionScope(exec?: PptExecution): string | undefined;
 export declare function loadTemplatesModule(): Promise<Record<string, any>>;
 /** Build executors with a shared engine loader; resolve paths separately for each call. */
 export declare function createPptExecutors(config: ResolvedPptConfig, loadEngine?: () => Promise<DeckEngine>, options?: ExecutorOptions): {
+    generation(rawArgs: unknown, exec?: PptExecution): Promise<{
+        [x: string]: any;
+    }>;
     themes(rawArgs: unknown, exec?: PptExecution): Promise<PptThemesResult>;
     create(rawArgs: unknown, exec?: PptExecution): Promise<import("./types.js").PptCreateResult>;
     templates(rawArgs: unknown, exec?: PptExecution): Promise<{

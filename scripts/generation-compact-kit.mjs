@@ -25,10 +25,11 @@ export function safeFile(root,path){
 }
 export function saveJson(file,value){mkdirSync(dirname(file),{recursive:true});writeFileSync(file,JSON.stringify(value,null,2)+'\n',{flag:'wx'})}
 export function codeVersions(){
-  const files=['package.json','pnpm-lock.yaml','package-lock.json','docs/GENERATION-EVALUATION.md']
-  for(const dir of ['scripts','skills/dsh-ppt/scripts','src'])for(const file of readdirSync(join(repositoryRoot,dir)))if(/\.(mjs|ts)$/.test(file))files.push(dir+'/'+file)
+  // npm installations omit src and lockfiles; fingerprint the actual installed code.
+  const files=['package.json','pnpm-lock.yaml','package-lock.json','docs/GENERATION-EVALUATION.md'].filter(path=>existsSync(join(repositoryRoot,path)))
+  for(const dir of ['scripts','skills/dsh-ppt/scripts','src','lib'])if(existsSync(join(repositoryRoot,dir)))for(const file of readdirSync(join(repositoryRoot,dir)))if(/\.(mjs|js|ts)$/.test(file))files.push(dir+'/'+file)
   let commit=null,dirty=null
-  try{commit=execFileSync('git',['rev-parse','HEAD'],{cwd:repositoryRoot,encoding:'utf8'}).trim();dirty=!!execFileSync('git',['status','--porcelain'],{cwd:repositoryRoot,encoding:'utf8'}).trim()}catch{}
+  try{if(existsSync(join(repositoryRoot,'.git'))){commit=execFileSync('git',['rev-parse','HEAD'],{cwd:repositoryRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();dirty=!!execFileSync('git',['status','--porcelain'],{cwd:repositoryRoot,encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim()}}catch{}
   return {plugin:jsonFile(join(repositoryRoot,'package.json')).version,commit,dirty,node:process.version,spec:GENERATION_SPEC_VERSION,profile:GENERATION_PROFILE_VERSION,components:GENERATION_COMPONENT_VERSION,runner:GENERATION_RUN_VERSION,kit:COMPACT_KIT_VERSION,codeSha256:sha(files.sort().map(path=>[path,sha(readFileSync(join(repositoryRoot,path)))]))}
 }
 export function sceneResponseSchema(){return {type:'object',additionalProperties:false,required:['version','title','lang','mode','slides'],properties:{version:{const:1},title:{type:'string'},lang:{enum:['ru','en','zh']},mode:{enum:['factual','demo']},slides:{type:'array',minItems:1,maxItems:120,items:{type:'object',properties:{id:{type:'string'},notes:{type:'string'},...sceneInputProperties()},required:['id','layout','purpose','elements'],additionalProperties:false}}}}}
