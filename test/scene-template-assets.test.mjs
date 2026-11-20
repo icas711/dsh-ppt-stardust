@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {mkdtempSync,rmSync,writeFileSync} from 'node:fs'
+import {mkdtempSync,rmSync,writeFileSync,readFileSync} from 'node:fs'
+import {createHash} from 'node:crypto'
+import {PNG} from 'pngjs'
+import * as engine from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {unzipSync,zipSync,strFromU8,strToU8} from 'fflate'
@@ -10,6 +13,32 @@ import * as templates from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {fixtures} from './fixtures/pptx/generate.mjs'
 
 const identity={login:'scene-assets-user',admin:false,local:false}
+
+test('unused scene layout backgrounds survive creation, edits, history-only retention and undo',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'layout-background-'));t.after(()=>rmSync(root,{recursive:true,force:true}))
+ function image(red){
+  const png=new PNG({width:1,height:1});png.data.set([red,0,0,255]);const bytes=PNG.sync.write(png)
+  return ['img-'+createHash('sha256').update(bytes).digest('hex'),{mime:'image/png',width:1,height:1,data:'data:image/png;base64,'+bytes.toString('base64')}]
+ }
+ const background=image(255),unused=image(64),pageSize={width:9906000,height:6858000}
+ const scene={layout:'scene',designLayout:'title',elements:[{id:'title',type:'text',frame:{x:100000,y:100000,w:4000000,h:500000},paragraphs:[{runs:[{text:'Title'}]}]}]}
+ const style={pageSize,sceneLayouts:[{id:'title',purpose:'content',elements:[],slots:[]},{id:'body',purpose:'content',backgroundAssetId:background[0],elements:[],slots:[]}]}
+ const made=await engine.buildDeckAsync({title:'Preserved background',outputDir:root,slides:[scene],style,assets:Object.fromEntries([background,unused])})
+ const saved=()=>JSON.parse(readFileSync(made.jsonPath,'utf8'))
+ assert.deepEqual(saved().assets[background[0]],background[1]);assert.equal(saved().assets[unused[0]],undefined)
+ assert.equal(engine.checkDeck({deckPath:made.jsonPath}).revision,0)
+ await engine.editDeck({deckPath:made.jsonPath,expectedRevision:0,edits:[{slide:1,patch:{label:'Changed'}}]})
+ assert.equal(engine.checkDeck({deckPath:made.jsonPath}).revision,1)
+ // The background is now referenced ONLY by undo snapshots, not current slides/style.
+ await engine.editDeck({deckPath:made.jsonPath,expectedRevision:1,style:{pageSize}})
+ assert.equal(saved().style.sceneLayouts,undefined)
+ assert.deepEqual(saved().assets[background[0]],background[1])
+ assert.equal(engine.checkDeck({deckPath:made.jsonPath}).revision,2)
+ await engine.undoDeck({deckPath:made.jsonPath,expectedRevision:2})
+ assert.equal(saved().style.sceneLayouts[1].backgroundAssetId,background[0])
+ assert.deepEqual(saved().assets[background[0]],background[1])
+ assert.equal(engine.checkDeck({deckPath:made.jsonPath}).revision,3)
+})
 test('panel PPTX upload retains scene images through font binding, draft save, preview and ZIP export',async t=>{
  const root=mkdtempSync(join(tmpdir(),'scene-template-assets-'));t.after(()=>rmSync(root,{recursive:true,force:true}))
  const store=new PptTemplateStore({root:join(root,'library'),templatesModuleLoader:async()=>templates})
@@ -22,6 +51,7 @@ test('panel PPTX upload retains scene images through font binding, draft save, p
  assert.equal(response.status,200,JSON.stringify(result))
  assert.equal(result.key,'user:image-template')
  const saved=await store.get(result.key,identity)
+ assert.ok(saved.manifest.style.layouts.flatMap(l=>l.slots).filter(s=>s.type==='text').every(s=>s.required===false))
  for(const a of Object.values(saved.manifest.assetMap))assert.deepEqual(saved.assets[a.file].bytes,expected.assets[a.file].bytes)
  const edited=await store.saveDraft({manifest:{...saved.manifest,name:'Edited images'},baseKey:saved.key,expectedRevision:saved.manifest.revision,identity})
  const preview=await store.previewOptions({manifest:edited.manifest,baseKey:edited.key,identity})

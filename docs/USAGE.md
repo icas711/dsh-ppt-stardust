@@ -8,6 +8,8 @@ Before each new deck, use `ask_user_question` to confirm the template/style and 
 
 For a library template, read `ppt_template {operation:"get", templateId}` first. Use its page size, typography and existing layout IDs. A slide's `purpose` is its semantic role; `designLayout` explicitly selects an existing reference. Without an explicit ID, cover needs a cover reference; other roles may fall back to content. Do not guess IDs or change the semantic role just to bypass a missing reference.
 
+Use compositionGuides from ppt_template get: choose the actual title/body reference, consider text anchors, typography, decor, real pictures, captions and neighboring blocks, then choose sizes and wrapping and pass final frames in EMU. referenceArea is a sample, not a capacity quota or exclusion mask. For an unrotated right anchor R, choose width W and x = R - W: R=94 with W=40 gives x=54; W=55 gives x=39. Paragraph alignment alone does not position the block. Rotated/reflected bounds are not the typesetting frame; preserve frame/transform semantics. New content may have different widths, heights and block counts. Do not shorten user text or shrink fonts merely to match the sample. Guides describe the first meaningful run, not all mixed styles. This is initial composition guidance, not a fit guarantee or a reason for automatic metric/render/repair loops. For explicit fixed-slot filling, request includeFixedSlots:true; this preserves original frames and requirements.
+
 Create with Markdown or structured `slides`:
 
 ```js

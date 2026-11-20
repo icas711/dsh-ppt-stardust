@@ -983,9 +983,11 @@ export function templateFromSceneManifest(project,options={}){
     if(!families.has(signature))families.set(signature,'family-'+(families.size+1))
     const elements=structuredClone(s.elements),slots=[]
     for(const e of elements)if(e.role!=='decor'&&['text','image','chart','table'].includes(e.type)){
-      const slot={id:'slot-'+e.id,elementId:e.id,type:e.type,name:e.name??e.id,required:true};slots.push(slot);e.slotId=slot.id
+      const slot={id:'slot-'+e.id,elementId:e.id,type:e.type,name:e.name??e.id,required:e.type!=='text'};slots.push(slot);e.slotId=slot.id
       if(e.type==='text'){
-        let first=true;for(const p of e.paragraphs)for(const r of p.runs)if(!r.break){r.text=first?'Заполнить: '+(e.name??'текст'):'';first=false}
+        const runs=e.paragraphs.flatMap(p=>p.runs).filter(r=>!r.break)
+        const first=runs.find(r=>r.text?.trim())??runs[0]
+        for(const r of runs)r.text=r===first?'Заполнить: '+(e.name??'текст'):''
       }
       if(e.type==='table')for(const c of e.table.cells)for(const p of c.paragraphs)for(const r of p.runs)if(!r.break)r.text='Заполнить:'
       if(e.type==='chart'){e.chart.categories=e.chart.categories.map((_,i)=>'Заполнить: '+(i+1));e.chart.series=e.chart.series.map((s,i)=>({...s,name:'Series '+(i+1),values:s.values.map(()=>1),...(s.pointDataLabels?{pointDataLabels:s.pointDataLabels.map(l=>l?{...l,text:undefined}:null)}:{}),...(s.dataLabels?{dataLabels:{...s.dataLabels,text:undefined}}:{})}))}
@@ -999,7 +1001,7 @@ export function templateFromSceneManifest(project,options={}){
   const used=new Set(layouts.flatMap(l=>[l.backgroundAssetId,...l.elements.flatMap(e=>[e.assetId,e.previewAssetId])].filter(Boolean)))
   for(const [key,a]of Object.entries(assetMap))if(!used.has(key)){delete assetMap[key];delete assets[a.file]}
   const manifest={schemaVersion:3,id:options.templateId,name:options.name,description:options.description,revision:1,style:{theme:project.theme??'data',pageSize:project.style?.pageSize??project.pageSize,...(project.themeFonts?{themeFonts:project.themeFonts}:{}),...(fonts.length?{fonts}:{}),...(project.sourceTheme?{brand:{primaryColor:project.sourceTheme.accent1,backgroundColor:project.sourceTheme.light1,textColor:project.sourceTheme.dark1}}:{}),layouts},assetMap}
-  return {manifest:validateTemplateManifest(manifest,{templateAssets:assets}),assets}
+  return {manifest:validateTemplateManifest(manifest,{templateAssets:assets}),assets,report:{textAreas:'Text areas are composition guides and optional fixed slots; other slot requirements are unchanged.'}}
 }
 export async function templateFromPptxScene(source,options={}){
   options.signal?.throwIfAborted()
@@ -1009,7 +1011,7 @@ export async function templateFromPptxScene(source,options={}){
   const result=templateFromSceneManifest({...imported,theme:'data',style:{pageSize:imported.pageSize}},options)
   const layouts=result.manifest.style.layouts,all=layouts.flatMap(l=>l.elements),families=new Set(layouts.map(l=>l.familyId)),page=imported.pageSize
   const skipped=imported.report.objects.filter(o=>['ignored','unsupported','preview'].includes(o.mode))
-  return {...result,report:{...imported.report,slideCount:imported.slides.length,sourceSlides:imported.slides.length,layoutCount:layouts.length,layouts:families.size,layoutVariants:layouts.length,pageSize:page,slide:{...page,ratio:Math.round(page.width/page.height*1000)/1000,adapted:false},
+  return {...result,report:{...imported.report,...result.report,slideCount:imported.slides.length,sourceSlides:imported.slides.length,layoutCount:layouts.length,layouts:families.size,layoutVariants:layouts.length,pageSize:page,slide:{...page,ratio:Math.round(page.width/page.height*1000)/1000,adapted:false},
     layoutStats:{images:all.filter(e=>e.type==='image'||e.previewAssetId).length,svg:0,backgrounds:layouts.filter(l=>l.backgroundColor||l.backgroundAssetId).length,plates:all.filter(e=>e.type==='shape'&&e.fill?.opacity!==0&&e.fill).length,zones:layouts.reduce((n,l)=>n+l.slots.length,0)},
     skippedObjects:skipped.map(o=>({kind:o.kind,name:o.name,source:o.elementId,sourceLabel:'Слайд '+o.slide,slides:[o.slide],reason:o.reason})),warnings:imported.report.warnings}}
 }

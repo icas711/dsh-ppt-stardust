@@ -232,7 +232,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
             lang: typeof manifest.language === 'string' ? manifest.language : lang,
           })
           const saved = await needStore().save({ manifest: extracted.manifest, assets: extracted.assets, scope: publicScope(args, identity), identity })
-          return { ok: true, key: saved.key, template: summarize(saved) }
+          return { ok: true, key: saved.key, template: summarize(saved), report: extracted.report }
         }
         case 'save': {
           const manifest = args.manifest

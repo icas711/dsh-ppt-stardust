@@ -178,7 +178,10 @@ function collectAssets(manifest) {
     if (state.brand?.logoAssetId) ids.add(state.brand.logoAssetId)
     for (const face of state.style?.fonts ?? []) ids.add(face.assetId)
     for (const bg of state.style?.backgrounds ?? []) ids.add(bg.assetId)
-    for (const layout of state.style?.sceneLayouts ?? []) for (const e of layout.elements) {if(e.assetId)ids.add(e.assetId);if(e.previewAssetId)ids.add(e.previewAssetId)}
+    for (const layout of state.style?.sceneLayouts ?? []) {
+      if(layout.backgroundAssetId)ids.add(layout.backgroundAssetId)
+      for (const e of layout.elements) {if(e.assetId)ids.add(e.assetId);if(e.previewAssetId)ids.add(e.previewAssetId)}
+    }
     for (const layout of state.style?.layouts ?? []) for (const id of layoutAssetIds(layout)) ids.add(id)
     for (const slide of state.slides) {
       if(slide.backgroundAssetId)ids.add(slide.backgroundAssetId)

@@ -11,6 +11,7 @@ import * as engine from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 import {composeSceneTemplateSlides,resolveSceneReference} from '../skills/dsh-ppt/scripts/deck-template-scene.mjs'
 import {buildPptTools} from '../lib/tools.js'
 import {resolvePptConfig} from '../lib/config.js'
+import {renderScenePptx} from '../skills/dsh-ppt/scripts/deck-scene-pptx.mjs'
 
 const frame={x:500000,y:500000,w:7500000,h:600000}
 const text=(id,value,y=500000)=>({id,type:'text',frame:{...frame,y},paragraphs:[{runs:[{text:value}]}]})
@@ -106,6 +107,55 @@ test('template get text exposes default reference IDs and schema explains explic
  assert.match(scene.designLayout.description,/Cover without a cover reference requires an explicit ID/)
 })
 
+test('template get exposes relative anchors; chosen widths preserve right edge in exported PPTX',async t=>{
+ const {template:raw}=fixture(),template=templates.validateTemplateManifest(raw),header=template.style.layouts[1].elements.find(e=>e.id==='heading')
+ header.frame={x:4451230,y:306559,w:5084321,h:357870}
+ header.paragraphs[0].style={align:'right'}
+ header.paragraphs[0].runs[0].style={size:18,bold:true}
+ const before=structuredClone(template),tool=buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_template')
+ const value={template:{key:'user:headers',name:'Headers',revision:1},manifest:template}
+ const summary=tool.output.render({},value)[0].text
+ const data=JSON.parse(summary.slice(summary.indexOf('{\n'))),variant=data.variants[1]
+ const region=variant.compositionGuides.text.find(r=>r.id==='heading')
+ assert.equal(region.alignment,'right');assert.equal(region.typography.size,18)
+ assert.equal(region.anchor.x,96.26);assert.equal(variant.compositionGuides.units,'percentOfPage')
+ assert.deepEqual(variant.compositionGuides.decor.map(r=>r.id),['art'])
+ assert.equal(variant.slots,undefined);assert.equal(variant.description,undefined)
+ assert.equal(data.defaultReferences.cover,'cover');assert.equal(variant.purpose,'content')
+ assert.doesNotMatch(summary,/Sample heading|"frame"|maxCharacters/)
+ const fixed=tool.output.render({includeFixedSlots:true},value)[0].text
+ const fixedData=JSON.parse(fixed.slice(fixed.indexOf('{\n')))
+ assert.deepEqual(fixedData.variants[1].textRegions[0].frame,header.frame)
+ assert.equal(fixedData.variants[1].slots[0].required,true)
+ assert.equal(fixedData.variants[1].compositionGuides,undefined)
+ assert.ok(summary.length<fixed.length)
+ const right=header.frame.x+header.frame.w
+ const sceneSlides=[]
+ const outputs=[4000000,5500000].map((w,i)=>{
+  const frame={x:right-w,y:306559,w,h:600000}
+  const slides=composeSceneTemplateSlides([{layout:'scene',purpose:'content',elements:[{id:'new-header',type:'text',frame,paragraphs:[{style:{align:'right'},runs:[{text:i?'Long heading with supporting detail':'Short'}]}]}]}],template,{})
+  assert.deepEqual(slides[0].elements.find(e=>e.id==='new-header').frame,frame)
+  assert.ok(!slides[0].elements.some(e=>e.id==='heading'))
+  sceneSlides.push({...slides[0],id:'header-'+i})
+  const xml=renderScenePptx(slides[0]).xml
+  assert.match(xml,/<a:pPr algn="r"/)
+  assert.ok(xml.includes(`<a:off x="${right-w}" y="306559"`))
+  assert.ok(xml.includes(`<a:ext cx="${w}" cy="600000"`))
+  return xml
+ })
+ assert.notEqual(outputs[0],outputs[1]);assert.deepEqual(template,before)
+ const dir=mkdtempSync(join(tmpdir(),'relative-headers-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const made=await engine.buildDeckAsync({title:'Relative headers',outputDir:dir,style:{pageSize:template.style.pageSize},slides:sceneSlides})
+ const parts=unzipSync(readFileSync(made.pptxPath))
+ for(const [i,w] of [4000000,5500000].entries()){
+  const xml=strFromU8(parts[`ppt/slides/slide${i+1}.xml`])
+  assert.match(xml,/<a:pPr algn="r"/)
+  assert.ok(xml.includes(`<a:off x="${right-w}" y="306559"`))
+  assert.ok(xml.includes(`<a:ext cx="${w}" cy="600000"`))
+ }
+
+})
+
 test('reference failures through the creation executor never generate delivery files or modify the template',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'reference-preflight-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
  const {template,slides}=fixture(),identity={login:'reference-user',admin:false,local:false}
@@ -130,10 +180,28 @@ test('scene template creation preserves declared roles; PPTX import defaults to 
  const manifest=engine.readDeckProject({deckPath:source.jsonPath}).manifest
  const fromProject=templates.templateFromSceneManifest(manifest,{templateId:'project-roles',name:'Declared roles'})
  assert.equal(fromProject.manifest.style.layouts[0].purpose,'cover')
+ assert.ok(fromProject.manifest.style.layouts[0].slots.filter(s=>s.type==='text').every(s=>s.required===false))
  const original=readFileSync(source.pptxPath)
  const imported=await templates.templateFromPptxScene(source.pptxPath,{templateId:'imported-roles',name:'Imported title artwork'})
  assert.equal(imported.manifest.style.layouts[0].purpose,'content')
  assert.deepEqual(readFileSync(source.pptxPath),original)
+ const store=new PptTemplateStore({root:join(dir,'library'),templatesModuleLoader:async()=>templates})
+ const executors=createPptExecutors(resolvePptConfig({}),async()=>engine,{templateStore:store})
+ const exec={agent:{session:{header:{owner:'import-guides-user'}}}}
+ const originalProject=readFileSync(source.jsonPath)
+ for(const args of [
+  {operation:'create-from-project',deckPath:source.jsonPath,newTemplateId:'project-tool',name:'Project tool'},
+  {operation:'create-from-pptx',pptxPath:source.pptxPath,newTemplateId:'pptx-tool',name:'PPTX tool'},
+ ]){
+  const made=await executors.template(args,exec)
+  assert.match(made.report.textAreas,/optional fixed slots/)
+  const got=await executors.template({operation:'get',templateId:made.key},exec)
+  assert.ok(got.manifest.style.layouts.flatMap(l=>l.slots).filter(s=>s.type==='text').every(s=>s.required===false))
+  const tool=buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_template')
+  const rendered=tool.output.render({},got)[0].text
+  assert.match(rendered,/compositionGuides/);assert.doesNotMatch(rendered,/"textRegions"|"slots"/)
+ }
+ assert.deepEqual(readFileSync(source.jsonPath),originalProject)
  const reference=imported.manifest.style.layouts[0]
  const composed=composeSceneTemplateSlides([{layout:'scene',purpose:'cover',designLayout:reference.id,elements:[text('new-title','New title')]}],imported.manifest,{})
  assert.equal(composed[0].purpose,'cover');assert.equal(composed[0].designLayout,reference.id)

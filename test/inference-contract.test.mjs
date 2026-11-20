@@ -184,3 +184,12 @@ test('check accepts numeric page strings, prefers exact numeric-looking IDs and 
     assert.throws(()=>engine.checkDeck({deckPath:made.jsonPath,slide}),/use a 1-based page number.*slide-2/)
   }
 })
+
+test('render text exposes exact page and receipt paths instead of requiring a shared-directory scan',()=>{
+ const tool=buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_render')
+ const result={ok:true,status:'rendered',slideCount:2,backend:'native',sourceSha256:'a'.repeat(64),receiptPath:'C:\\session\\render\\receipt.json',pngPaths:['C:\\session\\render\\page-1.png','C:\\session\\render\\page-2.png'],pdfPath:'C:\\session\\render\\document.pdf',outputDir:'C:\\session\\render',missingFonts:[]}
+ const rendered=tool.output.render({},result)[0].text
+ const data=JSON.parse(rendered.split('Render files (internal; use these exact paths, never scan shared directories):\n')[1])
+ assert.deepEqual(data.pngPaths,result.pngPaths);assert.equal(data.receiptPath,result.receiptPath)
+ assert.equal(data.pdfPath,result.pdfPath);assert.equal(data.pptxSha256,result.sourceSha256)
+})

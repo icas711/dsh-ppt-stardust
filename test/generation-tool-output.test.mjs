@@ -9,9 +9,9 @@ import {generationEvaluationCases} from './fixtures/generation-evaluation.mjs'
 import {templateCreateOptions} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {buildDeckAsync,checkDeck,editDeck} from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 const tools=buildPptTools(resolvePptConfig())
-test('schema 3 get exposes slot contracts and descriptions without original sample elements',()=>{
+test('schema 3 get explicitly exposes fixed slot contracts and descriptions without sample elements',()=>{
  const template=generationEvaluationCases()[0].template;template.style.layouts[0].description.slots[0].capacity={characters:1500}
- const text=tools.find(t=>t.name==='ppt_template').output.render({}, {template:{key:'user:test',revision:1,name:'Test'},manifest:template})[0].text
+ const text=tools.find(t=>t.name==='ppt_template').output.render({includeFixedSlots:true}, {template:{key:'user:test',revision:1,name:'Test'},manifest:template})[0].text
  for(const value of ['variant-0','variant-1','variant-2','body','required','capacity','estimate','structures','9906000'])assert.ok(text.includes(value),value)
  assert.ok(!text.includes('Sample content'));assert.ok(!text.includes('Каркас:'))
  const legacy=tools.find(t=>t.name==='ppt_template').output.render({}, {template:{key:'user:old',revision:1,name:'Old',outlineTitles:['Legacy cover']},manifest:{schemaVersion:1}})[0].text
