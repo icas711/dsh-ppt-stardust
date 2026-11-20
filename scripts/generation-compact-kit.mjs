@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto'
 import {execFileSync} from 'node:child_process'
 import {zipSync,unzipSync} from 'fflate'
 import {compactCases,compactTemplates} from './generation-compact-cases.mjs'
+import {compactPlanningConstraints} from './generation-compact-review.mjs'
 import {buildTemplateBundle,readTemplateBundle} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {buildGenerationTemplateProfile,GENERATION_PROFILE_VERSION} from '../skills/dsh-ppt/scripts/deck-generation-profile.mjs'
 import {generationSpecSchema,generationBriefSchema,validateGenerationBrief,validateGenerationSpec,GENERATION_SPEC_VERSION} from '../skills/dsh-ppt/scripts/deck-generation-spec.mjs'
@@ -35,7 +36,7 @@ export function codeVersions(){
 export function sceneResponseSchema(){return {type:'object',additionalProperties:false,required:['version','title','lang','mode','slides'],properties:{version:{const:1},title:{type:'string'},lang:{enum:['ru','en','zh']},mode:{enum:['factual','demo']},slides:{type:'array',minItems:1,maxItems:120,items:{type:'object',properties:{id:{type:'string'},notes:{type:'string'},...sceneInputProperties()},required:['id','layout','purpose','elements'],additionalProperties:false}}}}}
 export function sceneRequest(task,template){
   return {version:1,mode:'A',stage:'scene',kind:'initial',call:1,correctionsUsed:0,
-    instructions:'Return strict JSON {version:1,title,lang,mode,slides}. Compose freely as editable native scene elements with complete integer EMU frames and styles. No deckPlan. Use the authorized template references; the engine preserves fixed decor. Preserve all source facts. Put sourceRefs: followed by the supplied source IDs in notes of each slide. For demo show Синтетические данные on every slide. Do not invent numbers or missing values. No executable code or XML.',
+    instructions:'Return strict JSON {version:1,title,lang,mode,slides}. Compose freely as editable native scene elements with complete integer EMU frames and styles. No deckPlan. Use the authorized template references; the engine preserves fixed decor. Preserve all source facts. Brief requirements are instructions, not slide content; do not display preservation rules or pagination instructions. Put sourceRefs: followed by the supplied source IDs in notes of each slide. For demo show Синтетические данные on every slide. Do not invent numbers or missing values. No executable code or XML.',
     brief:task.brief,schema:sceneResponseSchema(),templateProfile:buildGenerationTemplateProfile(template.manifest,{assets:template.assets,importReport:template.report}).profile,
     sources:task.context.sources,assetIds:Object.keys(task.assets),iconIds:[...GENERATION_ICON_IDS],constraints:{lang:task.brief.lang,dataMode:task.dataMode,slideCount:task.brief.slideCount??null,allowMoreSlides:task.brief.allowMoreSlides}}
 }
@@ -86,7 +87,7 @@ export async function prepareCompactEvaluation(directory,{privateCasePath}={}){
     const task={...data,id:taskId,caseId:c.id,templateKey:t.key,brief:{...c.brief,goal:c.brief.goal+'\n'+c.instruction,templateId:t.manifest.id},template:{format:'zip',path:'../../templates/'+t.key+'.zip'},assetFiles}
     put('tasks/'+taskId+'/request.json',task)
     put('tasks/'+taskId+'/material.txt',c.context.sources.map(s=>s.id+'\n'+s.text).join('\n\n')+'\n')
-    const common={brief:task.brief,context:task.context,assets:task.assets,dataMode:task.dataMode,template:t}
+    const common={brief:task.brief,context:task.context,assets:task.assets,dataMode:task.dataMode,template:t,planningConstraints:compactPlanningConstraints(task,rubric)}
     for(const mode of ['A','B','C']){
       let request=sceneRequest(task,t)
       if(mode!=='A'){

@@ -36,8 +36,9 @@ export function compactCases(){
     ['overload','Полный реестр','', {type:'table',headers:['Проект','Статус'],rows:Array.from({length:30},(_,i)=>['Проект '+String(i+1).padStart(2,'0'),i%2?'В работе':'Готов'])}]
   ]
   return definitions.map(([id,title,material,visual])=>{
-    if(id==='long-ru')material=visual.items.map(i=>i.label+': '+i.detail).join('\n')+'\nВсе предложения обязательны; сокращение и пересказ не разрешены.'
-    if(id==='overload')material='Реестр с колонками Проект, Статус:\n'+visual.rows.map(r=>r.join(' — ')).join('\n')+'\nВсе строки обязательны. Разрешено увеличить число слайдов, повторяя заголовки колонок.'
+    const requirements=id==='long-ru'?'Все предложения обязательны; сокращение и пересказ не разрешены.':id==='overload'?'Все строки обязательны. Разрешено увеличить число слайдов, повторяя заголовки колонок.':''
+    if(id==='long-ru')material=visual.items.map(i=>i.label+': '+i.detail).join('\n')
+    if(id==='overload')material='Реестр с колонками Проект, Статус:\n'+visual.rows.map(r=>r.join(' — ')).join('\n')
     // The relationship between the cards is source content too, not speaker notes.
     if(id==='cards')visual.caption=material
     const sources=[{id:'material',text:material,synthetic:true}]
@@ -48,8 +49,8 @@ export function compactCases(){
       const png=new PNG({width:32,height:16});for(let i=0;i<32*16;i++)png.data.set(i%32<16?[40,100,180,255]:[220,100,40,255],i*4)
       assets['sample-image']={mime:'image/png',width:32,height:16,data:'data:image/png;base64,'+PNG.sync.write(png).toString('base64')}
     }
-    return {id,title,instruction:'Подготовить редактируемую презентацию для проектной команды. Представление: '+visual.type+'. Сохранить приведённые названия, значения, единицы и формулировки дословно. '+(id==='overload'||id==='long-ru'?'Разрешено увеличить число слайдов.':'Один содержательный слайд.'),
+    return {id,title,instruction:'Подготовить редактируемую презентацию для проектной команды. Представление: '+visual.type+'. Сохранить приведённые названия, значения, единицы и формулировки дословно. '+(requirements||'Один содержательный слайд.'),
       brief:{version:1,goal:'Объяснить '+title,audience:'Проектная команда',lang:'ru',allowMoreSlides:['long-ru','overload'].includes(id),slideCount:1,attachments:[],requiredFacts:[...new Set(literals)]},
-      context:{sources},assets,dataMode:'demo',rubric:{visual:{...visual,sourceRefs:ref},requiredTexts:[...new Set(literals)],private:false}}
+      context:{sources},assets,dataMode:'demo',rubric:{visual:{...visual,sourceRefs:ref},requiredTexts:[...new Set(literals)],...(requirements?{forbiddenTexts:[requirements]}:{}),private:false}}
   })
 }

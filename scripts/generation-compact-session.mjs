@@ -4,7 +4,7 @@ import {runCompactGeneration} from '../skills/dsh-ppt/scripts/deck-generation-ru
 import {buildDeckAsync} from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 import {recordedGenerationAdapter} from './generation-run.mjs'
 import {loadCompactKit,loadCompactTask,safeFile,jsonFile,saveJson,sha,sceneRequest,promptText} from './generation-compact-kit.mjs'
-import {reviewCompactSpec,checkCompactScene,finding} from './generation-compact-review.mjs'
+import {reviewCompactSpec,checkCompactScene,finding,compactPlanningConstraints} from './generation-compact-review.mjs'
 
 const pendingMessage='compact-offline-awaiting-response'
 const plain=v=>v!==null&&typeof v==='object'&&!Array.isArray(v)
@@ -68,7 +68,7 @@ export async function processCompactRecording({mode,task,template,rubric,recordi
   let result
   if(mode==='A')result=await replayScene({task,template,rubric,complete,onEvent:e=>journal.push(clone(e)),exportDeck,signal})
   else{
-    const raw=await runCompactGeneration({mode,brief:task.brief,context:task.context,template,assets:task.assets,dataMode:task.dataMode,manualInterventions,complete,onEvent:e=>journal.push(clone(e)),reviewSpec:spec=>reviewCompactSpec(spec,task,rubric),exportDeck,signal})
+    const raw=await runCompactGeneration({mode,brief:task.brief,context:task.context,template,assets:task.assets,dataMode:task.dataMode,planningConstraints:compactPlanningConstraints(task,rubric),manualInterventions,complete,onEvent:e=>journal.push(clone(e)),reviewSpec:spec=>reviewCompactSpec(spec,task,rubric),exportDeck,signal})
     const {composition,journal:ignored,...other}=raw
     result={...other,final:raw.spec,compositionReport:composition?.report??null,compositionDiagnostics:composition?.diagnostics??[]}
   }

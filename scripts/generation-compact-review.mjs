@@ -28,6 +28,7 @@ export function compactVisibleText(slides){return slides.flatMap(s=>s.elements.f
 function literalsCheck(text,task,rubric,path,slideId){
   const all=canonical(text),diagnostics=[]
   for(const literal of rubric.requiredTexts)if(!all.includes(canonical(literal)))diagnostics.push(finding('missing-fact',path,'Preserve visible text: '+literal,slideId))
+  for(const literal of rubric.forbiddenTexts??[])if(all.includes(canonical(literal)))diagnostics.push(finding('instruction-as-content',path,'Keep this requirement in the brief, not on slides: '+literal,slideId))
   const allowed=new Set(numbers(task.context.sources.map(s=>s.text).join('\n')+'\n'+rubric.requiredTexts.join('\n')))
   for(const token of new Set(numbers(text)))if(!allowed.has(token))diagnostics.push(finding('unexpected-number',path,'Number absent from supplied facts: '+token,slideId))
   return diagnostics
@@ -44,6 +45,10 @@ function combinedVisual(visuals){
     base.series=base.series.map((s,i)=>({...s,values:visuals.flatMap(v=>v.series[i].values)}))
   }else if(visuals.length!==1)return null
   return base
+}
+export function compactPlanningConstraints(task,rubric){
+  if(rubric.visual?.type!=='cards')return undefined
+  return {visualType:'cards',maxPlannedSlides:task.brief.allowMoreSlides?Math.floor(rubric.visual.items.length/2):task.brief.slideCount??1,purpose:'content',enginePagination:true}
 }
 function cardStructure(value,target,task){
   if(value?.type!=='cards')return value

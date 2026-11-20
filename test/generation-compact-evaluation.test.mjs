@@ -122,6 +122,39 @@ test('chart false defaults match omission without accepting unsupported order or
   assert.deepEqual(reviewCompactSpec(specification(c),loaded.task,explicit),[])
 })
 
+test('preservation instructions stay in the brief and cannot appear in visible A/B content',()=>{
+  for(const id of ['long-ru','overload']){
+    const c=compactCases().find(c=>c.id===id),loaded=task(id+'--decor'),requirement=c.rubric.forbiddenTexts[0]
+    assert.ok(loaded.task.brief.goal.includes(requirement))
+    assert.ok(!c.context.sources[0].text.includes(requirement))
+    const free=scene(c)
+    free.slides[0].elements[0].paragraphs[0].runs[0].text+='\n'+requirement
+    assert.ok(checkCompactScene(free,loaded.task,loaded.template,loaded.rubric).diagnostics.some(d=>d.code==='instruction-as-content'))
+    if(id==='long-ru'){
+      const input=specification(c);input.slides[0].visual.caption=requirement
+      assert.ok(reviewCompactSpec(input,loaded.task,loaded.rubric).some(d=>d.code==='instruction-as-content'))
+    }
+  }
+})
+
+test('C rejects an impossible long-text scenario before spec and repairs it within the shared budget',async()=>{
+  const c=compactCases().find(c=>c.id==='long-ru'),loaded=task('long-ru--decor')
+  const bad={version:1,slides:['cover','approval','check','delivery'].map((id,i)=>({id,purpose:i?'content':'cover',title:id,sourceRefs:['material']}))}
+  const first=await processCompactRecording({mode:'C',...loaded,recording:{version:1,responses:[]}})
+  assert.equal(first.pending.planningConstraints.maxPlannedSlides,1)
+  const rejected=await processCompactRecording({mode:'C',...loaded,recording:{version:1,responses:[response(bad,'scenario')]}})
+  assert.equal(rejected.pending.stage,'scenario');assert.equal(rejected.pending.kind,'repair')
+  assert.ok(rejected.pending.diagnostics.some(d=>d.code==='scenario-feasibility'))
+  assert.equal(rejected.pending.slideIds,undefined)
+  const input=specification(c),fixed={version:1,slides:input.slides.map(({id,purpose,title})=>({id,purpose,title,sourceRefs:['material']}))}
+  const result=await processCompactRecording({mode:'C',...loaded,recording:{version:1,responses:[response(bad,'scenario'),response(fixed,'scenario','repair'),response(input)]}})
+  assert.equal(result.status,'composed');assert.equal(result.corrections,1);assert.equal(result.calls,3)
+  assert.ok(result.compositionReport.slideCount>=1)
+  assert.deepEqual(result.final,input)
+  const valid=await processCompactRecording({mode:'C',...loaded,recording:{version:1,responses:[response(fixed,'scenario'),response(input)]}})
+  assert.equal(valid.status,'composed');assert.equal(valid.corrections,0)
+})
+
 test('manual C emits scenario/spec and exact repair prompts with a shared budget, preserving evidence',async()=>{
   const id='pilot-1-chart--dark-C',c=compactCases().find(c=>c.id==='chart')
   const first=await advanceCompactEvaluation(kitDir,id)
