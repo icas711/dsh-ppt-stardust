@@ -111,8 +111,15 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
     },
     async create(rawArgs: unknown, exec?: PptExecution) {
       exec?.signal?.throwIfAborted()
-      const args = asRecord(rawArgs) as unknown as PptCreateArgs
+      const input = asRecord(rawArgs)
+      const args = input as unknown as PptCreateArgs
       if (typeof args.title !== 'string' || args.title.trim() === '') throw new Error('dsh-ppt：title 不能为空')
+      const hasTableSpec = Object.hasOwn(input, 'tableSpec')
+      if (hasTableSpec) {
+        const conflicts = ['content','slides','deckPlan','generationPolicy','templateSelections','templateSamples','template','dataModel','assets','style','brand','theme'].filter(key => Object.hasOwn(input,key))
+        if (conflicts.length) throw new Error('dsh-ppt: tableSpec cannot be combined with ' + conflicts.join(', '))
+        if (typeof args.templateId !== 'string' || !args.templateId.trim()) throw new Error('dsh-ppt: tableSpec requires a schema 3 library templateId')
+      }
       const hasContent = typeof args.content === 'string' && args.content.trim() !== ''
       const hasSlides = Array.isArray(args.slides) && args.slides.length > 0
       // Never let malformed scene input disappear behind a template skeleton.
@@ -131,10 +138,11 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       const outputDir = typeof args.outputDir === 'string' && args.outputDir.trim() !== '' ? args.outputDir.trim() : config.outputDir
       // Library template: style + outline skeleton (+ optional samples) under the given title.
       let templateApply: Record<string, unknown> = {}
+      let tableComposition: Record<string, unknown> | undefined
       if (typeof args.templateId === 'string' && args.templateId.trim() !== '') {
         const store = options.templateStore
         if (!store) throw new Error('dsh-ppt：библиотека шаблонов недоступна в этой установке; используйте файл шаблона через CLI')
-        const { create, lineage } = await store.createOptions(args.templateId.trim(), identityOf(exec), {
+        const templateOptions = {
           title: args.title.trim(),
           includeSamples: args.templateSamples !== false,
           selections: args.templateSelections,
@@ -143,7 +151,17 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
           assets:args.assets,
           slides:hasSlides&&args.slides!.every(s=>s.layout==='scene')?args.slides:undefined,
           lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || 'zh'),
-        })
+        }
+        let applied
+        if (hasTableSpec) {
+          const record = await store.get(args.templateId.trim(), identityOf(exec))
+          exec?.signal?.throwIfAborted()
+          const module = await import(new URL('../skills/dsh-ppt/scripts/deck-table-create.mjs', import.meta.url).href)
+          applied = module.composeTableCreate(args.tableSpec, { title: templateOptions.title, lang: templateOptions.lang,
+            template: { manifest: record.manifest, assets: record.assets }, maxSlides: Math.min(config.maxSlides,120), signal: exec?.signal })
+          tableComposition = applied.report
+        } else applied = await store.createOptions(args.templateId.trim(), identityOf(exec), templateOptions)
+        const { create, lineage } = applied
         templateApply = {
           slides: create.slides,
           theme: create.theme,
@@ -161,7 +179,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         ? (templateApply.slides as typeof args.slides) ?? explicitSlides
         : suppliedVisuals ? explicitSlides : (templateApply.slides as typeof args.slides) ?? explicitSlides
       const explicitContent = hasContent ? (typeof args.content === 'string' ? args.content : '') : ''
-      return (engine.buildDeckAsync ?? engine.buildDeck)({
+      const result = await (engine.buildDeckAsync ?? engine.buildDeck)({
         title: args.title.trim(),
         content: explicitContent,
         // Composed scene slides already include the selected template's fixed artwork.
@@ -185,6 +203,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         cwd,
         signal: exec?.signal,
       })
+      return tableComposition ? { ...result, tableComposition } : result
     },
     async templates(rawArgs: unknown, exec?: PptExecution) {
       exec?.signal?.throwIfAborted()

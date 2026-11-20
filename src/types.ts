@@ -58,6 +58,8 @@ export interface PptConfig {
 
 export interface PptCreateArgs {
   title: string
+  /** Content-only native tables using an authorized schema 3 library template. */
+  tableSpec?: {version:1;mode:'factual'|'demo';allowMoreSlides?:boolean;sources:Array<{id:string;text:string;synthetic?:boolean}>;tables:Array<{id:string;title:string;notes?:string;designLayout?:string;sourceRefs:string[];headers:string[];rows:Array<Array<string|null>>}>}
   assets?: Record<string, {mime:string;width:number;height:number;data:string}>
   style?: {pageSize?:{width:number;height:number}}
   /** Markdown 正文：一句话、一段文字或整篇文档（与 slides 二选一，推荐）。 */
@@ -133,6 +135,7 @@ export interface PptCreateResult {
   changed?: boolean
   quality?: PptQualityResult
   generationReport?: PptGenerationReport
+  tableComposition?: Record<string,unknown>
   verification?: PptVerification
 }
 

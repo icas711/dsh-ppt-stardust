@@ -4,6 +4,8 @@ import {sceneInputProperties,generationInputProperties,semanticInputProperties,g
 import {compositionGuides} from '../skills/dsh-ppt/scripts/deck-template-guides.mjs'
 // @ts-expect-error Shared renderer page-size resolution, including legacy implicit default.
 import {pageSize as templatePageSize} from '../skills/dsh-ppt/scripts/deck-page.mjs'
+// @ts-expect-error Shared content-only table contract is shipped with the skill.
+import {tableCreateSchema} from '../skills/dsh-ppt/scripts/deck-table-create.mjs'
 import type { ResolvedPptConfig } from './config.js'
 import { createPptExecutors, type PptExecution, type ExecutorOptions } from './execution.js'
 import type { PptCreateResult, PptThemesResult, PptQualityResult, PptCheckResult, PptRenderResult } from './types.js'
@@ -22,6 +24,7 @@ export interface ToolDefinition {
  */
 interface ParameterSpec {
   type: string | string[]
+  schema?: Record<string, unknown>
   description?: string
   required?: boolean
   enum?: readonly string[]
@@ -59,7 +62,7 @@ function compileParameters(spec: Record<string, ParameterSpec>): Record<string, 
   const required: string[] = []
   for (const [key, prop] of Object.entries(spec)) {
     if (prop?.required === true) required.push(key)
-    const node: Record<string, unknown> = {}
+    const node: Record<string, unknown> = { ...prop.schema }
     if (typeof prop?.type === 'string' || Array.isArray(prop?.type)) node.type = prop.type
     if (typeof prop?.description === 'string') node.description = prop.description
     if (Array.isArray(prop?.enum)) node.enum = prop.enum
@@ -331,9 +334,10 @@ export function buildPptTools(config: ResolvedPptConfig, options: ExecutorOption
     },
     {
       name: 'ppt_create',
-      description: 'Generate a standalone HTML slideshow, editable PPTX preserving the requested physical slide size and PDF from prepared content. PDF export is optional: if the renderer fails or is unavailable, return HTML/PPTX with pdfWarning. The project JSON is stored permanently inside the plugin for editing; never attach it by default. Deliver only htmlPath, pptxPath and pdfPath when present. PNGs, manifests and receipts are internal render cache files, never deliver them. Organize real facts before calling; the deterministic generator does not research or invent missing facts. On success deliver files and relevant warnings; do not start an automatic check/render/pixel/metric/repair cycle. Extended review is opt-in. Template-only output is a draft.\n' + generationPlanningInstructions(),
+      description: 'Generate a standalone HTML slideshow, editable PPTX preserving the requested physical slide size and PDF from prepared content. PDF export is optional: if the renderer fails or is unavailable, return HTML/PPTX with pdfWarning. The project JSON is stored permanently inside the plugin for editing; never attach it by default. Deliver only htmlPath, pptxPath and pdfPath when present. PNGs, manifests and receipts are internal render cache files, never deliver them. Organize real facts before calling; the deterministic generator does not research or invent missing facts. On success deliver files and relevant warnings; do not start an automatic check/render/pixel/metric/repair cycle. Extended review is opt-in. For table-only decks on an authorized schema 3 template use tableSpec for content-only native composition and optional pagination, without the experiment protocol. Template-only output is a draft.\n' + generationPlanningInstructions(),
       parameters: compileParameters({
         title: { type: 'string', required: true, description: 'Deck title (used for the cover and file names).' },
+        tableSpec: {type:'object',schema:tableCreateSchema(),description:'Content-only table deck: version:1, mode:factual|demo, sources:[{id,text,synthetic?}], tables:[{id,title,sourceRefs,headers,rows,notes?,designLayout?}], allowMoreSlides?:boolean (default false). Requires an authorized schema 3 templateId. Up to 8 columns and 30 rows per logical table; strings are preserved verbatim, null means unknown. Engine composes editable native tables and repeats headers when pagination is allowed. No coordinates, styles or experiment required. Use instead of content/slides/deckPlan; no mixed content or style overrides. Source references are checked, factual entailment is not automatically verified.'},
         ...generationInputProperties(),
         content: { type: 'string', description: 'Markdown content: one sentence, a paragraph, or a full document. First # heading becomes the cover title; ## headings become slides; -/* lists become bullets; | ... | tables paginate with repeated headers (8 data rows/page, up to 8 columns and 60 characters/cell); > blockquotes become quote slides; <!-- 备注: ... --> comments become speaker notes. Provide content, slides or a schema 3 deckPlan; do not mix deckPlan with other content inputs.' },
         theme: { type: 'string', description: 'Visual theme id: swiss / velvet / data / soft / bold. Default data. See ppt_themes.' },
