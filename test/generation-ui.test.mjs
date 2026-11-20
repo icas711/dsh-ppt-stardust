@@ -45,15 +45,19 @@ test('every pilot mode/template has lossless first and repeated outputs, status 
     const recovered=await f.tools.generation({operation:'status'},e)
     assertOutput(definition,{operation:'status'},recovered)
     assert.deepEqual(recovered,r)
-    const report=await f.tools.generation({operation:'report',runId:r.runId},e)
+    const report=await f.tools.generation({operation:'report'},e)
+    assert.equal(report.runId,r.runId)
     assert.deepEqual(JSON.parse(assertOutput(definition,{operation:'report'},report)),report)
   }
 })
 
-test('status without runId only recovers the current trusted session',async t=>{
+test('status and report without runId only use the current trusted session',async t=>{
   const f=fixture(t),r=await f.tools.generation(start,f.e)
-  for(const e of [exec(f.root,'chat-2'),exec(f.root,'chat-1','bob')])
-    await assert.rejects(f.tools.generation({operation:'status'},e),/No active experiment/)
+  for(const e of [exec(f.root,'chat-2'),exec(f.root,'chat-1','bob')])for(const operation of ['status','report']){
+    await assert.rejects(f.tools.generation({operation},e),/No active experiment/)
+    await assert.rejects(f.tools.generation({operation,runId:r.runId},e),/not found/)
+  }
+  for(const operation of ['status','report'])await assert.rejects(f.tools.generation({operation,runId:'../other'},f.e),/Invalid experiment runId/)
   await assert.rejects(f.tools.generation({operation:'submit',expectedTurn:1,responseText:'{}'},f.e),/Invalid experiment runId/)
   assert.equal((await f.tools.generation({operation:'status'},f.e)).runId,r.runId)
 })
@@ -87,6 +91,11 @@ test('UI B exports editable input via the existing engine; duplicate start/submi
   for(const value of [r,again,made,duplicate,await f.tools.generation({operation:'status'},f.e)])assertOutput(definition,{},value)
   const reportText=assertOutput(definition,{operation:'report'},report)
   assert.deepEqual(JSON.parse(reportText),report)
+  const implicit=await f.tools.generation({operation:'report'},f.e)
+  assert.deepEqual(JSON.parse(assertOutput(definition,{operation:'report'},implicit)),implicit)
+  assert.equal(implicit.runId,r.runId);assert.equal(implicit.status,'exported')
+  assert.deepEqual(JSON.parse(readFileSync(implicit.reportPath)),saved)
+  assert.equal(f.exports,1)
   assert.equal(saved.responses[0].text,JSON.stringify(spec()));assert.equal(saved.input.rubric,undefined)
   assert.equal(saved.acceptance,'not-verified');assert.equal(saved.capture.includes('tool argument'),true)
 })

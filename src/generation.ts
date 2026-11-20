@@ -175,7 +175,7 @@ export class PptGenerationService {
         return this.view(state)
       }
       let runId = args.runId
-      if (args.operation === 'status' && runId === undefined) {
+      if (['status', 'report'].includes(args.operation) && runId === undefined) {
         const active = join(dir, 'active.json')
         if (!existsSync(active)) throw new Error('No active experiment in this user/session; use operation:start first')
         runId = readJson(active).runId
