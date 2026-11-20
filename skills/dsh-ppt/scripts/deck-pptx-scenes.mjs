@@ -10,6 +10,8 @@ import {IDENTITY_TRANSFORM,composeTransforms,groupTransform,frameTransform,trans
 import {imageInfo} from './deck-image.mjs'
 const hash=b=>createHash('sha256').update(b).digest('hex')
 const frame=b=>Object.fromEntries(['x','y','w','h'].map(k=>[k,Number(b[k])]))
+// Bump when import semantics change; experimental template-profile caches depend on it.
+export const PPTX_SCENE_IMPORTER_VERSION = 1
 function failure(message){throw new Error('dsh-ppt: '+message)}
 /** Import actual slides, retaining every object or an explicit per-object diagnostic. Never copies OLE binaries. */
 export async function importPptxScenes(bytes,{signal,strict=false}={}){

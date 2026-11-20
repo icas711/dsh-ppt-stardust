@@ -7,6 +7,10 @@ import {isDeepStrictEqual} from 'node:util'
 import {generationEvaluationCases} from '../test/fixtures/generation-evaluation.mjs'
 import {generationPlanningInstructions} from '../skills/dsh-ppt/scripts/deck-generation.mjs'
 import {buildTemplateBundle,templateCreateOptions} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
+import {prepareCompactEvaluation} from './generation-compact-kit.mjs'
+import {advanceCompactEvaluation,recordCompactResponse} from './generation-compact-session.mjs'
+import {reviewCompactEvaluation} from './generation-compact-evaluation.mjs'
+export {prepareCompactEvaluation,advanceCompactEvaluation,recordCompactResponse,reviewCompactEvaluation}
 
 const canonical=value=>typeof value==='string'?value.normalize('NFC').replace(/\s+/g,' ').trim():value
 const numbers=text=>[...text.matchAll(/\d+(?:[.,]\d+)?/g)].map(m=>m[0].replace(',','.'))
@@ -98,10 +102,14 @@ export function prepareGenerationEvaluation(directory){
  return {directory:out,...receipt}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
- const [command,input,output]=process.argv.slice(2)
- if(command==='prepare'&&input)console.log(JSON.stringify(prepareGenerationEvaluation(input),null,2))
+ const [command,input,output,extra,metadata]=process.argv.slice(2)
+ if(command==='prepare-compact'&&input)console.log(JSON.stringify(await prepareCompactEvaluation(input,{privateCasePath:output}),null,2))
+ else if(command==='advance-compact'&&input&&output)console.log(JSON.stringify(await advanceCompactEvaluation(input,output),null,2))
+ else if(command==='record-compact'&&input&&output&&extra)console.log(JSON.stringify(await recordCompactResponse(input,output,extra,metadata),null,2))
+ else if(command==='review-compact'&&input&&output){const report=await reviewCompactEvaluation(input,output);console.log(JSON.stringify({suiteId:report.suiteId,planned:report.planned,attempted:report.attempted,accepted:report.accepted,notRun:report.notRun,winner:report.winner},null,2));if(!report.allAttemptedAccepted)process.exitCode=1}
+ else if(command==='prepare'&&input)console.log(JSON.stringify(prepareGenerationEvaluation(input),null,2))
  else if(command==='review'&&input&&output){
   const file=readFileSync(input);if(file.length>2*1024*1024)throw new Error('Response file exceeds 2 MiB')
   const report=evaluateGenerationResponses(JSON.parse(file));mkdirSync(output,{recursive:true});writeFileSync(join(output,'report.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report,null,2));if(!report.passed)process.exitCode=1
- }else throw new Error('Usage: generation-evaluation.mjs prepare OUTPUT_DIRECTORY | review RESPONSES_JSON OUTPUT_DIRECTORY')
+ }else throw new Error('Usage: generation-evaluation.mjs prepare-compact KIT_DIRECTORY [PRIVATE_CASE_JSON] | record-compact KIT_DIRECTORY RUN_ID RESPONSE_FILE [METADATA_JSON] | advance-compact KIT_DIRECTORY RUN_ID | review-compact KIT_DIRECTORY NEW_REPORT_DIRECTORY | prepare LEGACY_DIRECTORY | review LEGACY_RESPONSES_JSON OUTPUT_DIRECTORY')
 }

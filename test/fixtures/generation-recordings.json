@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "provenance": "Hand-written synthetic responses for offline orchestration tests; no live model measurements.",
+  "scenario": {"stage":"scenario","kind":"initial","text":"{\"version\":1,\"slides\":[{\"id\":\"slide-1\",\"purpose\":\"content\",\"title\":\"Videos\",\"sourceRefs\":[\"source-1\"]}]}"},
+  "invalidScenario": {"stage":"scenario","kind":"initial","text":"not JSON"},
+  "spec": {"stage":"spec","kind":"initial","model":"recorded-synthetic","usage":{"inputTokens":100,"outputTokens":80},"text":"{\"version\":1,\"title\":\"Videos\",\"lang\":\"ru\",\"mode\":\"factual\",\"slides\":[{\"id\":\"slide-1\",\"purpose\":\"content\",\"title\":\"Videos\",\"visual\":{\"type\":\"big_number\",\"sourceRefs\":[\"source-1\"],\"items\":[{\"id\":\"count\",\"label\":\"Videos\",\"value\":30,\"unit\":\"videos\"}]}}]}"},
+  "invalidSpec": {"stage":"spec","kind":"initial","text":"{\"version\":1,\"title\":\"Videos\",\"lang\":\"ru\",\"mode\":\"factual\",\"slides\":[{\"id\":\"slide-1\",\"purpose\":\"content\",\"title\":\"Videos\",\"visual\":{\"type\":\"big_number\",\"sourceRefs\":[\"source-1\"],\"items\":[{\"id\":\"count\",\"label\":\"Videos\",\"value\":\"30\",\"unit\":\"videos\"}]}}]}"},
+  "slideRepair": {"stage":"spec","kind":"repair","text":"{\"slides\":[{\"id\":\"slide-1\",\"purpose\":\"content\",\"title\":\"Videos\",\"visual\":{\"type\":\"big_number\",\"sourceRefs\":[\"source-1\"],\"items\":[{\"id\":\"count\",\"label\":\"Videos\",\"value\":30,\"unit\":\"videos\"}]}}]}"}
+}
