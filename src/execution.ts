@@ -101,6 +101,12 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       if (typeof args.title !== 'string' || args.title.trim() === '') throw new Error('dsh-ppt：title 不能为空')
       const hasContent = typeof args.content === 'string' && args.content.trim() !== ''
       const hasSlides = Array.isArray(args.slides) && args.slides.length > 0
+      // Never let malformed scene input disappear behind a template skeleton.
+      if (hasSlides) for (const [index, slide] of args.slides!.entries()) {
+        if (slide && 'elements' in slide && slide.layout !== 'scene') {
+          throw new Error(`dsh-ppt: composition-layout at slides[${index}] (slide ${index + 1}): slides with elements require layout:"scene". Every element requires a complete frame:{x,y,w,h} in integer EMU (914400/inch). Supplied content was not replaced with template draft pages.`)
+        }
+      }
       if(args.generationPolicy&&!args.deckPlan)throw new Error('dsh-ppt: generationPolicy requires deckPlan')
       if(args.deckPlan&&(!args.templateId||hasContent||hasSlides||args.templateSelections||args.dataModel))throw new Error('dsh-ppt: deckPlan requires templateId and cannot be combined with content, slides, templateSelections or dataModel')
       if (!hasContent && !hasSlides && !args.template && !args.templateId) throw new Error('dsh-ppt：content 不能为空（或用 slides / template / templateId 传结构化幻灯片）')

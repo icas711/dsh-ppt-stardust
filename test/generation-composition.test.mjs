@@ -67,6 +67,31 @@ test('real tool exports all free content, fixed artwork and editable chart from 
  assert.deepEqual(saved.slides[1].elements.find(e=>e.id==='data').chart.series[0].values,[12,8])
 })
 
+test('malformed scene requests fail before generation instead of becoming a template draft',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'composition-input-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const {template,slides}=fixture(),identity={login:'another-user',admin:false,local:false}
+ const store=new PptTemplateStore({root:join(dir,'library'),templatesModuleLoader:async()=>templates,admins:[]})
+ await store.save({manifest:template,assets:{},identity})
+ const before=readdirSync(dir,{recursive:true}).sort(),saved=await store.get('user:'+template.id,identity)
+ let generations=0
+ const tools=createPptExecutors(resolvePptConfig({outputDir:join(dir,'delivery')}),async()=>({...engine,buildDeckAsync:()=>{generations++;throw new Error('must not generate')}}),{templateStore:store})
+ const exec={agent:{session:{header:{owner:identity.login}}}}
+ const six=structuredClone(slides.slice(0,6))
+ const noLayout=six.map(({layout,...s})=>s)
+ const noFrame=structuredClone(six);delete noFrame[0].elements[0].frame
+ const mixed=structuredClone(six);delete mixed[5].layout
+ for(const [bad,pattern] of [[noLayout,/composition-layout at slides\[0\].*layout:"scene"/],[mixed,/composition-layout at slides\[5\]/],[noFrame,/slides\[0\].*elements\[0\]\.frame/]]){
+  await assert.rejects(tools.create({title:'Six slides',templateId:'user:'+template.id,slides:bad,overwrite:true},exec),pattern)
+  assert.equal(generations,0)
+  assert.deepEqual(readdirSync(dir,{recursive:true}).sort(),before)
+  assert.deepEqual(await store.get('user:'+template.id,identity),saved)
+ }
+ await assert.rejects(tools.create({title:'No template',slides:noLayout},exec),/composition-layout/)
+ // A template-only request remains a supported explicit draft path.
+ const draft=templates.templateCreateOptions(template,{}, {title:'Draft'})
+ assert.equal(draft.create.slides.length,2)
+})
+
 test('content-only references require an explicit cover ID while preserving semantic purpose and original template',()=>{
  const {template,slides}=fixture()
  const [title,body]=template.style.layouts

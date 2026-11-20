@@ -23,6 +23,8 @@ export function resolveSceneReference(input,layouts,index=0){
 export function composeSceneTemplateSlides(slides,manifest,assets){
  return slides.map((input,index)=>{
   if(input.layout!=='scene')fail('composition-layout','slides['+index+']','Template composition expects scene slides')
+  // Validate caller objects before adding decor, so error indices refer to the request.
+  normalizeSceneSlide(input,{assets,path:`slides[${index}] (slide ${index+1})`})
   const layouts=manifest.style.layouts,purpose=input.purpose??'content'
   const layout=resolveSceneReference(input,layouts,index)
   if(!Array.isArray(input.elements))fail('composition-elements','slides['+index+']','Expected elements')

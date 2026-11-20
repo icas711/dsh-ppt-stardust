@@ -265,7 +265,7 @@ const brandProperties = {
 }
 const slideProperties = {
   ...sceneInputProperties(),
-  layout: { type: 'string', enum: ['cover', 'section', 'bullets', 'statement', 'quote', 'table', 'closing', 'image', 'image-left', 'image-right', 'chart', 'scene', 'diagram'] },
+  layout: { type: 'string', enum: ['cover', 'section', 'bullets', 'statement', 'quote', 'table', 'closing', 'image', 'image-left', 'image-right', 'chart', 'scene', 'diagram'], description: 'Required as "scene" on EVERY slide containing elements. designLayout selects template artwork and does not replace layout. Every element needs a complete frame:{x,y,w,h} in integer EMU.' },
   title: { type: 'string' }, subtitle: { type: 'string' }, kicker: { type: 'string' }, text: { type: 'string' }, notes: { type: 'string' },
   bullets: { type: 'array', items: { type: 'string' } }, rows: { type: 'array', items: { type: 'array', items: { type: ['string', 'number'] } } },
   image: imageSchema, chart: chartSchema,
