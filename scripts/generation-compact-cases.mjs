@@ -38,9 +38,12 @@ export function compactCases(){
   return definitions.map(([id,title,material,visual])=>{
     if(id==='long-ru')material=visual.items.map(i=>i.label+': '+i.detail).join('\n')+'\nВсе предложения обязательны; сокращение и пересказ не разрешены.'
     if(id==='overload')material='Реестр с колонками Проект, Статус:\n'+visual.rows.map(r=>r.join(' — ')).join('\n')+'\nВсе строки обязательны. Разрешено увеличить число слайдов, повторяя заголовки колонок.'
+    // The relationship between the cards is source content too, not speaker notes.
+    if(id==='cards')visual.caption=material
     const sources=[{id:'material',text:material,synthetic:true}]
     const literals=visual.type==='table'?[...visual.headers,...visual.rows.flat().filter(v=>v!==null)]:visual.type==='chart'?[...visual.categories,visual.unit,...visual.series.flatMap(s=>s.values.map(String))]:visual.type==='image'?[visual.caption]:[...(visual.criteria??[]),...visual.items.flatMap(i=>[i.label,i.detail,i.date,i.value===undefined?undefined:String(i.value),i.unit,...(i.values??[])].filter(v=>v!==undefined&&v!==null))]
     const assets={}
+    if(visual.caption)literals.push(...visual.caption.split(/(?<=[.!?])\s+/u))
     if(id==='image'){
       const png=new PNG({width:32,height:16});for(let i=0;i<32*16;i++)png.data.set(i%32<16?[40,100,180,255]:[220,100,40,255],i*4)
       assets['sample-image']={mime:'image/png',width:32,height:16,data:'data:image/png;base64,'+PNG.sync.write(png).toString('base64')}

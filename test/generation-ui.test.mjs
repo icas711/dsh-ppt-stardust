@@ -183,7 +183,7 @@ test('UI A preserves manually composed native elements and C completes scenario 
     const f=fixture(t,async()=>({buildDeckAsync:async options=>{captured=options;return {ok:true}}}));let r=await f.tools.generation({...start,mode},f.e)
     if(mode==='A'){
       assert.equal(r.nextRequest.stage,'scene')
-      const value={version:1,title:'Принципы сервиса',lang:'ru',mode:'demo',slides:[{id:'s',layout:'scene',purpose:'content',notes:'sourceRefs: material',elements:[{id:'manual-body',type:'text',frame:{x:500000,y:1500000,w:6500000,h:2000000},paragraphs:[{runs:[{text:'Прозрачность\nНадёжность\nДоступность\nСинтетические данные'}]}]}]}]}
+      const value={version:1,title:'Принципы сервиса',lang:'ru',mode:'demo',slides:[{id:'s',layout:'scene',purpose:'content',notes:'sourceRefs: material',elements:[{id:'manual-body',type:'text',frame:{x:500000,y:1500000,w:6500000,h:2000000},paragraphs:[{runs:[{text:compactCases().find(c=>c.id==='cards').context.sources[0].text+'\nСинтетические данные'}]}]}]}]}
       r=await f.tools.generation(submit(r,value),f.e)
       assert.ok(captured.slides[0].elements.some(e=>e.id==='manual-body'))
       assert.ok(captured.slides[0].elements.some(e=>e.id==='stripe'))

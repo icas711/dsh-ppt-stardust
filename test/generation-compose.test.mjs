@@ -37,6 +37,24 @@ test('dark and portrait-like templates retain source dimensions and typography',
   }
 })
 
+test('short cards stay compact and centered with a visible caption and optional icons',()=>{
+  for(const icons of [false,true]){
+    const input=spec([{type:'cards',sourceRefs,caption:'Three equal principles. These are not stages or rankings.',items:items(3).map(i=>({id:i.id,label:i.label,...(icons?{iconId:'check'}:{})}))}])
+    const r=compose(input),slide=r.create.slides[0],cards=slide.elements.filter(e=>e.id.startsWith('gen-card-'))
+    const caption=slide.elements.find(e=>e.id==='gen-caption'),region=r.report.placements[0].region
+    assert.ok(strings([slide]).includes(input.slides[0].visual.caption))
+    assert.equal(cards.length,3)
+    assert.ok(cards.every(c=>c.frame.h<region.h*.65&&c.frame.y>caption.frame.y+caption.frame.h))
+    assert.equal(new Set(cards.map(c=>c.frame.h)).size,1)
+    for(let i=0;i<cards.length;i++){
+      const label=slide.elements.find(e=>e.id===`gen-item-${i}-0`)
+      assert.equal(label.textFrame.align,'center')
+      assert.ok(label.frame.y>cards[i].frame.y+cards[i].frame.h*.2)
+      assert.ok(label.frame.y+label.frame.h<cards[i].frame.y+cards[i].frame.h)
+    }
+  }
+})
+
 test('dense tables paginate only with permission and preserve every row with repeated headers',()=>{
   const visual={type:'table',sourceRefs,headers:['Project','Status'],rows:Array.from({length:24},(_,i)=>['Unique row '+i,'Source status '+i])},input=spec([visual])
   assert.throws(()=>compose(input),e=>e.code==='component-capacity'&&e.slideId==='slide-1')

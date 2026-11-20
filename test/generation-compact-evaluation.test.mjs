@@ -76,6 +76,33 @@ test('source evaluator rejects changed associations, order, nulls, missing detai
   assert.ok(reviewCompactSpec(input,loaded.task,loaded.rubric).some(d=>d.code==='unexpected-number'))
 })
 
+test('cards preserve the relationship visibly; source excerpts do not require deleting facts',()=>{
+  const c=compactCases().find(c=>c.id==='cards'),loaded=task('cards--light'),input=specification(c)
+  const source=c.context.sources[0].text
+  assert.ok(c.brief.requiredFacts.includes('Это не этапы и не рейтинг.'))
+  assert.deepEqual(reviewCompactSpec(input,loaded.task,loaded.rubric),[])
+  // Both repaired pilot responses omitted the caption, even when notes kept it.
+  delete input.slides[0].visual.caption
+  input.slides[0].notes=source
+  assert.ok(reviewCompactSpec(input,loaded.task,loaded.rubric).some(d=>d.code==='missing-fact'&&d.message.includes('Это не этапы и не рейтинг.')))
+  // Keeping the exact source in a visible detail is also valid.
+  input.slides[0].visual.items[0].detail=source
+  assert.deepEqual(reviewCompactSpec(input,loaded.task,loaded.rubric),[])
+  input.slides[0].visual.caption=source
+  input.slides[0].visual.caption+=' Постоянная доступность гарантирована.'
+  assert.ok(reviewCompactSpec(input,loaded.task,loaded.rubric).some(d=>d.code==='source-semantics'))
+  input.slides[0].visual.caption=source
+  input.slides[0].visual.items[0].detail='Надёжность гарантирована на 100%'
+  assert.ok(reviewCompactSpec(input,loaded.task,loaded.rubric).some(d=>d.code==='source-semantics'))
+  // A must preserve the same facts, rather than passing on the three labels alone.
+  const free=scene(c)
+  // Source sentences may be separated by the cards themselves, as in pilot A.
+  free.slides[0].elements[0].paragraphs[0].runs[0].text='Три равноправных принципа: Прозрачность, Надёжность, Доступность.\nПрозрачность\nНадёжность\nДоступность\nЭто не этапы и не рейтинг.\nСинтетические данные'
+  assert.deepEqual(checkCompactScene(free,loaded.task,loaded.template,loaded.rubric).diagnostics,[])
+  free.slides[0].elements[0].paragraphs[0].runs[0].text='Прозрачность Надёжность Доступность\nСинтетические данные'
+  assert.ok(checkCompactScene(free,loaded.task,loaded.template,loaded.rubric).diagnostics.some(d=>d.code==='missing-fact'))
+})
+
 test('manual C emits scenario/spec and exact repair prompts with a shared budget, preserving evidence',async()=>{
   const id='pilot-1-chart--dark-C',c=compactCases().find(c=>c.id==='chart')
   const first=await advanceCompactEvaluation(kitDir,id)

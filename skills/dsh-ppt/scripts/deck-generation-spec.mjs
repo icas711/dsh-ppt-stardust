@@ -12,7 +12,7 @@ const baseItem = {id:identifier,label:text(500),detail:text(),sourceRefs:refs}
 const item = (extra={},required=['id','label']) => object({...baseItem,...extra},required)
 const visual = (type,properties,required=Object.keys(properties)) => object({type:{const:type},sourceRefs:refs,...properties},['type','sourceRefs',...required])
 const visuals = [
-  visual('cards',{items:array(item({iconId:identifier}),2,4)}),
+  visual('cards',{items:array(item({iconId:identifier}),2,4),caption:text()},['items']),
   visual('process',{ordered:{const:true},items:array(item(),3,5)}),
   visual('timeline',{ordered:{const:true},items:array(item({date:{...text(10),pattern:'^\\d{4}-\\d{2}(-\\d{2})?$'}},['id','label','date']),2,6)}),
   visual('comparison',{criteria:{...array(text(256),1,8),uniqueItems:true},items:array(item({values:array(nullableText,1,8)},['id','label','values']),2,4)}),

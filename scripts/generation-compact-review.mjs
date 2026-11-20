@@ -41,6 +41,16 @@ function combinedVisual(visuals){
   }else if(visuals.length!==1)return null
   return base
 }
+function cardStructure(value,target,task){
+  if(value?.type!=='cards')return value
+  // A caption may instead be represented by visible item details. Check its
+  // required literals separately, never count speaker notes as visible content.
+  if(value.caption!==undefined&&task.context.sources.some(s=>canonical(s.text).includes(canonical(value.caption))))delete value.caption
+  value.items.forEach((item,i)=>{
+    if(item.detail!==undefined&&target.items[i]?.detail===undefined&&task.context.sources.some(s=>canonical(s.text).includes(canonical(item.detail))))delete item.detail
+  })
+  return value
+}
 export function reviewCompactSpec(spec,task,rubric){
   const report=validateGenerationSpec(spec,{...task.context,assetIds:Object.keys(task.assets),iconIds:[...GENERATION_ICON_IDS]})
   if(!report.valid)return report.diagnostics
@@ -50,6 +60,10 @@ export function reviewCompactSpec(spec,task,rubric){
   if(rubric.visual){
     const target=clean(rubric.visual),types=spec.slides.map(s=>s.visual.type)
     const actual=types.every(t=>t===target.type)?combinedVisual(spec.slides.map(s=>s.visual)):null
+    if(target.type==='cards'){
+      cardStructure(actual,target,task)
+      delete target.caption
+    }
     if(actual?.type==='chart'&&['bar','column'].includes(actual.kind)&&['bar','column'].includes(target.kind))actual.kind=target.kind
     if(!isDeepStrictEqual(actual,target))diagnostics.push(finding('source-semantics',path,'Preserve source representation, labels, details, nulls, dates, order, values, units and associations. Consult the supplied material; do not add unsupported content.',single))
   }
@@ -59,7 +73,7 @@ export function reviewCompactSpec(spec,task,rubric){
     if(v.type==='table')return [...v.headers,...v.rows.flat().filter(x=>x!==null)].join('\n')
     if(v.type==='chart')return [v.unit,...v.categories,...v.series.flatMap(s=>[s.name,...s.values])].join('\n')
     if(v.type==='image')return [v.alt,v.caption??''].join('\n')
-    return [...(v.criteria??[]),...v.items.flatMap(i=>[i.label,i.detail??'',i.date??'',i.value??'',i.unit??'',...(i.values??[]).filter(x=>x!==null)])].join('\n')
+    return [v.caption??'',...(v.criteria??[]),...v.items.flatMap(i=>[i.label,i.detail??'',i.date??'',i.value??'',i.unit??'',...(i.values??[]).filter(x=>x!==null)])].join('\n')
   }).join('\n')
   diagnostics.push(...literalsCheck(content+'\n'+spec.title+'\n'+spec.slides.map(s=>s.title).join('\n'),task,rubric,path,single))
   return diagnostics
