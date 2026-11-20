@@ -8,6 +8,10 @@ export const finding=(code,path,message,slideId=null)=>({severity:'error',code,p
 const canonical=text=>String(text).normalize('NFC').replace(/\s+/g,' ').trim()
 const numbers=text=>[...text.matchAll(/\d+(?:[.,]\d+)?/g)].map(m=>String(Number(m[0].replace(',','.'))))
 const clean=value=>Array.isArray(value)?value.map(clean):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([k])=>!['id','sourceRefs','iconId'].includes(k)).map(([k,v])=>[k,clean(v)])):value
+function chartDefaults(value){
+  if(value?.type==='chart')for(const key of ['ordered','whole'])if(value[key]===false)delete value[key]
+  return value
+}
 const textOf=paragraphs=>(paragraphs??[]).map(p=>(p.runs??[]).map(r=>r.break?' ':r.text??'').join('')).join('\n')
 function chartText(chart){
   const circular=['pie','doughnut'].includes(chart.kind),parts=[chart.title??'']
@@ -58,8 +62,8 @@ export function reviewCompactSpec(spec,task,rubric){
   const diagnostics=[]
   if(spec.lang!==task.brief.lang||spec.mode!==task.dataMode)diagnostics.push(finding('brief-contract','spec','Keep language and factual/demo mode'))
   if(rubric.visual){
-    const target=clean(rubric.visual),types=spec.slides.map(s=>s.visual.type)
-    const actual=types.every(t=>t===target.type)?combinedVisual(spec.slides.map(s=>s.visual)):null
+    const target=chartDefaults(clean(rubric.visual)),types=spec.slides.map(s=>s.visual.type)
+    const actual=chartDefaults(types.every(t=>t===target.type)?combinedVisual(spec.slides.map(s=>s.visual)):null)
     if(target.type==='cards'){
       cardStructure(actual,target,task)
       delete target.caption

@@ -103,6 +103,25 @@ test('cards preserve the relationship visibly; source excerpts do not require de
   assert.ok(checkCompactScene(free,loaded.task,loaded.template,loaded.rubric).diagnostics.some(d=>d.code==='missing-fact'))
 })
 
+test('chart false defaults match omission without accepting unsupported order or whole claims',()=>{
+  const c=compactCases().find(c=>c.id==='chart'),loaded=task('chart--dark')
+  for(const flags of [{ordered:false},{whole:false},{ordered:false,whole:false}]){
+    const input=specification(c);Object.assign(input.slides[0].visual,flags)
+    const before=structuredClone(input)
+    assert.deepEqual(reviewCompactSpec(input,loaded.task,loaded.rubric),[])
+    assert.deepEqual(input,before)
+  }
+  for(const flags of [{ordered:true},{whole:true}]){
+    const input=specification(c);Object.assign(input.slides[0].visual,flags)
+    assert.ok(reviewCompactSpec(input,loaded.task,loaded.rubric).some(d=>d.code==='source-semantics'))
+  }
+  const input=specification(c);input.slides[0].visual.series[0].values.reverse()
+  Object.assign(input.slides[0].visual,{ordered:false,whole:false})
+  assert.ok(reviewCompactSpec(input,loaded.task,loaded.rubric).some(d=>d.code==='source-semantics'))
+  const explicit=structuredClone(loaded.rubric);Object.assign(explicit.visual,{ordered:false,whole:false})
+  assert.deepEqual(reviewCompactSpec(specification(c),loaded.task,explicit),[])
+})
+
 test('manual C emits scenario/spec and exact repair prompts with a shared budget, preserving evidence',async()=>{
   const id='pilot-1-chart--dark-C',c=compactCases().find(c=>c.id==='chart')
   const first=await advanceCompactEvaluation(kitDir,id)

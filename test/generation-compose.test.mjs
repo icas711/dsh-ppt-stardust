@@ -55,6 +55,24 @@ test('short cards stay compact and centered with a visible caption and optional 
   }
 })
 
+test('small category charts retain native data and add editable values; complex charts keep their space',()=>{
+  const v={type:'chart',sourceRefs,kind:'column',unit:'заявки',categories:['Север','Юг'],series:[{name:'Заявки',values:[17,9]}]}
+  const r=compose(spec([v])),slide=r.create.slides[0],chart=slide.elements.find(e=>e.id==='gen-chart')
+  assert.deepEqual(chart.chart.categories,v.categories)
+  assert.deepEqual(chart.chart.series.map(({name,values})=>({name,values})),v.series)
+  const cards=slide.elements.filter(e=>e.id.startsWith('gen-chart-card-'))
+  assert.equal(cards.length,2)
+  assert.ok(cards.every(c=>c.frame.x>=chart.frame.x+chart.frame.w))
+  for(const fact of ['Север','Юг','17','9'])assert.ok(strings([slide]).includes(fact))
+  for(const changed of [
+    {...v,series:[{name:'Заявки',values:[17,-9]}]},
+    {...v,series:[...v.series,{name:'Вторая серия',values:[3,4]}]},
+    {...v,kind:'line',ordered:true},
+    {...v,kind:'pie',whole:true}
+  ])assert.equal(compose(spec([changed])).create.slides[0].elements.some(e=>e.id.startsWith('gen-chart-card-')),false)
+  assert.equal(compose(spec([v]),{template:template({page:{width:7559675,height:10691813}})}).create.slides[0].elements.some(e=>e.id.startsWith('gen-chart-card-')),false)
+})
+
 test('dense tables paginate only with permission and preserve every row with repeated headers',()=>{
   const visual={type:'table',sourceRefs,headers:['Project','Status'],rows:Array.from({length:24},(_,i)=>['Unique row '+i,'Source status '+i])},input=spec([visual])
   assert.throws(()=>compose(input),e=>e.code==='component-capacity'&&e.slideId==='slide-1')

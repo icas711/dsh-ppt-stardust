@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=2
+export const GENERATION_COMPONENT_VERSION=3
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -206,7 +206,7 @@ function nativeTable(v,b,s,lang){
   const cells=matrix.flatMap((row,r)=>row.map((value,col)=>({row:r,col,paragraphs:[{runs:[{text:String(value??'—')}]}],textStyle:clone(styles[r]),textFrame:{anchor:'center',margins:{left:PAD,right:PAD,top:PAD,bottom:PAD}},fill:r===0?s.accent:r%2?s.surface:s.background})))
   return [{id:'gen-table',type:'table',frame:frame(b.x,b.y,b.w,height),table:{columns,rows:heights,cells}}]
 }
-function chart(v,b,s){
+function nativeChart(v,b,s){
   const size=s.styles.body.size,labels=v.categories,n=labels.length
   const labelSpace=v.kind==='bar'?Math.max(...labels.map(label=>[...label].reduce((a,c)=>a+glyphWidth(c,size),0))):0
   if(labelSpace>b.w*.42||n>(v.kind==='bar'?Math.floor(b.h/(size*PT*1.8)):v.kind==='pie'?10:Math.min(12,Math.floor(b.w/(size*PT*3)))))fail('component-capacity','Native chart labels need more space; pie/line charts cannot be paginated')
@@ -214,6 +214,27 @@ function chart(v,b,s){
   if(v.series.some(series=>estimateGenerationTextHeight(series.name,b.w,s.styles.body)>b.h*.15)||estimateGenerationTextHeight(v.unit,b.w,s.styles.body)>b.h*.15)fail('component-capacity','Chart legend or unit needs more space')
   const data=semanticChartDesign({kind:v.kind,title:v.unit,categories:clone(v.categories),series:clone(v.series)},{accent:s.accent,background:s.background,color:s.styles.body.color,fontFamily:s.styles.body.fontFamily,size})
   return [{id:'gen-chart',type:'chart',frame:clone(b),chart:data}]
+}
+function chart(v,b,s){
+  // A small comparison benefits from a chart plus exact, readable values.
+  // Keep complex, signed and narrow charts on the full-width native path.
+  if(['bar','column'].includes(v.kind)&&v.series.length===1&&v.categories.length>=2&&v.categories.length<=3&&v.series[0].values.every(n=>n>=0)&&b.w>=8*EMU&&b.w/b.h>=1.5){
+    try{
+      const width=Math.min(3*EMU,b.w*.27),x=b.x+b.w-width,color=ink(s.accent)
+      const labelStyle=styled(s.styles.body,{color}),valueStyle=styled(s.styles.title,{size:Math.max(36,s.styles.title.size),bold:true,color})
+      const heights=v.categories.map((label,i)=>estimateGenerationTextHeight(label,width-2*PAD,labelStyle)+GAP+estimateGenerationTextHeight(String(v.series[0].values[i]),width-2*PAD,valueStyle))
+      const height=Math.max(1.2*EMU,Math.max(...heights)+2*PAD),total=height*v.categories.length+GAP*(v.categories.length-1)
+      if(total>b.h)fail('component-capacity','Value cards need more vertical space')
+      const out=nativeChart(v,frame(b.x,b.y,b.w-width-2*GAP,b.h),s)
+      v.categories.forEach((label,i)=>{
+        const box=frame(x,b.y+(b.h-total)/2+i*(height+GAP),width,height)
+        out.push(shape('gen-chart-card-'+i,box,s.accent))
+        stack(out,'gen-chart-value-'+i,[{value:label,style:labelStyle,align:'center'},{value:String(v.series[0].values[i]),style:valueStyle,align:'center'}],frame(box.x+PAD,box.y+(box.h-heights[i])/2,box.w-2*PAD,heights[i]))
+      })
+      return out
+    }catch(e){if(e.code!=='component-capacity')throw e}
+  }
+  return nativeChart(v,b,s)
 }
 function image(v,b,s){
   const captionHeight=v.caption?estimateGenerationTextHeight(v.caption,b.w,s.styles.body)+GAP:0
