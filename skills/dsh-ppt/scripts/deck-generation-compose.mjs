@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=9
+export const GENERATION_COMPONENT_VERSION=10
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -170,7 +170,9 @@ function cards(v,b,s,columns){
   if(groupHeight>b.h)fail('component-capacity','Cards require more vertical space')
   const top=b.y+(b.h-groupHeight)/2
   v.items.forEach((item,i)=>{
-    const box=frame(b.x+(i%columns)*(w+GAP),top+Math.floor(i/columns)*(h+GAP),w,h)
+    const row=Math.floor(i/columns),rowItems=Math.min(columns,v.items.length-row*columns)
+    const rowOffset=(columns-rowItems)*(w+GAP)/2
+    const box=frame(b.x+rowOffset+(i%columns)*(w+GAP),top+row*(h+GAP),w,h)
     if(box.w<=2*padding||box.h<=2*padding)fail('component-capacity','Card has no content area')
     out.push(shape('gen-card-'+i,box,s.surface,'roundRect',s.accent))
     let y=hasDetails?box.y+padding:box.y+(box.h-heights[i])/2
