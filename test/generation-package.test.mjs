@@ -5,6 +5,7 @@ import {join,dirname,resolve} from 'node:path'
 import {spawnSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
 
+import {picture} from './fixtures/generation-components.mjs'
 import {ordinaryVisualSlides} from './fixtures/ordinary-visuals.mjs'
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..')
@@ -58,11 +59,13 @@ test('npm tarball runs the UI protocol without src, development scripts, fixture
     console.log('packaged-extended-exported');
     const {visualCreateContentHash}=await import('./package/skills/dsh-ppt/scripts/deck-visual-create.mjs');
     const {writeFileSync}=await import('node:fs');const {createHash}=await import('node:crypto');
+    visualSpec.assets=${JSON.stringify([{id:'pack-image',...picture()}])};
+    visualSpec.slides.push({id:'image',title:'Original picture',visual:{type:'image',sourceRefs:['data'],assetId:'pack-image',alt:'Red and blue source image',caption:'Preserve full image'}});
     visualSpec.contentHash=visualCreateContentHash(visualSpec);
     const fileArgs={title:'File projects',lang:'ru',templateId:'user:register',visualSpec};
     const bytes=JSON.stringify(fileArgs);writeFileSync('prepared.json',bytes);
     const fromFile=await normal.create({title:fileArgs.title,requestFile:'prepared.json',requestSha256:createHash('sha256').update(bytes).digest('hex')},exec);
-    if(!fromFile.ok||!fromFile.requestInput||fromFile.visualComposition.sourceSlides!==4)throw new Error('Packaged requestFile create failed');
+    if(!fromFile.ok||!fromFile.requestInput||fromFile.visualComposition.sourceSlides!==5)throw new Error('Packaged requestFile create failed');
     console.log('packaged-file-exported');
   `
   const run=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:out,encoding:'utf8'})

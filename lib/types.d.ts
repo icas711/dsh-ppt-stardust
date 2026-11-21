@@ -239,6 +239,13 @@ export interface PptVisualCreateSpec {
     mode: 'factual' | 'demo';
     allowMoreSlides?: boolean;
     contentHash?: string;
+    assets?: Array<{
+        id: string;
+        mime: 'image/png' | 'image/jpeg';
+        width: number;
+        height: number;
+        data: string;
+    }>;
     sources: Array<{
         id: string;
         text: string;
@@ -304,6 +311,12 @@ export interface PptVisualCreateSpec {
                 sourceRefs?: string[];
             }>;
         } | {
+            type: 'image';
+            sourceRefs: string[];
+            assetId: string;
+            alt: string;
+            caption?: string;
+        } | {
             type: 'table';
             sourceRefs: string[];
             headers: string[];
@@ -350,7 +363,7 @@ export interface PptCreateArgs {
             rows: Array<Array<string | null>>;
         }>;
     };
-    /** Content-only native visuals (seven supported types) using an authorized schema 3 template. */
+    /** Content-only native visuals (eight supported types) using an authorized schema 3 template. */
     visualSpec?: PptVisualCreateSpec;
     assets?: Record<string, {
         mime: string;

@@ -146,7 +146,7 @@ test('normal cards/charts preserve source text, data, template decor and input o
 test('visualSpec rejects unsupported types, coordinates, malformed facts and invalid source bindings',()=>{
   for(const mutate of [
     v=>v.frame={},v=>v.sources[0].extra=true,v=>v.sources[0].id='bad id',v=>v.sources[0].synthetic=true,
-    v=>v.slides[0].purpose='cover',v=>v.slides[0].visual.frame={},v=>v.slides[0].visual.type='image',
+    v=>v.slides[0].purpose='cover',v=>v.slides[0].visual.frame={},v=>v.slides[0].visual.type='unsupported',
     v=>v.slides[0].visual.items[0].iconId='unknown',v=>v.slides[0].visual.sourceRefs=['missing'],
     v=>v.slides[0].visual.items[0].sourceRefs=['missing'],v=>v.slides[0].visual.items[1].id='alpha',
     v=>v.slides.push(structuredClone(v.slides[0])),v=>v.slides[1].visual.series[0].values.pop(),
@@ -191,10 +191,10 @@ test('cards and chart pagination require permission and retain complete items an
   chart.kind='pie';chart.whole=true;assert.throws(()=>compose(many),{code:'component-capacity'})
 })
 
-test('ppt_create publishes all seven ordinary visual schemas',()=>{
+test('ppt_create publishes all eight ordinary visual schemas',()=>{
   const schema=buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_create').parameters.properties.visualSpec
   assert.deepEqual(schema.required,visualCreateSchema().required)
-  assert.deepEqual(schema.properties.slides.items.properties.visual.oneOf.map(v=>v.properties.type.const),['cards','process','timeline','comparison','big_number','chart','table'])
+  assert.deepEqual(schema.properties.slides.items.properties.visual.oneOf.map(v=>v.properties.type.const),['cards','process','timeline','comparison','big_number','chart','table','image'])
 })
 
 test('ordinary visualSpec exports native editable chart/cards with authorized session storage',async t=>{
