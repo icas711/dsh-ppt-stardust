@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 3,
+  "id": "ordinary-portrait-20261121",
+  "name": "Портретный контрольный A4",
+  "revision": 1,
+  "createdAt": "2026-11-20T00:00:00Z",
+  "updatedAt": "2026-11-20T00:00:00Z",
+  "style": {
+    "pageSize": {
+      "width": 7560000,
+      "height": 10692000
+    },
+    "brand": {
+      "primaryColor": "#2864B4"
+    },
+    "layouts": [
+      {
+        "id": "cover",
+        "name": "cover",
+        "purpose": "cover",
+        "backgroundColor": "#FFFFFF",
+        "slots": [],
+        "elements": [
+          {
+            "id": "stripe",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "w": 100004,
+              "h": 10692000
+            },
+            "fill": {
+              "color": "#2864B4"
+            }
+          },
+          {
+            "id": "sample-title",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500021,
+              "y": 250004,
+              "w": 6559957,
+              "h": 650011
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 30,
+              "color": "#202020"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "sample-body",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500021,
+              "y": 1400024,
+              "w": 6559957,
+              "h": 8691965
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 18,
+              "color": "#202020"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "content",
+        "name": "content",
+        "purpose": "content",
+        "backgroundColor": "#FFFFFF",
+        "slots": [],
+        "elements": [
+          {
+            "id": "stripe",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "w": 100004,
+              "h": 10692000
+            },
+            "fill": {
+              "color": "#2864B4"
+            }
+          },
+          {
+            "id": "sample-title",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500021,
+              "y": 250004,
+              "w": 6559957,
+              "h": 650011
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 30,
+              "color": "#202020"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "sample-body",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500021,
+              "y": 1400024,
+              "w": 6559957,
+              "h": 8691965
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 18,
+              "color": "#202020"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "closing",
+        "name": "closing",
+        "purpose": "closing",
+        "backgroundColor": "#FFFFFF",
+        "slots": [],
+        "elements": [
+          {
+            "id": "stripe",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "w": 100004,
+              "h": 10692000
+            },
+            "fill": {
+              "color": "#2864B4"
+            }
+          },
+          {
+            "id": "sample-title",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500021,
+              "y": 250004,
+              "w": 6559957,
+              "h": 650011
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 30,
+              "color": "#202020"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "sample-body",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500021,
+              "y": 1400024,
+              "w": 6559957,
+              "h": 8691965
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 18,
+              "color": "#202020"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "assetMap": {},
+  "description": "Публичный синтетический контрольный шаблон для обычной генерации восьми типов. A4 portrait, Arial 30/18 pt."
+}
