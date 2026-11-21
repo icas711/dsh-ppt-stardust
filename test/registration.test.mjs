@@ -80,6 +80,25 @@ test('output.schema 是纯 JSON（可无损序列化）', () => {
   }
 })
 
+test('registered output constants declare a Harness-supported scalar type', () => {
+  const ctx = fakeCtx()
+  apply(ctx, {})
+  const walk = (node, path) => {
+    assert.equal(Array.isArray(node.type), false, path + ': Harness rejects type arrays')
+    if (Object.hasOwn(node, 'const')) {
+      assert.ok(typeof node.type === 'string' || Array.isArray(node.oneOf), path + '.const requires type or oneOf')
+      if (node.type === 'string') assert.equal(typeof node.const, 'string', path)
+    }
+    for (const [key, value] of Object.entries(node.properties ?? {})) walk(value, path + '.' + key)
+    if (node.items) walk(node.items, path + '[]')
+    node.oneOf?.forEach((value, i) => walk(value, path + '.oneOf[' + i + ']'))
+  }
+  for (const def of ctx.tools.defs) walk(def.output.schema, def.name + '.output')
+  const visual = ctx.tools.defs.find(def => def.name === 'ppt_create').output.schema.properties.pdfRender.properties.visual
+  assert.equal(visual.type, 'string')
+  assert.equal(visual.const, 'not-verified')
+})
+
 test('execute 校验参数，不触网', async () => {
   const ctx = fakeCtx()
   apply(ctx, {})

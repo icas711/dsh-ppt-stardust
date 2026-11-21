@@ -124,7 +124,7 @@ const createResultSchema: Record<string, unknown> = {
     jsonPath: { type: 'string' },
     pdfPath: { type: 'string' },
     pdfWarning: { type: 'string' },
-    pdfRender: {type:'object',properties:{sourceSha256:{type:'string'},pdfSha256:{type:'string'},backend:{type:'string'},rendererVersion:{type:'string'},missingFonts:{type:'array',items:{type:'string'}},visual:{const:'not-verified'}},required:['sourceSha256','pdfSha256','missingFonts','visual'],additionalProperties:false},
+    pdfRender: {type:'object',properties:{sourceSha256:{type:'string'},pdfSha256:{type:'string'},backend:{type:'string'},rendererVersion:{type:'string'},missingFonts:{type:'array',items:{type:'string'}},visual:{type:'string',const:'not-verified'}},required:['sourceSha256','pdfSha256','missingFonts','visual'],additionalProperties:false},
     internalProject: { type: 'boolean' },
     requestInput: {type:'object',properties:{sha256:{type:'string'},bytes:{type:'integer'}},required:['sha256','bytes'],additionalProperties:false},
   },
