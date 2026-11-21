@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync,readFileSync,existsSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {unzipSync,strFromU8} from 'fflate'
-import {composeTableCreate,tableCreateSchema} from '../skills/dsh-ppt/scripts/deck-table-create.mjs'
+import {composeTableCreate,tableCreateSchema,tableCreateContentHash} from '../skills/dsh-ppt/scripts/deck-table-create.mjs'
 import {compactTemplates} from '../scripts/generation-compact-cases.mjs'
 import {createPptExecutors} from '../lib/execution.js'
 import {resolvePptConfig} from '../lib/config.js'
@@ -87,6 +87,22 @@ test('ppt_create tool publishes the full portable table contract',()=>{
   assert.deepEqual(definition.parameters.properties.tableSpec.required,tableCreateSchema().required)
   assert.deepEqual(definition.parameters.properties.tableSpec.properties.tables.items.required,['id','title','sourceRefs','headers','rows'])
   assert.equal(definition.parameters.properties.tableSpec.properties.tables.items.properties.rows.items.items.oneOf[1].type,'null')
+  assert.equal(definition.parameters.properties.tableSpec.properties.contentHash.pattern,'^[a-f0-9]{64}$')
+})
+
+test('an optional verified content hash catches whitespace changes before composition',()=>{
+  const value=input();value.tables[0].rows[0][0]='50\u00a0000';value.tables[0].notes='Source note  '
+  value.contentHash=tableCreateContentHash(value)
+  assert.ok(compose(value).create.slides.length>0)
+  const changed=structuredClone(value);changed.tables[0].rows[0][0]='50 000'
+  assert.throws(()=>compose(changed),/Content hash mismatch/)
+  changed.tables[0].rows[0][0]='50\u00a0000';changed.tables[0].notes='Source note'
+  assert.throws(()=>compose(changed),/Content hash mismatch/)
+  const reordered={tables:value.tables,sources:value.sources,contentHash:value.contentHash,mode:value.mode,version:1,allowMoreSlides:true}
+  assert.equal(tableCreateContentHash(reordered),value.contentHash)
+  assert.ok(compose(reordered).create.slides.length>0)
+  value.contentHash='invalid';assert.throws(()=>compose(value),/Content hash mismatch/)
+  delete changed.contentHash;assert.ok(compose(changed).create.slides.length>0)
 })
 
 test('ppt_create tableSpec exports real native PPTX/HTML with session storage and authorized template access',async t=>{
@@ -118,6 +134,9 @@ test('tableSpec conflicts, template errors, limits and cancellation never fall b
   for(const key of ['content','slides','deckPlan','templateSelections','brand','style','assets','dataModel'])await assert.rejects(tools.create({...args,[key]:{}}),/cannot be combined/)
   await assert.rejects(tools.create({...args,templateId:''}),/requires/)
   await assert.rejects(tools.create(args),e=>e.code==='component-slide-limit')
+  args.tableSpec.contentHash=tableCreateContentHash(args.tableSpec)
+  args.tableSpec.tables[0].rows[0][0]+=' '
+  await assert.rejects(tools.create(args),/Content hash mismatch/)
   const legacy=createPptExecutors(resolvePptConfig({}),async()=>({buildDeckAsync:async()=>{builds++}}),{templateStore:{get:async()=>({manifest:{schemaVersion:1},assets:{}})}})
   await assert.rejects(legacy.create(args))
   const controller=new AbortController();controller.abort(new Error('cancelled'))

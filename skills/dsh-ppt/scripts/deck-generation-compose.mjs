@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=6
+export const GENERATION_COMPONENT_VERSION=7
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -35,7 +35,7 @@ function estimateTextHeight(text,width,style,widthOf){
   let lines=0
   for(const paragraph of String(text).split('\n')){
     let used=0;lines++
-    for(const word of paragraph.split(/(\s+)/u)){
+    for(const word of paragraph.split(/([^\S\u00a0\u202f]+)/u)){
       const wordWidth=[...word].reduce((sum,c)=>sum+widthOf(c,size),0)
       if(wordWidth<=available){if(used&&used+wordWidth>available){lines++;used=0}used+=wordWidth}
       else for(const c of word){const w=widthOf(c,size);if(w>available)return Infinity;if(used&&used+w>available){lines++;used=0}used+=w}
@@ -216,13 +216,22 @@ function tableWeights(headers,rows){
   const weights=headers.map((_,col)=>Math.sqrt(Math.max(...rows.map(row=>[...String(row[col]??'')].length))))
   return weights.some(w=>w>0)?weights:weights.map(()=>1)
 }
+function tableColumnProfile(headers,rows,size){
+  const padding=2*PAD+4*PT
+  const width=value=>[...value].reduce((w,c)=>w+glyphWidth(c,size),0)*1.15
+  const headerMin=headers.map(label=>Math.max(.5*EMU,Math.min(1.5*EMU,width(label)+padding)))
+  const wordMin=headers.map((header,col)=>[header,...rows.map(r=>r[col]??'—')].reduce((max,value)=>String(value).split(/[^\S\u00a0\u202f]+/u).reduce((max,word)=>Math.max(max,width(word)+padding),max),headerMin[col]))
+  return {weights:tableWeights(headers,rows),headerMin,wordMin}
+}
 function tableMetrics(v,b,s,lang){
   const {headers,rows}=tableData(v,lang),matrix=[headers,...rows]
-  const weights=v.columnWeights??tableWeights(headers,rows)
+  const {weights,headerMin,wordMin}=v.columnProfile??tableColumnProfile(headers,rows,s.styles.body.size)
   // Reserve readable headings, then give long data more room. An empty index
   // column must not consume the same minimum share as a paragraph column.
-  const minima=headers.map(label=>Math.max(.5*EMU,Math.min(1.5*EMU,[...label].reduce((w,c)=>w+glyphWidth(c,s.styles.body.size),0)+2*PAD+4*PT)))
-  const minimumSum=minima.reduce((a,b)=>a+b,0),scale=Math.min(1,b.w*.6/minimumSum),available=b.w-minimumSum*scale
+  // Protect complete words when the page can accommodate all column minima.
+  // Explicit zero indents below prevent theme list defaults stealing this room.
+  const protectWords=wordMin.reduce((a,b)=>a+b,0)<=b.w,minima=protectWords?wordMin:headerMin
+  const minimumSum=minima.reduce((a,b)=>a+b,0),scale=protectWords?1:Math.min(1,b.w*.6/minimumSum),available=b.w-minimumSum*scale
   const sum=weights.reduce((a,b)=>a+b,0),columns=weights.map((w,col)=>Math.floor(minima[col]*scale+available*w/sum))
   columns[columns.length-1]+=b.w-columns.reduce((a,b)=>a+b,0)
   const styles=matrix.map((_,i)=>i===0?styled(s.styles.body,{bold:true,color:ink(s.accent)}):s.styles.body)
@@ -233,7 +242,7 @@ function nativeTable(v,b,s,lang){
   const {matrix,columns,styles,heights}=tableMetrics(v,b,s,lang)
   const height=heights.reduce((a,b)=>a+b,0)
   if(height>b.h)fail('component-capacity','Table requires more vertical space')
-  const cells=matrix.flatMap((row,r)=>row.map((value,col)=>({row:r,col,paragraphs:[{runs:[{text:String(value??'—')}]}],textStyle:clone(styles[r]),textFrame:{anchor:'center',margins:{left:PAD,right:PAD,top:PAD,bottom:PAD}},fill:r===0?s.accent:r%2?s.surface:s.background})))
+  const cells=matrix.flatMap((row,r)=>row.map((value,col)=>({row:r,col,paragraphs:[{style:{marL:0,marR:0,indent:0},runs:[{text:String(value??'—')}]}],textStyle:clone(styles[r]),textFrame:{anchor:'center',margins:{left:PAD,right:PAD,top:PAD,bottom:PAD}},fill:r===0?s.accent:r%2?s.surface:s.background})))
   return [{id:'gen-table',type:'table',frame:frame(b.x,b.y,b.w,height),table:{columns,rows:heights,cells}}]
 }
 
@@ -255,29 +264,75 @@ function fittingPrefix(value,width,height,style){
   const last=breaks.at(-1)
   return last?prefix.slice(0,last.index+last[0].length):prefix
 }
+function tableCellParts(value,width,height,style,{maxParts,signal}){
+  const split=(input,cap,limit)=>{
+    const parts=[]
+    while(input.length){
+      signal?.throwIfAborted()
+      const piece=fittingPrefix(input,width,cap,style)
+      if(!piece.length)return null
+      parts.push(piece)
+      if(parts.length>limit)return parts
+      input=input.slice(piece.length)
+    }
+    return parts
+  }
+  const greedy=split(value,height,maxParts)
+  if(!greedy||greedy.length<2||greedy.length>maxParts)return greedy
+  // Minimize the tallest fragment at the same page count, instead of greedily
+  // leaving a few words on a nearly empty final slide.
+  let low=0,high=Math.floor(height)
+  while(low<high){
+    const mid=Math.floor((low+high)/2),trial=split(value,mid,greedy.length)
+    if(trial&&trial.length<=greedy.length)high=mid
+    else low=mid+1
+  }
+  const parts=split(value,high,greedy.length)
+  const leading=style.size*PT*1.35
+  // Move nearby boundaries to paragraph/sentence ends when both neighbouring
+  // fragments still fit; every separator stays in the source text.
+  const rebalance=i=>{
+    const pair=parts[i]+parts[i+1],current=parts[i].length
+    const boundaries=new Map([[current,0]])
+    for(const m of pair.matchAll(/\n[ \t]*\n(?:[ \t]*\n)*|[.!?…][ \t]+/gu))boundaries.set(m.index+m[0].length,m[0].includes('\n')?1:.45)
+    let best
+    for(const [end,bonus]of boundaries){
+      if(!end||end===pair.length)continue
+      const a=estimateGenerationTextHeight(pair.slice(0,end),width,style),b=estimateGenerationTextHeight(pair.slice(end),width,style)
+      if(a>height||b>height)continue
+      const score=Math.max(a,b)+Math.abs(a-b)*.25-leading*bonus
+      if(!best||score<best.score)best={end,score}
+    }
+    if(best){parts[i]=pair.slice(0,best.end);parts[i+1]=pair.slice(best.end)}
+  }
+  for(let i=0;i<parts.length-1;i++)rebalance(i)
+  for(let i=parts.length-2;i>=0;i--)rebalance(i)
+  return parts
+}
 function splitTableRow(v,rowIndex,s,lang,{maxParts,signal}){
   const row=v.rows[rowIndex]
   for(const region of [...s.regions].sort((a,b)=>b.w-a.w||area(b)-area(a))){
-    const chunks=[],remaining=row.map(value=>value??''),offsets=row.map(()=>0)
+    const chunks=[],offsets=row.map(()=>0)
     const caption=part=>lang==='ru'?`Строка ${rowIndex+1} · часть ${part}`:lang==='zh'?`第 ${rowIndex+1} 行 · 第 ${part} 部分`:`Row ${rowIndex+1} · part ${part}`
     const captionHeight=estimateGenerationTextHeight(caption('120/120'),region.w,s.styles.body)
     const box=frame(region.x,region.y+captionHeight+GAP,region.w,region.h-captionHeight-GAP)
     if(box.h<=0)continue
     const metrics=tableMetrics({...v,rows:[row]},box,s,lang),cellHeight=box.h-metrics.heights[0]-2*PAD
     if(estimateGenerationTextHeight('',Math.min(...metrics.columns)-2*PAD,s.styles.body)>cellHeight)continue
-    let failed=false
-    do{
+    const columns=row.map((value,col)=>tableCellParts(value??'',metrics.columns[col]-2*PAD,cellHeight,s.styles.body,{maxParts,signal}))
+    if(columns.some(parts=>parts===null))continue
+    const parts=Math.max(...columns.map(parts=>parts.length))
+    if(parts>maxParts)fail('component-slide-limit','Row continuation exceeds the allowed slide count',{itemIndex:rowIndex})
+    for(let part=0;part<parts;part++){
       signal?.throwIfAborted()
-      const pieces=remaining.map((value,col)=>fittingPrefix(value,metrics.columns[col]-2*PAD,cellHeight,s.styles.body))
-      if(!pieces.some(value=>value.length)){failed=true;break}
-      if(chunks.length>=maxParts)fail('component-slide-limit','Row continuation exceeds the allowed slide count',{itemIndex:rowIndex})
+      const pieces=columns.map(parts=>parts[part]??'')
       const cellRanges=pieces.map((piece,col)=>row[col]===null?null:{start:offsets[col],end:offsets[col]+piece.length})
       const fragment=pieces.map((piece,col)=>row[col]===null&&!chunks.length?null:piece)
       const elements=nativeTable({...v,rows:[fragment]},box,s,lang)
       chunks.push({elements,region,composition:'table-row-continuation',start:rowIndex,end:rowIndex+1,rowContinuation:{sourceRow:rowIndex+1,part:chunks.length+1,cellRanges}})
-      pieces.forEach((piece,col)=>{offsets[col]+=piece.length;remaining[col]=remaining[col].slice(piece.length)})
-    }while(remaining.some(value=>value.length))
-    if(failed)continue
+      pieces.forEach((piece,col)=>{offsets[col]+=piece.length})
+    }
+    if(!chunks.length)continue
     for(const chunk of chunks){
       chunk.rowContinuation.parts=chunks.length
       const captionBox=frame(region.x,region.y,region.w,captionHeight)
@@ -390,7 +445,7 @@ export function composeGenerationSpec(input,{template,context,assets={},allowMor
       const n=count(source.visual)
       if(!allowMoreSlides||(n<2&&source.visual.type!=='table')||(source.visual.type==='chart'&&!['column','bar'].includes(source.visual.kind)))fail('component-capacity','Slide cannot fit without changing content or typography',{slideId:source.id,path:`spec.slides[${index}].visual`})
       // Freeze the full table's column proportions across physical pages.
-      const visual=source.visual.type==='table'?{...source.visual,columnWeights:tableWeights(source.visual.headers,source.visual.rows)}:source.visual
+      const visual=source.visual.type==='table'?{...source.visual,columnProfile:tableColumnProfile(source.visual.headers,source.visual.rows,s.styles.body.size)}:source.visual
       let start=0
       while(start<n){
         signal?.throwIfAborted();let chosen

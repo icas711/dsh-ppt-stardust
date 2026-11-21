@@ -131,6 +131,25 @@ test('empty index columns stay compact beside long table paragraphs',()=>{
   assert.ok(table.columns[0]<table.columns[2]/3)
 })
 
+test('row fragments are balanced instead of leaving a short final page',()=>{
+  const value='Project planning and implementation details. '.repeat(25)+'Final note.'
+  const r=compose(spec([{type:'table',sourceRefs,headers:['Description'],rows:[[value]]}]),{allowMoreSlides:true})
+  const tables=r.create.slides.map(s=>s.elements.find(e=>e.type==='table').table)
+  assert.ok(tables.length>1)
+  const heights=tables.map(t=>t.rows[1])
+  assert.ok(Math.min(...heights)>=Math.max(...heights)*.55)
+  assert.equal(tables.map(t=>t.cells.find(c=>c.row===1).paragraphs[0].runs[0].text).join(''),value)
+})
+
+test('whole-word column minima protect Russian deadlines without inherited paragraph indents',()=>{
+  const rows=[['1.','Подготовка материалов','В соответствии с утвержденными сроками','Проверка полученных документов '.repeat(8)]]
+  const r=compose(spec([{type:'table',sourceRefs,headers:['№','Мероприятие','Срок','Комментарий'],rows}]),{allowMoreSlides:true})
+  const table=r.create.slides[0].elements.find(e=>e.type==='table').table
+  // Include padding and conservative font headroom for the longest deadline word.
+  assert.ok(table.columns[2]>=('утвержденными'.length*18*.57*1.15+4)*12700+2*.17*914400)
+  assert.ok(table.cells.every(c=>c.paragraphs[0].style.marL===0&&c.paragraphs[0].style.indent===0))
+})
+
 test('row continuation still rejects a header that leaves no room for a fragment',()=>{
   const input=spec([{type:'table',sourceRefs,headers:['Long heading '.repeat(38),'Value'],rows:[[null,'Unchanged source value']]}])
   assert.throws(()=>compose(input,{allowMoreSlides:true}),e=>e.code==='component-capacity'&&e.itemIndex===0)
@@ -234,6 +253,7 @@ test('real HTML/PPTX export keeps physical size, native charts/tables/images and
   const r=compose(),made=await buildDeckAsync({...r.create,outputDir:root}),parts=unzipSync(readFileSync(made.pptxPath))
   assert.ok(Object.keys(parts).some(p=>/^ppt\/charts\/chart\d+\.xml$/.test(p)))
   assert.match(strFromU8(parts['ppt/slides/slide7.xml']),/<a:tbl>/)
+  assert.match(strFromU8(parts['ppt/slides/slide7.xml']),/<a:pPr[^>]*marL="0"[^>]*marR="0"[^>]*indent="0"/)
   assert.match(strFromU8(parts['ppt/slides/slide8.xml']),/<p:pic>/)
   assert.match(strFromU8(parts['ppt/slides/slide2.xml']),/<p:cxnSp>/)
   assert.match(strFromU8(parts['ppt/slides/slide5.xml']),/sz="6000"/)
