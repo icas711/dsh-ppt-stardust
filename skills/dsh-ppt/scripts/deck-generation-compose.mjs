@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=15
+export const GENERATION_COMPONENT_VERSION=16
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -160,12 +160,20 @@ function cards(v,b,s,columns){
     b=frame(b.x,b.y+h+2*GAP,b.w,b.h-h-2*GAP)
   }
   const rows=Math.ceil(v.items.length/columns),w=(b.w-GAP*(columns-1))/columns
-  const labelStyle=styled(s.styles.body,{bold:true,color:s.accent}),side=Math.round(.32*EMU),padding=Math.max(PAD,Math.round(side*.7))
   const hasDetails=v.items.some(item=>item.detail!==undefined),hasIcons=v.items.some(item=>item.iconId)
+  const side=Math.round(.32*EMU),padding=Math.max(PAD,Math.round(side*.7))
+  let labelStyle=styled(s.styles.body,{...(!hasDetails?{size:Math.max(22,s.styles.body.size)}:{}),bold:true,color:s.accent})
+  if(!hasDetails){
+    const prominent=styled(labelStyle,{size:Math.max(28,labelStyle.size)}),width=w-2*padding
+    if(v.items.every(item=>measure(item.label,width,prominent)<=measure('Ag',width,prominent)))labelStyle=prominent
+  }
   const labelHeight=Math.max(...v.items.map(item=>measure(item.label,w-2*padding,labelStyle)))
   const heights=v.items.map(item=>labelHeight+(item.detail!==undefined?GAP+measure(item.detail,w-2*padding,s.styles.body):0)+(hasIcons?side+GAP:0))
-  // Keep equal cards sized to their content; whitespace belongs around the group.
-  const h=Math.max(2*padding+Math.max(...heights),Math.min(2.5*EMU,w*.85))
+  // Short principles need visual weight as well as fit. Keep the larger target
+  // within the available row height; detailed cards retain their content sizing.
+  const availableHeight=(b.h-(rows-1)*GAP)/rows
+  const preferredHeight=hasDetails?Math.min(2.5*EMU,w*.85):Math.min(3.3*EMU,w*.95,availableHeight)
+  const h=Math.max(2*padding+Math.max(...heights),preferredHeight)
   const groupHeight=rows*h+(rows-1)*GAP
   if(groupHeight>b.h)fail('component-capacity','Cards require more vertical space')
   const top=b.y+(b.h-groupHeight)/2

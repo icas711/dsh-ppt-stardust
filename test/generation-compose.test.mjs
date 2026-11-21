@@ -37,17 +37,19 @@ test('dark and portrait-like templates retain source dimensions and typography',
   }
 })
 
-test('short cards stay compact and centered with a visible caption and optional icons',()=>{
+test('short cards keep prominent labels and taller equal panels with caption and optional icons',()=>{
   for(const icons of [false,true]){
     const input=spec([{type:'cards',sourceRefs,caption:'Three equal principles. These are not stages or rankings.',items:items(3).map(i=>({id:i.id,label:i.label,...(icons?{iconId:'check'}:{})}))}])
     const r=compose(input),slide=r.create.slides[0],cards=slide.elements.filter(e=>e.id.startsWith('gen-card-'))
     const caption=slide.elements.find(e=>e.id==='gen-caption'),region=r.report.placements[0].region
     assert.ok(strings([slide]).includes(input.slides[0].visual.caption))
     assert.equal(cards.length,3)
-    assert.ok(cards.every(c=>c.frame.h<region.h*.65&&c.frame.y>caption.frame.y+caption.frame.h))
+    assert.ok(cards.every(c=>c.frame.h>=3*914400&&c.frame.y>caption.frame.y+caption.frame.h&&c.frame.y+c.frame.h<=region.y+region.h))
     assert.equal(new Set(cards.map(c=>c.frame.h)).size,1)
     for(let i=0;i<cards.length;i++){
       const label=slide.elements.find(e=>e.id===`gen-item-${i}-0`)
+      assert.ok(label.textStyle.size>=28)
+      assert.equal(label.textStyle.bold,true)
       assert.equal(label.textFrame.align,'center')
       assert.ok(label.frame.y>cards[i].frame.y+cards[i].frame.h*.2)
       assert.ok(label.frame.y+label.frame.h<cards[i].frame.y+cards[i].frame.h)
