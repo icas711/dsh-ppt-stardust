@@ -1,0 +1,336 @@
+{
+  "schemaVersion": 3,
+  "id": "ordinary-dark-decor-20261121",
+  "name": "Тёмный контрольный с декором",
+  "revision": 1,
+  "createdAt": "2026-11-20T00:00:00Z",
+  "updatedAt": "2026-11-20T00:00:00Z",
+  "style": {
+    "pageSize": {
+      "width": 12192000,
+      "height": 6858000
+    },
+    "brand": {
+      "primaryColor": "#79C6FF",
+      "backgroundColor": "#121826",
+      "textColor": "#F5F7FA",
+      "fontFamily": "Arial"
+    },
+    "layouts": [
+      {
+        "id": "cover",
+        "name": "cover",
+        "purpose": "cover",
+        "backgroundColor": "#121826",
+        "slots": [],
+        "elements": [
+          {
+            "id": "stripe",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "w": 100000,
+              "h": 6858000
+            },
+            "fill": {
+              "color": "#79C6FF"
+            }
+          },
+          {
+            "id": "sample-title",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500000,
+              "y": 250000,
+              "w": 11192000,
+              "h": 650000
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 30,
+              "color": "#F5F7FA"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "sample-body",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500000,
+              "y": 1400000,
+              "w": 11192000,
+              "h": 4858000
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 18,
+              "color": "#F5F7FA"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "right-panel",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 9992000,
+              "y": 1150000,
+              "w": 2000000,
+              "h": 4800000
+            },
+            "fill": {
+              "color": "#22354B"
+            }
+          },
+          {
+            "id": "corner",
+            "role": "decor",
+            "type": "shape",
+            "preset": "ellipse",
+            "frame": {
+              "x": 10592000,
+              "y": 200000,
+              "w": 900000,
+              "h": 600000
+            },
+            "fill": {
+              "color": "#79C6FF"
+            }
+          }
+        ]
+      },
+      {
+        "id": "content",
+        "name": "content",
+        "purpose": "content",
+        "backgroundColor": "#121826",
+        "slots": [],
+        "elements": [
+          {
+            "id": "stripe",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "w": 100000,
+              "h": 6858000
+            },
+            "fill": {
+              "color": "#79C6FF"
+            }
+          },
+          {
+            "id": "sample-title",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500000,
+              "y": 250000,
+              "w": 11192000,
+              "h": 650000
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 30,
+              "color": "#F5F7FA"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "sample-body",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500000,
+              "y": 1400000,
+              "w": 11192000,
+              "h": 4858000
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 18,
+              "color": "#F5F7FA"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "right-panel",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 9992000,
+              "y": 1150000,
+              "w": 2000000,
+              "h": 4800000
+            },
+            "fill": {
+              "color": "#22354B"
+            }
+          },
+          {
+            "id": "corner",
+            "role": "decor",
+            "type": "shape",
+            "preset": "ellipse",
+            "frame": {
+              "x": 10592000,
+              "y": 200000,
+              "w": 900000,
+              "h": 600000
+            },
+            "fill": {
+              "color": "#79C6FF"
+            }
+          }
+        ]
+      },
+      {
+        "id": "closing",
+        "name": "closing",
+        "purpose": "closing",
+        "backgroundColor": "#121826",
+        "slots": [],
+        "elements": [
+          {
+            "id": "stripe",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "w": 100000,
+              "h": 6858000
+            },
+            "fill": {
+              "color": "#79C6FF"
+            }
+          },
+          {
+            "id": "sample-title",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500000,
+              "y": 250000,
+              "w": 11192000,
+              "h": 650000
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 30,
+              "color": "#F5F7FA"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "sample-body",
+            "role": "content",
+            "type": "text",
+            "frame": {
+              "x": 500000,
+              "y": 1400000,
+              "w": 11192000,
+              "h": 4858000
+            },
+            "textStyle": {
+              "fontFamily": "Arial",
+              "size": 18,
+              "color": "#F5F7FA"
+            },
+            "paragraphs": [
+              {
+                "runs": [
+                  {
+                    "text": "Образец оформления"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "right-panel",
+            "role": "decor",
+            "type": "shape",
+            "preset": "rect",
+            "frame": {
+              "x": 9992000,
+              "y": 1150000,
+              "w": 2000000,
+              "h": 4800000
+            },
+            "fill": {
+              "color": "#22354B"
+            }
+          },
+          {
+            "id": "corner",
+            "role": "decor",
+            "type": "shape",
+            "preset": "ellipse",
+            "frame": {
+              "x": 10592000,
+              "y": 200000,
+              "w": 900000,
+              "h": 600000
+            },
+            "fill": {
+              "color": "#79C6FF"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "assetMap": {},
+  "description": "Публичный синтетический шаблон: 13⅓ × 7½ дюймов, Arial 30/18 pt, тёмный фон и фиксированный декор справа."
+}
