@@ -22,6 +22,42 @@ const input=()=>({version:1,mode:'factual',allowMoreSlides:true,sources:[{id:'ma
 ]})
 const compose=(value=input(),options={})=>composeVisualCreate(value,{title:'Проверка направлений',lang:'ru',template:template(),...options})
 const strings=slides=>slides.flatMap(s=>s.elements.filter(e=>e.type==='text').flatMap(e=>e.paragraphs.flatMap(p=>p.runs.map(r=>r.text??'')))).join('\n')
+const mixedInput=()=>{
+  const value=input()
+  value.slides.splice(1,0,{id:'register',title:'Реестр',notes:'Полный реестр между карточками и диаграммой.',visual:{type:'table',sourceRefs:['material'],headers:['Проект','Значение'],rows:Array.from({length:30},(_,i)=>['Проект '+(i+1),i===0?'50\u00a0000 ₽':i===1?null:i===2?'001.20':String(i)])}})
+  return value
+}
+const tableText=(table,row,col)=>table.cells.find(c=>c.row===row&&c.col===col).paragraphs.map(p=>p.runs.map(r=>r.text??'').join('')).join('\n')
+
+test('mixed visuals retain logical order, paginated table cells, source notes and demo disclosures',()=>{
+  const value=mixedInput();value.mode='demo';value.sources[0].synthetic=true
+  value.contentHash=visualCreateContentHash(value)
+  const before=structuredClone(value),made=compose(value)
+  assert.deepEqual(value,before)
+  assert.equal(made.report.sourceSlides,3)
+  const slides=made.create.slides,tables=slides.filter(s=>s.elements.some(e=>e.type==='table'))
+  assert.ok(tables.length>1)
+  assert.ok(!slides[0].elements.some(e=>['table','chart'].includes(e.type)))
+  assert.ok(slides.at(-1).elements.some(e=>e.type==='chart'))
+  assert.equal(slides.length,tables.length+2)
+  const rows=[]
+  for(const slide of tables){
+    const table=slide.elements.find(e=>e.type==='table').table
+    assert.deepEqual([tableText(table,0,0),tableText(table,0,1)],value.slides[1].visual.headers)
+    for(let r=1;r<table.rows.length;r++)rows.push([tableText(table,r,0),tableText(table,r,1)])
+    assert.ok(slide.notes.includes(value.slides[1].notes))
+  }
+  assert.deepEqual(rows,value.slides[1].visual.rows.map(row=>row.map(cell=>cell??'—')))
+  assert.ok(slides.every(s=>s.elements.some(e=>e.id==='gen-disclosure')&&s.notes.includes('Source: material')))
+  const noPagination=structuredClone(value);noPagination.allowMoreSlides=false
+  assert.throws(()=>compose(noPagination),{code:'component-capacity'})
+  assert.throws(()=>compose(value,{maxSlides:slides.length-1}),{code:'component-slide-limit'})
+  for(const mutate of [v=>v.slides[1].visual.rows[0].pop(),v=>v.slides[1].visual.rows[0][0]=42,v=>v.slides[1].visual.sourceRefs=['missing']]){
+    const changed=mixedInput();mutate(changed);assert.throws(()=>compose(changed))
+  }
+  const changed=structuredClone(value);changed.slides[1].visual.rows[0][1]='50 000 ₽'
+  assert.throws(()=>compose(changed),/Content hash mismatch/)
+})
 
 test('normal cards/charts preserve source text, data, template decor and input objects',()=>{
   const value=input(),t=template(),before=structuredClone({value,t}),r=compose(value,{template:t})
@@ -91,10 +127,10 @@ test('cards and chart pagination require permission and retain complete items an
   chart.kind='pie';chart.whole=true;assert.throws(()=>compose(many),{code:'component-capacity'})
 })
 
-test('ppt_create publishes the exact cards/chart schema',()=>{
+test('ppt_create publishes the exact cards/chart/table schema',()=>{
   const schema=buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_create').parameters.properties.visualSpec
   assert.deepEqual(schema.required,visualCreateSchema().required)
-  assert.deepEqual(schema.properties.slides.items.properties.visual.oneOf.map(v=>v.properties.type.const),['cards','chart'])
+  assert.deepEqual(schema.properties.slides.items.properties.visual.oneOf.map(v=>v.properties.type.const),['cards','chart','table'])
 })
 
 test('ordinary visualSpec exports native editable chart/cards with authorized session storage',async t=>{
@@ -104,10 +140,10 @@ test('ordinary visualSpec exports native editable chart/cards with authorized se
   await store.save({manifest:record.manifest,assets:record.assets,identity})
   const tools=createPptExecutors(resolvePptConfig({}),async()=>engine,{templateStore:store})
   const exec={agent:{session:{header:{cwd:root,id:'normal-visual',owner:'alice'}}}}
-  const args={title:'Направления',templateId:'user:'+record.manifest.id,lang:'ru',visualSpec:input()}
+  const args={title:'Направления',templateId:'user:'+record.manifest.id,lang:'ru',visualSpec:mixedInput()}
   const made=await tools.create(args,exec)
   assert.ok(made.ok&&made.internalProject);assert.ok(made.outputDir.includes('session-'))
-  assert.equal(made.visualComposition.sourceSlides,2);assert.equal(made.tableComposition,undefined)
+  assert.equal(made.visualComposition.sourceSlides,3);assert.equal(made.tableComposition,undefined)
   assert.equal(made.verification.visual,'not-verified')
   assert.ok(existsSync(made.htmlPath)&&existsSync(made.pptxPath)&&existsSync(made.jsonPath))
   const project=JSON.parse(readFileSync(made.jsonPath,'utf8'))
@@ -116,6 +152,9 @@ test('ordinary visualSpec exports native editable chart/cards with authorized se
   const parts=unzipSync(readFileSync(made.pptxPath)),chart=Object.keys(parts).find(p=>/^ppt\/charts\/chart\d+\.xml$/.test(p))
   assert.ok(chart);assert.match(strFromU8(parts[chart]),/<c:v>17<\/c:v>/)
   assert.match(strFromU8(parts['ppt/slides/slide1.xml']),/<p:cxnSp>/)
+  const nativeSlides=Object.keys(parts).filter(p=>/^ppt\/slides\/slide\d+\.xml$/.test(p)).map(p=>strFromU8(parts[p]))
+  assert.ok(nativeSlides.filter(xml=>xml.includes('<a:tbl>')).length>1)
+  assert.ok(nativeSlides.some(xml=>xml.includes('50\u00a0000 ₽')))
   await assert.rejects(tools.create(args,{agent:{session:{header:{cwd:root,id:'other',owner:'bob'}}}}))
 })
 

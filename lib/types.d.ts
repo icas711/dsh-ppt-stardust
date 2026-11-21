@@ -261,6 +261,11 @@ export interface PptVisualCreateSpec {
                 iconId?: 'check' | 'clock' | 'target' | 'trend';
             }>;
         } | {
+            type: 'table';
+            sourceRefs: string[];
+            headers: string[];
+            rows: Array<Array<string | null>>;
+        } | {
             type: 'chart';
             sourceRefs: string[];
             kind: 'column' | 'bar' | 'line' | 'pie';
@@ -298,7 +303,7 @@ export interface PptCreateArgs {
             rows: Array<Array<string | null>>;
         }>;
     };
-    /** Content-only native cards/charts using an authorized schema 3 template. */
+    /** Content-only native cards/charts/tables using an authorized schema 3 template. */
     visualSpec?: PptVisualCreateSpec;
     assets?: Record<string, {
         mime: string;

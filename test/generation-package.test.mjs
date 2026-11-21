@@ -43,7 +43,13 @@ test('npm tarball runs the UI protocol without src, development scripts, fixture
     const visual=await normal.create({title:'Projects',lang:'en',templateId:'user:register',visualSpec},exec);
     if(!visual.ok||!visual.visualComposition||!captured.slides.some(s=>s.elements.some(e=>e.type==='chart')))throw new Error('Packaged visual create failed');
     console.log('packaged-visual-exported');
+    visualSpec.allowMoreSlides=true;
+    visualSpec.slides.splice(1,0,{id:'table',title:'Register',visual:{type:'table',sourceRefs:['data'],headers:['Project','Value'],rows:Array.from({length:30},(_,i)=>['Project '+i,i===0?null:'001.20'])}});
+    const mixed=await normal.create({title:'Mixed projects',lang:'en',templateId:'user:register',visualSpec},exec);
+    const kinds=captured.slides.map(s=>s.elements.some(e=>e.type==='table')?'table':s.elements.some(e=>e.type==='chart')?'chart':'cards');
+    if(!mixed.ok||mixed.visualComposition.sourceSlides!==3||kinds[0]!=='cards'||kinds.at(-1)!=='chart'||kinds.filter(k=>k==='table').length<2)throw new Error('Packaged mixed create failed');
+    console.log('packaged-mixed-exported');
   `
   const run=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:out,encoding:'utf8'})
-  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/packaged-ui-exported/);assert.match(run.stdout,/packaged-table-exported/);assert.match(run.stdout,/packaged-visual-exported/)
+  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/packaged-ui-exported/);assert.match(run.stdout,/packaged-table-exported/);assert.match(run.stdout,/packaged-visual-exported/);assert.match(run.stdout,/packaged-mixed-exported/)
 })

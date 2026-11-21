@@ -1,4 +1,4 @@
-// Content-only cards/charts for normal ppt_create, using the shared compositor.
+// Content-only cards/charts/tables for normal ppt_create, using the shared compositor.
 import {createHash} from 'node:crypto'
 import {generationSpecSchema,validateGenerationSpec} from './deck-generation-spec.mjs'
 import {GENERATION_ICON_IDS} from './deck-generation-compose.mjs'
@@ -9,7 +9,7 @@ const only=(v,keys)=>plain(v)&&Object.keys(v).every(k=>keys.includes(k))
 function fail(message,diagnostics=[]){const e=new Error('dsh-ppt: visualSpec: '+message);e.code='visual-spec';e.diagnostics=diagnostics;throw e}
 export function visualCreateSchema(){
   const slide=generationSpecSchema().properties.slides.items.properties
-  const alternatives=slide.visual.oneOf.filter(v=>['cards','chart'].includes(v.properties.type.const))
+  const alternatives=slide.visual.oneOf.filter(v=>['cards','chart','table'].includes(v.properties.type.const))
   alternatives.find(v=>v.properties.type.const==='cards').properties.items.items.properties.iconId={enum:[...GENERATION_ICON_IDS]}
   return {type:'object',additionalProperties:false,required:['version','mode','sources','slides'],properties:{
     version:{const:1},mode:{enum:['factual','demo']},allowMoreSlides:{type:'boolean'},
@@ -27,7 +27,7 @@ export function composeVisualCreate(value,{title,lang,template,maxSlides=120,sig
   signal?.throwIfAborted()
   if(!only(value,['version','mode','sources','slides','allowMoreSlides','contentHash'])||value.version!==1||!['factual','demo'].includes(value.mode)||(value.allowMoreSlides!==undefined&&typeof value.allowMoreSlides!=='boolean'))fail('Expected version:1, mode:factual|demo, sources, slides and optional allowMoreSlides:boolean, contentHash:string')
   if(!validContentSources(value.sources))fail('Provide 1–64 source records {id,text,synthetic?} with valid source IDs')
-  if(!Array.isArray(value.slides)||value.slides.length<1||value.slides.length>120||value.slides.some(s=>!only(s,['id','title','visual','notes','designLayout'])||!['cards','chart'].includes(s.visual?.type)))fail('Provide 1–120 content slides with id, title and visual:cards|chart; coordinates, styles and other visual types are not supported')
+  if(!Array.isArray(value.slides)||value.slides.length<1||value.slides.length>120||value.slides.some(s=>!only(s,['id','title','visual','notes','designLayout'])||!['cards','chart','table'].includes(s.visual?.type)))fail('Provide 1–120 content slides with id, title and visual:cards|chart|table; coordinates, styles and other visual types are not supported')
   const spec={version:1,title,lang,mode:value.mode,slides:value.slides.map(s=>({...structuredClone(s),purpose:'content'}))}
   const context={sources:structuredClone(value.sources),iconIds:[...GENERATION_ICON_IDS]}
   const checked=validateGenerationSpec(spec,context)
