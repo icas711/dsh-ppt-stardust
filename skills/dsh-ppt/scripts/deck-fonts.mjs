@@ -190,6 +190,30 @@ export function unzipTypography(bytes) {
   } })
 }
 
+// Decode only declared embedded faces for an isolated renderer font directory.
+// EOT is an Office container; the renderer's font index expects sfnt originals.
+export function extractRenderFonts(bytes) {
+  const files = unzipTypography(bytes), part = 'ppt/presentation.xml'
+  const rels = relationships(files, part), result = new Map()
+  let total = 0, count = 0
+  for (const item of all(readXml(files, part), 'embeddedFont')) {
+    for (const variant of variants) {
+      const ref = Object.entries(child(item, variant)?.attrs ?? {}).find(([key]) => key.endsWith(':id'))?.[1]
+      if (!ref) continue
+      if (++count > 64) fail('At most 64 embedded font faces are allowed')
+      const rel = rels.find(r => r.id === ref && r.type === 'font')
+      if (!rel || !files[rel.target]) fail('Missing embedded font part')
+      const info = fontInfo(Buffer.from(files[rel.target])), data = info.preview
+      const digest = createHash('sha256').update(data).digest('hex')
+      if (result.has(digest)) continue
+      total += data.length
+      if (total > MAX_FONTS) fail('Embedded renderer fonts exceed 32 MiB')
+      result.set(digest, { file: `${digest}.${(info.previewMime ?? info.mime) === 'font/otf' ? 'otf' : 'ttf'}`, bytes: data })
+    }
+  }
+  return [...result.values()]
+}
+
 export function extractTypography(bytes, layouts, layoutIdByPart, assets, report) {
   const files = unzipTypography(bytes), presentation = 'ppt/presentation.xml'
   const rels = relationships(files, presentation), fonts = [], used = new Set()

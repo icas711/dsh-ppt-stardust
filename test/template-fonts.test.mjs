@@ -72,6 +72,20 @@ test('EOT browser conversion and font validation reject corrupt data and invalid
   assert.throws(() => fonts.fontFamily('Arial;</style><script>bad()</script>'), /family/)
 })
 
+test('renderer extraction rejects missing/corrupt embedded faces instead of silently substituting', () => {
+  const pack = (target, bytes) => Buffer.from(zipSync({
+    'ppt/presentation.xml': strToU8('<p:presentation xmlns:p="p" xmlns:r="r"><p:embeddedFontLst><p:embeddedFont><p:font typeface="DSH Test Body"/><p:regular r:id="font"/></p:embeddedFont></p:embeddedFontLst></p:presentation>'),
+    'ppt/_rels/presentation.xml.rels': strToU8(`<Relationships><Relationship Id="font" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/font" Target="${target}"/></Relationships>`),
+    ...(bytes ? { 'ppt/fonts/body.fntdata': bytes } : {}),
+  }))
+  assert.throws(() => fonts.extractRenderFonts(pack('fonts/missing.fntdata')), /Missing embedded font/)
+  assert.throws(() => fonts.extractRenderFonts(pack('fonts/body.fntdata', Buffer.from('corrupt font'))), /font/i)
+  const extracted = fonts.extractRenderFonts(pack('fonts/body.fntdata', eot(body, 'DSH Test Body')))
+  assert.equal(extracted.length, 1)
+  assert.deepEqual(extracted[0].bytes, body)
+  assert.match(extracted[0].file, /^[a-f0-9]{64}\.ttf$/)
+})
+
 test('font sizes have their own budget; fonts larger than the image limit survive a bundle', () => {
   // Valid sfnt may contain trailing padding. This exercises the size policy without proprietary fonts.
   const big = Buffer.concat([heading, Buffer.alloc(6 * 1024 * 1024)])

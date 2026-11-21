@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { inflateRawSync } from 'node:zlib'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { reserveRenderCache, touchRenderCache } from './deck-storage.mjs'
+import { extractRenderFonts } from './deck-fonts.mjs'
 
 export const RENDERER_PACKAGE = '@deepseek-ai/libreoffice-kit'
 /** Preferred renderer version: install guidance and the receipt default. */
@@ -152,6 +154,15 @@ function fileRecord(root, path, budget) {
 }
 function fontNames(values) { return [...new Set(values.flat().filter(v => typeof v === 'string'))].sort() }
 
+// Explicit fontDirectories replaces the SDK defaults. Retain conventional host
+// roots for other families/glyphs while giving this document's faces priority.
+function hostFontDirectories() {
+  const home = homedir(), env = process.env
+  if (process.platform === 'win32') return [join(env.SystemRoot ?? 'C:\\Windows', 'Fonts'), join(env.LOCALAPPDATA ?? join(home, 'AppData', 'Local'), 'Microsoft', 'Windows', 'Fonts')]
+  if (process.platform === 'darwin') return ['/System/Library/Fonts', '/Library/Fonts', join(home, 'Library', 'Fonts')]
+  return [...new Set([...(env.XDG_DATA_DIRS ?? '/usr/local/share:/usr/share').split(':').filter(Boolean).map(path => join(path, 'fonts')), join(home, '.fonts'), join(env.XDG_DATA_HOME ?? join(home, '.local', 'share'), 'fonts')])]
+}
+
 /** Optional renderer; dependency/engine absence is a result, other errors throw.
  * The second argument is an internal loader seam for testing and isolated hosts.
  */
@@ -169,15 +180,22 @@ export async function renderDeck(options = {}, loadKit = loadRenderer) {
   abort(options.signal)
   if (!isSupportedVersion(kit.ENGINE_VERSION) || typeof kit.createConverter !== 'function') return unavailable(new Error(`需要 ${RENDERER_PACKAGE}@${RENDERER_VERSIONS.join(' 或 ')}，当前模块版本为 ${String(kit.ENGINE_VERSION ?? '未知')}`))
   const input = readBounded(pptxPath, INPUT_LIMIT, 'PPTX'), sourceSha256 = sha256(input), shape = geometry(input, width)
-  let converter
-  try { converter = await kit.createConverter({ timeoutMs, maxInputBytes: INPUT_LIMIT, maxOutputBytes: OUTPUT_LIMIT, maxArchiveEntries: 20000, maxUncompressedBytes: 512 * 1024 * 1024, fontMetadataCacheDirectory: false }) }
-  catch (error) { abort(options.signal); if (missingDependency(error)) return unavailable(error); throw error }
+  let converter, fontDirectory
   let root, staging, committed = false
   const deadline = new AbortController()
   const timer = setTimeout(() => deadline.abort(Object.assign(new Error(`PPTX 渲染超过 ${timeoutMs}ms`), { code: 'timeout' })), timeoutMs)
   timer.unref()
   const operationSignal = options.signal ? AbortSignal.any([options.signal, deadline.signal]) : deadline.signal
   try {
+    abort(operationSignal)
+    const embeddedFonts = extractRenderFonts(input)
+    if (embeddedFonts.length) {
+      fontDirectory = mkdtempSync(join(tmpdir(), 'dsh-ppt-fonts-'))
+      for (const font of embeddedFonts) writeFileSync(join(fontDirectory, font.file), font.bytes, { flag: 'wx', mode: 0o600 })
+    }
+    try { converter = await kit.createConverter({ timeoutMs, maxInputBytes: INPUT_LIMIT, maxOutputBytes: OUTPUT_LIMIT, maxArchiveEntries: 20000, maxUncompressedBytes: 512 * 1024 * 1024, fontMetadataCacheDirectory: false,
+      ...(fontDirectory ? { fontDirectories: [fontDirectory, ...hostFontDirectories()] } : {}) }) }
+    catch (error) { abort(operationSignal); if (missingDependency(error)) return unavailable(error); throw error }
     abort(operationSignal)
     root = reserveDirectory(requestedOutput ?? reserveRenderCache(options.cacheScope))
     staging = join(root, `.partial-${randomUUID()}`)
@@ -233,6 +251,7 @@ export async function renderDeck(options = {}, loadKit = loadRenderer) {
     return resultFromReceipt(receipt, join(destination, 'render-receipt.json'))
   } finally {
     if (converter) { try { await converter.dispose() } catch { /* Preserve the original operation/cancellation error. */ } }
+    if (fontDirectory) rmSync(fontDirectory, { recursive: true, force: true })
     clearTimeout(timer)
     if (!committed) cleanupOwned(root, staging)
   }

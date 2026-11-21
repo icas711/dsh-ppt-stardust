@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { buildDeck } from '../skills/dsh-ppt/scripts/deck-core.mjs'
 import { renderDeck, readRenderReceipt, RENDERER_VERSION } from '../skills/dsh-ppt/scripts/deck-render.mjs'
+import { embedPptxFonts } from '../skills/dsh-ppt/scripts/deck-fonts.mjs'
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aE1cAAAAASUVORK5CYII=', 'base64')
 const hash = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -19,6 +20,7 @@ function loader(hooks = {}) {
   const calls = { dispose: 0, requests: [] }
   return { calls, load: async () => ({ ENGINE_VERSION: RENDERER_VERSION, createConverter: async config => {
     calls.config = config
+    await hooks.config?.(config)
     return { backend: 'native', dispose: async () => { calls.dispose++; await hooks.dispose?.() },
       renderImages: async (request, signal) => {
         calls.requests.push(request)
@@ -44,6 +46,41 @@ test('missing optional dependency does not create output or change source', asyn
   assert.ok(result.installationHint.includes(RENDERER_VERSION))
   assert.equal(existsSync(f.outputDir), false)
   assert.deepEqual(readFileSync(f.pptxPath), f.original)
+})
+
+function embeddedFixture(t) {
+  const f = fixture(t), data = readFileSync(new URL('./fixtures/fonts/DSH-Test-Body.ttf', import.meta.url))
+  writeFileSync(f.pptxPath, embedPptxFonts(f.original, { slides: [{}], assets: { testFont: { data: `data:font/ttf;base64,${data.toString('base64')}` } },
+    style: { fonts: [{ family: 'DSH Test Body', variant: 'regular', assetId: 'testFont' }, { family: 'DSH Test Body', variant: 'bold', assetId: 'testFont' }] } }))
+  return { ...f, original: readFileSync(f.pptxPath), data }
+}
+
+test('embedded EOT faces become original sfnt files for PNG and PDF, then are removed', async t => {
+  const f = embeddedFixture(t)
+  let fontDir
+  const kit = loader({ config: config => {
+    fontDir = config.fontDirectories[0]
+    assert.equal(readdirSync(fontDir).length, 1, 'identical embedded faces deduplicate')
+    assert.deepEqual(readFileSync(join(fontDir, readdirSync(fontDir)[0])), f.data)
+    assert.ok(config.fontDirectories.length > 1, 'host fallback roots retained')
+  }, images: () => assert.ok(existsSync(fontDir)), pdf: () => assert.ok(existsSync(fontDir)), dispose: () => assert.ok(existsSync(fontDir)) })
+  const result = await renderDeck({ ...f, format: 'both' }, kit.load)
+  assert.equal(result.ok, true)
+  assert.equal(existsSync(fontDir), false)
+  assert.deepEqual(readFileSync(f.pptxPath), f.original)
+  assert.deepEqual(readdirSync(join(result.outputDir, 'artifacts')).sort(), ['document.pdf', 'pages', 'render-receipt.json'])
+})
+
+test('private embedded fonts are removed when converter creation, export or cancellation fails', async t => {
+  for (const phase of ['config', 'pdf', 'cancel']) {
+    const f = embeddedFixture(t), failure = new Error(`failed ${phase}`)
+    const controller = new AbortController()
+    let fontDir
+    const kit = loader({ config: config => { fontDir = config.fontDirectories[0]; if (phase === 'config') throw failure }, pdf: () => { if (phase === 'cancel') controller.abort(failure); throw failure } })
+    await assert.rejects(renderDeck({ ...f, format: 'pdf', signal: controller.signal }, kit.load), error => error === failure)
+    assert.equal(existsSync(fontDir), false)
+    assert.equal(existsSync(f.outputDir), false)
+  }
 })
 
 test('native engine absence is unavailable and never publishes an empty render', async t => {
