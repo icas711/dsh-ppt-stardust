@@ -5,6 +5,8 @@ import {join,dirname,resolve} from 'node:path'
 import {spawnSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
 
+import {ordinaryVisualSlides} from './fixtures/ordinary-visuals.mjs'
+
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..')
 test('npm tarball runs the UI protocol without src, development scripts, fixtures or git',t=>{
   mkdirSync(join(root,'.test-output'),{recursive:true})
@@ -49,7 +51,12 @@ test('npm tarball runs the UI protocol without src, development scripts, fixture
     const kinds=captured.slides.map(s=>s.elements.some(e=>e.type==='table')?'table':s.elements.some(e=>e.type==='chart')?'chart':'cards');
     if(!mixed.ok||mixed.visualComposition.sourceSlides!==3||kinds[0]!=='cards'||kinds.at(-1)!=='chart'||kinds.filter(k=>k==='table').length<2)throw new Error('Packaged mixed create failed');
     console.log('packaged-mixed-exported');
+    const added=${JSON.stringify(ordinaryVisualSlides())};
+    visualSpec.slides=added.map(s=>({...s,visual:{...s.visual,sourceRefs:['data']}}));
+    const extended=await normal.create({title:'Extended visuals',lang:'ru',templateId:'user:register',visualSpec},exec);
+    if(!extended.ok||extended.visualComposition.sourceSlides!==4||!captured.slides.some(s=>s.elements.some(e=>e.type==='table')))throw new Error('Packaged extended create failed');
+    console.log('packaged-extended-exported');
   `
   const run=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:out,encoding:'utf8'})
-  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/packaged-ui-exported/);assert.match(run.stdout,/packaged-table-exported/);assert.match(run.stdout,/packaged-visual-exported/);assert.match(run.stdout,/packaged-mixed-exported/)
+  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/packaged-ui-exported/);assert.match(run.stdout,/packaged-table-exported/);assert.match(run.stdout,/packaged-visual-exported/);assert.match(run.stdout,/packaged-mixed-exported/);assert.match(run.stdout,/packaged-extended-exported/)
 })

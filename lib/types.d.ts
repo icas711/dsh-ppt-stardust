@@ -261,6 +261,49 @@ export interface PptVisualCreateSpec {
                 iconId?: 'check' | 'clock' | 'target' | 'trend';
             }>;
         } | {
+            type: 'process';
+            sourceRefs: string[];
+            ordered: true;
+            items: Array<{
+                id: string;
+                label: string;
+                detail?: string;
+                sourceRefs?: string[];
+            }>;
+        } | {
+            type: 'timeline';
+            sourceRefs: string[];
+            ordered: true;
+            items: Array<{
+                id: string;
+                label: string;
+                date: string;
+                detail?: string;
+                sourceRefs?: string[];
+            }>;
+        } | {
+            type: 'comparison';
+            sourceRefs: string[];
+            criteria: string[];
+            items: Array<{
+                id: string;
+                label: string;
+                values: Array<string | null>;
+                detail?: string;
+                sourceRefs?: string[];
+            }>;
+        } | {
+            type: 'big_number';
+            sourceRefs: string[];
+            items: Array<{
+                id: string;
+                label: string;
+                value: number;
+                unit: string;
+                detail?: string;
+                sourceRefs?: string[];
+            }>;
+        } | {
             type: 'table';
             sourceRefs: string[];
             headers: string[];
@@ -303,7 +346,7 @@ export interface PptCreateArgs {
             rows: Array<Array<string | null>>;
         }>;
     };
-    /** Content-only native cards/charts/tables using an authorized schema 3 template. */
+    /** Content-only native visuals (seven supported types) using an authorized schema 3 template. */
     visualSpec?: PptVisualCreateSpec;
     assets?: Record<string, {
         mime: string;

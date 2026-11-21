@@ -64,6 +64,10 @@ export interface PptVisualCreateSpec {
   sources: Array<{id:string;text:string;synthetic?:boolean}>
   slides: Array<{id:string;title:string;notes?:string;designLayout?:string;visual:
     | {type:'cards';sourceRefs:string[];caption?:string;items:Array<{id:string;label:string;detail?:string;sourceRefs?:string[];iconId?:'check'|'clock'|'target'|'trend'}>}
+    | {type:'process';sourceRefs:string[];ordered:true;items:Array<{id:string;label:string;detail?:string;sourceRefs?:string[]}>}
+    | {type:'timeline';sourceRefs:string[];ordered:true;items:Array<{id:string;label:string;date:string;detail?:string;sourceRefs?:string[]}>}
+    | {type:'comparison';sourceRefs:string[];criteria:string[];items:Array<{id:string;label:string;values:Array<string|null>;detail?:string;sourceRefs?:string[]}>}
+    | {type:'big_number';sourceRefs:string[];items:Array<{id:string;label:string;value:number;unit:string;detail?:string;sourceRefs?:string[]}>}
     | {type:'table';sourceRefs:string[];headers:string[];rows:Array<Array<string|null>>}
     | {type:'chart';sourceRefs:string[];kind:'column'|'bar'|'line'|'pie';unit:string;categories:string[];series:Array<{name:string;values:number[]}>;ordered?:boolean;whole?:boolean}
   }>
@@ -73,7 +77,7 @@ export interface PptCreateArgs {
   title: string
   /** Content-only native tables using an authorized schema 3 library template. */
   tableSpec?: {version:1;mode:'factual'|'demo';allowMoreSlides?:boolean;contentHash?:string;sources:Array<{id:string;text:string;synthetic?:boolean}>;tables:Array<{id:string;title:string;notes?:string;designLayout?:string;sourceRefs:string[];headers:string[];rows:Array<Array<string|null>>}>}
-  /** Content-only native cards/charts/tables using an authorized schema 3 template. */
+  /** Content-only native visuals (seven supported types) using an authorized schema 3 template. */
   visualSpec?: PptVisualCreateSpec
   assets?: Record<string, {mime:string;width:number;height:number;data:string}>
   style?: {pageSize?:{width:number;height:number}}
