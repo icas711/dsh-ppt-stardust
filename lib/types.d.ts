@@ -325,6 +325,10 @@ export interface PptVisualCreateSpec {
 }
 export interface PptCreateArgs {
     title: string;
+    /** Read a prepared tableSpec/visualSpec request directly; no inline overrides except an exactly matching title. */
+    requestFile?: string;
+    /** SHA-256 of the original JSON file bytes; required with requestFile. */
+    requestSha256?: string;
     /** Content-only native tables using an authorized schema 3 library template. */
     tableSpec?: {
         version: 1;
@@ -442,6 +446,10 @@ export interface PptCreateResult {
     generationReport?: PptGenerationReport;
     tableComposition?: Record<string, unknown>;
     visualComposition?: Record<string, unknown>;
+    requestInput?: {
+        sha256: string;
+        bytes: number;
+    };
     verification?: PptVerification;
 }
 /** Library template manifest (schemaVersion 1) summary as shown in lists. */

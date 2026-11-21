@@ -17,7 +17,7 @@ test('npm tarball runs the UI protocol without src, development scripts, fixture
   const packed=spawnSync(process.execPath,[cli,'pack','--json','--pack-destination',out],{cwd:root,encoding:'utf8',maxBuffer:4*1024*1024})
   assert.equal(packed.status,0,packed.stderr)
   const manifest=JSON.parse(packed.stdout)[0],paths=manifest.files.map(f=>f.path)
-  for(const required of ['lib/generation.js','scripts/generation-compact-session.mjs','scripts/generation-compact-cases.mjs','scripts/generation-run.mjs','docs/GENERATION-DSH-PILOT.md','skills/dsh-ppt/scripts/deck-table-create.mjs','skills/dsh-ppt/scripts/deck-content-create.mjs','skills/dsh-ppt/scripts/deck-visual-create.mjs'])assert.ok(paths.includes(required),required)
+  for(const required of ['lib/generation.js','lib/create-request.js','scripts/generation-compact-session.mjs','scripts/generation-compact-cases.mjs','scripts/generation-run.mjs','docs/GENERATION-DSH-PILOT.md','skills/dsh-ppt/scripts/deck-table-create.mjs','skills/dsh-ppt/scripts/deck-content-create.mjs','skills/dsh-ppt/scripts/deck-visual-create.mjs'])assert.ok(paths.includes(required),required)
   assert.ok(paths.every(p=>!p.startsWith('test/')&&!p.startsWith('src/')&&!p.startsWith('.test-output/')))
   const extracted=spawnSync('tar',['-xf',join(out,manifest.filename),'-C',out],{encoding:'utf8'})
   assert.equal(extracted.status,0,extracted.stderr)
@@ -56,7 +56,15 @@ test('npm tarball runs the UI protocol without src, development scripts, fixture
     const extended=await normal.create({title:'Extended visuals',lang:'ru',templateId:'user:register',visualSpec},exec);
     if(!extended.ok||extended.visualComposition.sourceSlides!==4||!captured.slides.some(s=>s.elements.some(e=>e.type==='table')))throw new Error('Packaged extended create failed');
     console.log('packaged-extended-exported');
+    const {visualCreateContentHash}=await import('./package/skills/dsh-ppt/scripts/deck-visual-create.mjs');
+    const {writeFileSync}=await import('node:fs');const {createHash}=await import('node:crypto');
+    visualSpec.contentHash=visualCreateContentHash(visualSpec);
+    const fileArgs={title:'File projects',lang:'ru',templateId:'user:register',visualSpec};
+    const bytes=JSON.stringify(fileArgs);writeFileSync('prepared.json',bytes);
+    const fromFile=await normal.create({title:fileArgs.title,requestFile:'prepared.json',requestSha256:createHash('sha256').update(bytes).digest('hex')},exec);
+    if(!fromFile.ok||!fromFile.requestInput||fromFile.visualComposition.sourceSlides!==4)throw new Error('Packaged requestFile create failed');
+    console.log('packaged-file-exported');
   `
   const run=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:out,encoding:'utf8'})
-  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/packaged-ui-exported/);assert.match(run.stdout,/packaged-table-exported/);assert.match(run.stdout,/packaged-visual-exported/);assert.match(run.stdout,/packaged-mixed-exported/);assert.match(run.stdout,/packaged-extended-exported/)
+  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/packaged-ui-exported/);assert.match(run.stdout,/packaged-table-exported/);assert.match(run.stdout,/packaged-visual-exported/);assert.match(run.stdout,/packaged-mixed-exported/);assert.match(run.stdout,/packaged-extended-exported/);assert.match(run.stdout,/packaged-file-exported/)
 })

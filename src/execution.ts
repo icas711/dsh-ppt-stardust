@@ -5,6 +5,7 @@ import type { ResolvedPptConfig } from './config.js'
 import type { DeckEngine, PptCreateArgs, PptThemesResult } from './types.js'
 import { PptTemplateStore } from './templates.js'
 import { resolveToolIdentity, type CallerIdentity, type WebAuthLike } from './identity.js'
+import { readCreateRequest } from './create-request.js'
 
 /** The Harness execution fields used by this plugin; optional for direct callers. */
 export interface PptExecution {
@@ -111,7 +112,13 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
     },
     async create(rawArgs: unknown, exec?: PptExecution) {
       exec?.signal?.throwIfAborted()
-      const input = asRecord(rawArgs)
+      let input = asRecord(rawArgs)
+      let requestInput: {sha256:string;bytes:number} | undefined
+      if (Object.hasOwn(input, 'requestFile')) {
+        const loaded = await readCreateRequest(input, exec?.agent?.session.header.cwd ?? process.cwd(), exec?.signal)
+        input = loaded.input
+        requestInput = loaded.receipt
+      } else if (Object.hasOwn(input, 'requestSha256')) throw new Error('dsh-ppt: requestSha256 requires requestFile')
       const args = input as unknown as PptCreateArgs
       if (typeof args.title !== 'string' || args.title.trim() === '') throw new Error('dsh-ppt：title 不能为空')
       const hasTableSpec = Object.hasOwn(input, 'tableSpec')
@@ -213,7 +220,8 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         cwd,
         signal: exec?.signal,
       })
-      return tableComposition ? { ...result, tableComposition } : visualComposition ? { ...result, visualComposition } : result
+      const composed = tableComposition ? { ...result, tableComposition } : visualComposition ? { ...result, visualComposition } : result
+      return requestInput ? { ...composed, requestInput } : composed
     },
     async templates(rawArgs: unknown, exec?: PptExecution) {
       exec?.signal?.throwIfAborted()
