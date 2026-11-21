@@ -56,6 +56,31 @@ test('all controlled semantic references compose across four sizes/styles with v
   }
 })
 
+test('detailed cards use broad rows before pagination without shrinking or losing facts and icons',()=>{
+  const c=compactCases().find(c=>c.id==='long-ru'),loaded=task('long-ru--decor')
+  for(const icons of [false,true]){
+    const input=specification(c)
+    input.slides[0].title='Порядок работы с материалами: согласование, проверка, передача'
+    if(icons)input.slides[0].visual.items.forEach((item,i)=>item.iconId=['target','check','trend'][i])
+    const r=composeGenerationSpec(input,{template:loaded.template,context:loaded.task.context,allowMoreSlides:false,maxSlides:1})
+    assert.equal(r.create.slides.length,1)
+    assert.equal(r.report.placements[0].composition,'rows')
+    assert.deepEqual(r.report.splits,[])
+    const slide=r.create.slides[0],panels=slide.elements.filter(e=>e.id.startsWith('gen-card-'))
+    assert.equal(panels.length,3)
+    for(const [i,item] of input.slides[0].visual.items.entries()){
+      const label=slide.elements.find(e=>e.id===`gen-item-${i}-0`),detail=slide.elements.find(e=>e.id===`gen-item-${i}-1`)
+      assert.equal(label.paragraphs.flatMap(p=>p.runs.map(r=>r.text)).join('\n'),item.label)
+      assert.equal(detail.paragraphs.flatMap(p=>p.runs.map(r=>r.text)).join('\n'),item.detail)
+      assert.equal(label.textStyle.size,18);assert.equal(detail.textStyle.size,18)
+      assert.equal(detail.textStyle.fontFamily,'Arial');assert.equal(detail.textFrame.autoFit,'none')
+      assert.ok(label.frame.x+label.frame.w<detail.frame.x)
+      if(i)assert.ok(panels[i-1].frame.y+panels[i-1].frame.h<panels[i].frame.y)
+    }
+    assert.equal(slide.elements.some(e=>e.id.startsWith('gen-icon-')),icons)
+  }
+})
+
 test('source evaluator rejects changed associations, order, nulls, missing details and synthetic mode',()=>{
   for(const [id,mutate]of [
     ['process',s=>s.slides[0].visual.items.reverse()],

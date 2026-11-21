@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=16
+export const GENERATION_COMPONENT_VERSION=17
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -188,6 +188,32 @@ function cards(v,b,s,columns){
     if(hasIcons){if(item.iconId)out.push(...icon('gen-icon-'+i,item.iconId,frame(align==='center'?box.x+(box.w-side)/2:box.x+padding,y,side,side),s.accent));y+=side+GAP}
     out.push(text('gen-item-'+i+'-0',item.label,frame(box.x+padding,y,box.w-2*padding,labelHeight),labelStyle,align));y+=labelHeight+GAP
     if(item.detail!==undefined)out.push(text('gen-item-'+i+'-1',item.detail,frame(box.x+padding,y,box.w-2*padding,measure(item.detail,box.w-2*padding,s.styles.body)),s.styles.body,align))
+  })
+  return out
+}
+function detailedCardRows(v,b,s){
+  if(b.w<b.h*1.15||!v.items.every(item=>item.detail!==undefined))fail('component-capacity','Detailed rows need a broad region and source details')
+  const out=[],measure=(value,width,style)=>estimateTextHeight(value,width,style,(c,size)=>glyphWidth(c,size)*1.02)
+  if(v.caption){
+    const h=measure(v.caption,b.w,s.styles.body)
+    out.push(text('gen-caption',v.caption,frame(b.x,b.y,b.w,h),s.styles.body))
+    b=frame(b.x,b.y+h+2*GAP,b.w,b.h-h-2*GAP)
+  }
+  const padding=Math.round(.12*EMU),labelStyle=styled(s.styles.body,{bold:true,color:s.accent}),labelWidth=Math.min(2*EMU,b.w*.21),side=Math.round(.32*EMU)
+  const detailWidth=b.w-2*padding-labelWidth-2*GAP
+  if(labelWidth<1.2*EMU||detailWidth<3*EMU)fail('component-capacity','Detailed rows need readable label and text columns')
+  if(v.items.some(item=>item.label.split(/\s+/u).some(word=>measure(word,labelWidth,labelStyle)>measure('Ag',labelWidth,labelStyle))))fail('component-capacity','Detailed row labels must keep whole words')
+  const heights=v.items.map(item=>Math.max(measure(item.label,labelWidth,labelStyle)+(item.iconId?side+GAP:0),measure(item.detail,detailWidth,s.styles.body))+2*padding)
+  const total=heights.reduce((sum,h)=>sum+h,0)+(heights.length-1)*GAP
+  if(total>b.h)fail('component-capacity','Detailed rows require more vertical space')
+  let y=b.y+(b.h-total)/2
+  v.items.forEach((item,i)=>{
+    const box=frame(b.x,y,b.w,heights[i]),labelY=box.y+padding+(item.iconId?side+GAP:0)
+    out.push(shape('gen-card-'+i,box,s.surface,'roundRect',s.accent))
+    if(item.iconId)out.push(...icon('gen-icon-'+i,item.iconId,frame(box.x+padding,box.y+padding,side,side),s.accent))
+    out.push(text('gen-item-'+i+'-0',item.label,frame(box.x+padding,labelY,labelWidth,measure(item.label,labelWidth,labelStyle)),labelStyle))
+    out.push(text('gen-item-'+i+'-1',item.detail,frame(box.x+padding+labelWidth+2*GAP,box.y+padding,detailWidth,measure(item.detail,detailWidth,s.styles.body)),s.styles.body))
+    y+=heights[i]+GAP
   })
   return out
 }
@@ -393,10 +419,10 @@ function image(v,b,s){
 }
 function render(v,s,lang,offset=0){
   for(const b of s.regions){
-    const alternatives=v.type==='cards'?[...new Set([Math.min(v.items.length,3),2,1])]:['process','timeline'].includes(v.type)?[...new Set([b.h>b.w,false,true])]:v.type==='big_number'?[...new Set([v.items.length,1])]:[null]
+    const alternatives=v.type==='cards'?[...new Set([Math.min(v.items.length,3),...(v.items.every(item=>item.detail!==undefined)?['rows']:[]),2,1])]:['process','timeline'].includes(v.type)?[...new Set([b.h>b.w,false,true])]:v.type==='big_number'?[...new Set([v.items.length,1])]:[null]
     for(const variant of alternatives){
       try{
-        const elements=v.type==='cards'?cards(v,b,s,variant):v.type==='process'||v.type==='timeline'?connected(v,b,s,variant===true,offset):v.type==='big_number'?numbers(v,b,s,variant):v.type==='comparison'||v.type==='table'?nativeTable(v,b,s,lang):v.type==='chart'?chart(v,b,s):image(v,b,s)
+        const elements=v.type==='cards'?(variant==='rows'?detailedCardRows(v,b,s):cards(v,b,s,variant)):v.type==='process'||v.type==='timeline'?connected(v,b,s,variant===true,offset):v.type==='big_number'?numbers(v,b,s,variant):v.type==='comparison'||v.type==='table'?nativeTable(v,b,s,lang):v.type==='chart'?chart(v,b,s):image(v,b,s)
         if(elements.some(e=>!inside(boxBounds(e),b)))fail('component-capacity','Rounded component geometry exceeds its region')
         return {elements,region:b,composition:String(variant??v.type)}
       }catch(e){if(e.code!=='component-capacity')throw e}
