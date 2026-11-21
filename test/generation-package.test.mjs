@@ -15,7 +15,7 @@ test('npm tarball runs the UI protocol without src, development scripts, fixture
   const packed=spawnSync(process.execPath,[cli,'pack','--json','--pack-destination',out],{cwd:root,encoding:'utf8',maxBuffer:4*1024*1024})
   assert.equal(packed.status,0,packed.stderr)
   const manifest=JSON.parse(packed.stdout)[0],paths=manifest.files.map(f=>f.path)
-  for(const required of ['lib/generation.js','scripts/generation-compact-session.mjs','scripts/generation-compact-cases.mjs','scripts/generation-run.mjs','docs/GENERATION-DSH-PILOT.md','skills/dsh-ppt/scripts/deck-table-create.mjs'])assert.ok(paths.includes(required),required)
+  for(const required of ['lib/generation.js','scripts/generation-compact-session.mjs','scripts/generation-compact-cases.mjs','scripts/generation-run.mjs','docs/GENERATION-DSH-PILOT.md','skills/dsh-ppt/scripts/deck-table-create.mjs','skills/dsh-ppt/scripts/deck-content-create.mjs','skills/dsh-ppt/scripts/deck-visual-create.mjs'])assert.ok(paths.includes(required),required)
   assert.ok(paths.every(p=>!p.startsWith('test/')&&!p.startsWith('src/')&&!p.startsWith('.test-output/')))
   const extracted=spawnSync('tar',['-xf',join(out,manifest.filename),'-C',out],{encoding:'utf8'})
   assert.equal(extracted.status,0,extracted.stderr)
@@ -38,7 +38,12 @@ test('npm tarball runs the UI protocol without src, development scripts, fixture
     const made=await normal.create({title:'Реестр',lang:'ru',templateId:'user:register',tableSpec:{version:1,mode:'factual',allowMoreSlides:true,sources:[{id:'data',text:'Source register'}],tables:[{id:'t',title:'Реестр',sourceRefs:['data'],headers:['Проект'],rows:Array.from({length:30},(_,i)=>['Строка '+i])}]}},exec);
     if(!made.ok||captured.slides.length<2||!captured.slides.every(s=>s.elements.some(e=>e.type==='table')))throw new Error('Packaged table create failed');
     console.log('packaged-table-exported');
+    const visualSpec={version:1,mode:'demo',sources:[{id:'data',text:'Synthetic project data',synthetic:true}],slides:[{id:'cards',title:'Projects',visual:{type:'cards',sourceRefs:['data'],items:[{id:'a',label:'Alpha',detail:'Full alpha description.'},{id:'b',label:'Beta',detail:'Full beta description.'}]}},{id:'chart',title:'Requests',visual:{type:'chart',sourceRefs:['data'],kind:'column',unit:'requests',categories:['North','South'],series:[{name:'Count',values:[17,9]}]}}]};
+    if(!buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_create').parameters.properties.visualSpec)throw new Error('No visualSpec schema');
+    const visual=await normal.create({title:'Projects',lang:'en',templateId:'user:register',visualSpec},exec);
+    if(!visual.ok||!visual.visualComposition||!captured.slides.some(s=>s.elements.some(e=>e.type==='chart')))throw new Error('Packaged visual create failed');
+    console.log('packaged-visual-exported');
   `
   const run=spawnSync(process.execPath,['--input-type=module','-e',code],{cwd:out,encoding:'utf8'})
-  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/packaged-ui-exported/);assert.match(run.stdout,/packaged-table-exported/)
+  assert.equal(run.status,0,run.stderr);assert.match(run.stdout,/packaged-ui-exported/);assert.match(run.stdout,/packaged-table-exported/);assert.match(run.stdout,/packaged-visual-exported/)
 })

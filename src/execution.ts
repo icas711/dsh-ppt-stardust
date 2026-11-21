@@ -115,10 +115,12 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       const args = input as unknown as PptCreateArgs
       if (typeof args.title !== 'string' || args.title.trim() === '') throw new Error('dsh-ppt：title 不能为空')
       const hasTableSpec = Object.hasOwn(input, 'tableSpec')
-      if (hasTableSpec) {
-        const conflicts = ['content','slides','deckPlan','generationPolicy','templateSelections','templateSamples','template','dataModel','assets','style','brand','theme'].filter(key => Object.hasOwn(input,key))
-        if (conflicts.length) throw new Error('dsh-ppt: tableSpec cannot be combined with ' + conflicts.join(', '))
-        if (typeof args.templateId !== 'string' || !args.templateId.trim()) throw new Error('dsh-ppt: tableSpec requires a schema 3 library templateId')
+      const hasVisualSpec = Object.hasOwn(input, 'visualSpec')
+      if (hasTableSpec || hasVisualSpec) {
+        const field = hasTableSpec ? 'tableSpec' : 'visualSpec'
+        const conflicts = ['content','slides','deckPlan','generationPolicy','templateSelections','templateSamples','template','dataModel','assets','style','brand','theme',hasTableSpec?'visualSpec':'tableSpec'].filter(key => Object.hasOwn(input,key))
+        if (conflicts.length) throw new Error('dsh-ppt: '+field+' cannot be combined with ' + conflicts.join(', '))
+        if (typeof args.templateId !== 'string' || !args.templateId.trim()) throw new Error('dsh-ppt: '+field+' requires a schema 3 library templateId')
       }
       const hasContent = typeof args.content === 'string' && args.content.trim() !== ''
       const hasSlides = Array.isArray(args.slides) && args.slides.length > 0
@@ -139,6 +141,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
       // Library template: style + outline skeleton (+ optional samples) under the given title.
       let templateApply: Record<string, unknown> = {}
       let tableComposition: Record<string, unknown> | undefined
+      let visualComposition: Record<string, unknown> | undefined
       if (typeof args.templateId === 'string' && args.templateId.trim() !== '') {
         const store = options.templateStore
         if (!store) throw new Error('dsh-ppt：библиотека шаблонов недоступна в этой установке; используйте файл шаблона через CLI')
@@ -153,13 +156,20 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
           lang: typeof args.lang === 'string' && args.lang.trim() !== '' ? args.lang.trim() : (config.defaultLang || 'zh'),
         }
         let applied
-        if (hasTableSpec) {
+        if (hasTableSpec || hasVisualSpec) {
           const record = await store.get(args.templateId.trim(), identityOf(exec))
           exec?.signal?.throwIfAborted()
-          const module = await import(new URL('../skills/dsh-ppt/scripts/deck-table-create.mjs', import.meta.url).href)
-          applied = module.composeTableCreate(args.tableSpec, { title: templateOptions.title, lang: templateOptions.lang,
-            template: { manifest: record.manifest, assets: record.assets }, maxSlides: Math.min(config.maxSlides,120), signal: exec?.signal })
-          tableComposition = applied.report
+          const composeOptions = { title: templateOptions.title, lang: templateOptions.lang,
+            template: { manifest: record.manifest, assets: record.assets }, maxSlides: Math.min(config.maxSlides,120), signal: exec?.signal }
+          if (hasTableSpec) {
+            const module = await import(new URL('../skills/dsh-ppt/scripts/deck-table-create.mjs', import.meta.url).href)
+            applied = module.composeTableCreate(args.tableSpec, composeOptions)
+            tableComposition = applied.report
+          } else {
+            const module = await import(new URL('../skills/dsh-ppt/scripts/deck-visual-create.mjs', import.meta.url).href)
+            applied = module.composeVisualCreate(args.visualSpec, composeOptions)
+            visualComposition = applied.report
+          }
         } else applied = await store.createOptions(args.templateId.trim(), identityOf(exec), templateOptions)
         const { create, lineage } = applied
         templateApply = {
@@ -203,7 +213,7 @@ export function createPptExecutors(config: ResolvedPptConfig, loadEngine: () => 
         cwd,
         signal: exec?.signal,
       })
-      return tableComposition ? { ...result, tableComposition } : result
+      return tableComposition ? { ...result, tableComposition } : visualComposition ? { ...result, visualComposition } : result
     },
     async templates(rawArgs: unknown, exec?: PptExecution) {
       exec?.signal?.throwIfAborted()

@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=7
+export const GENERATION_COMPONENT_VERSION=8
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -45,7 +45,7 @@ function estimateTextHeight(text,width,style,widthOf){
 }
 function text(id,value,box,style,align='left'){
   if(estimateGenerationTextHeight(value,box.w,style)>box.h)fail('component-capacity','Text does not fit at the template font size',{elementId:id})
-  return {id,type:'text',frame:frame(box.x,box.y,box.w,box.h),textStyle:clone(style),textFrame:{anchor:'top',align,wrap:'square',autoFit:'none',margins:{left:2*PT,right:2*PT,top:2*PT,bottom:2*PT}},paragraphs:String(value).split('\n').map(s=>({runs:[{text:s}]}))}
+  return {id,type:'text',frame:frame(box.x,box.y,box.w,box.h),textStyle:clone(style),textFrame:{anchor:'top',align,wrap:'square',autoFit:'none',margins:{left:2*PT,right:2*PT,top:2*PT,bottom:2*PT}},paragraphs:String(value).split('\n').map(s=>({style:{marL:0,marR:0,indent:0},runs:[{text:s}]}))}
 }
 const shape=(id,box,fill,preset='roundRect',stroke)=>({id,type:'shape',frame:frame(box.x,box.y,box.w,box.h),preset,...(fill?{fill:{color:fill}}:{}),...(stroke?{stroke:{color:stroke,width:1}}:{})})
 const line=(id,x1,y1,x2,y2,color,arrow=false)=>{
@@ -153,27 +153,31 @@ function stack(out,id,parts,b,gap=GAP){
 }
 function cards(v,b,s,columns){
   const out=[]
+  const measure=(value,width,style)=>estimateTextHeight(value,width,style,(c,size)=>glyphWidth(c,size)*1.15)
   if(v.caption){
-    const h=estimateGenerationTextHeight(v.caption,b.w,s.styles.body)
+    const h=measure(v.caption,b.w,s.styles.body)
     out.push(text('gen-caption',v.caption,frame(b.x,b.y,b.w,h),s.styles.body))
     b=frame(b.x,b.y+h+2*GAP,b.w,b.h-h-2*GAP)
   }
   const rows=Math.ceil(v.items.length/columns),w=(b.w-GAP*(columns-1))/columns
-  const labelStyle=styled(s.styles.body,{bold:true,color:s.accent}),side=Math.round(.32*EMU)
-  const heights=v.items.map(item=>estimateGenerationTextHeight(item.label,w-2*PAD,labelStyle)+(item.detail!==undefined?GAP+estimateGenerationTextHeight(item.detail,w-2*PAD,s.styles.body):0)+(item.iconId?side+GAP:0))
+  const labelStyle=styled(s.styles.body,{bold:true,color:s.accent}),side=Math.round(.32*EMU),padding=Math.max(PAD,Math.round(side*.7))
+  const hasDetails=v.items.some(item=>item.detail!==undefined),hasIcons=v.items.some(item=>item.iconId)
+  const labelHeight=Math.max(...v.items.map(item=>measure(item.label,w-2*padding,labelStyle)))
+  const heights=v.items.map(item=>labelHeight+(item.detail!==undefined?GAP+measure(item.detail,w-2*padding,s.styles.body):0)+(hasIcons?side+GAP:0))
   // Keep equal cards sized to their content; whitespace belongs around the group.
-  const h=Math.max(2*PAD+Math.max(...heights),Math.min(2.5*EMU,w*.85))
+  const h=Math.max(2*padding+Math.max(...heights),Math.min(2.5*EMU,w*.85))
   const groupHeight=rows*h+(rows-1)*GAP
   if(groupHeight>b.h)fail('component-capacity','Cards require more vertical space')
   const top=b.y+(b.h-groupHeight)/2
   v.items.forEach((item,i)=>{
     const box=frame(b.x+(i%columns)*(w+GAP),top+Math.floor(i/columns)*(h+GAP),w,h)
-    if(box.w<=2*PAD||box.h<=2*PAD)fail('component-capacity','Card has no content area')
+    if(box.w<=2*padding||box.h<=2*padding)fail('component-capacity','Card has no content area')
     out.push(shape('gen-card-'+i,box,s.surface,'roundRect',s.accent))
-    let y=box.y+(box.h-heights[i])/2
+    let y=hasDetails?box.y+padding:box.y+(box.h-heights[i])/2
     const align=item.detail!==undefined?'left':'center'
-    if(item.iconId){out.push(...icon('gen-icon-'+i,item.iconId,frame(align==='center'?box.x+(box.w-side)/2:box.x+PAD,y,side,side),s.accent));y+=side+GAP}
-    stack(out,'gen-item-'+i,[{value:item.label,style:labelStyle,align},{value:item.detail,style:s.styles.body}],frame(box.x+PAD,y,box.w-2*PAD,box.y+box.h-PAD-y))
+    if(hasIcons){if(item.iconId)out.push(...icon('gen-icon-'+i,item.iconId,frame(align==='center'?box.x+(box.w-side)/2:box.x+padding,y,side,side),s.accent));y+=side+GAP}
+    out.push(text('gen-item-'+i+'-0',item.label,frame(box.x+padding,y,box.w-2*padding,labelHeight),labelStyle,align));y+=labelHeight+GAP
+    if(item.detail!==undefined)out.push(text('gen-item-'+i+'-1',item.detail,frame(box.x+padding,y,box.w-2*padding,measure(item.detail,box.w-2*padding,s.styles.body)),s.styles.body,align))
   })
   return out
 }

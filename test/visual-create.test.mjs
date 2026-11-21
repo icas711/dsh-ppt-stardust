@@ -1,0 +1,138 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {mkdtempSync,rmSync,readFileSync,existsSync} from 'node:fs'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
+import {unzipSync,strFromU8} from 'fflate'
+import {composeVisualCreate,visualCreateSchema,visualCreateContentHash} from '../skills/dsh-ppt/scripts/deck-visual-create.mjs'
+import {template} from './fixtures/generation-components.mjs'
+import {createPptExecutors} from '../lib/execution.js'
+import {resolvePptConfig} from '../lib/config.js'
+import {PptTemplateStore} from '../lib/templates.js'
+import {buildPptTools} from '../lib/tools.js'
+import * as templates from '../skills/dsh-ppt/scripts/deck-templates.mjs'
+import * as engine from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
+
+const input=()=>({version:1,mode:'factual',allowMoreSlides:true,sources:[{id:'material',text:'Public test data: Alpha, Beta, Gamma. North 17, South 9, East 5 requests.'}],slides:[
+  {id:'projects',title:'Направления работы',notes:'Prepared source descriptions.',visual:{type:'cards',sourceRefs:['material'],caption:'Три направления',items:[
+    {id:'alpha',label:'Альфа',detail:'Первое полное предложение. Второе предложение с важной оговоркой.',iconId:'check'},
+    {id:'beta',label:'Бета',detail:'Все исходные условия сохраняются без сокращения.',iconId:'clock'},
+    {id:'gamma',label:'Гамма',detail:'Итог зависит от подтверждения исходных данных.',iconId:'target'}]}},
+  {id:'requests',title:'Количество заявок',visual:{type:'chart',sourceRefs:['material'],kind:'column',unit:'заявок',categories:['Север','Юг','Восток'],series:[{name:'Заявки',values:[17,9,5]}]}}
+]})
+const compose=(value=input(),options={})=>composeVisualCreate(value,{title:'Проверка направлений',lang:'ru',template:template(),...options})
+const strings=slides=>slides.flatMap(s=>s.elements.filter(e=>e.type==='text').flatMap(e=>e.paragraphs.flatMap(p=>p.runs.map(r=>r.text??'')))).join('\n')
+
+test('normal cards/charts preserve source text, data, template decor and input objects',()=>{
+  const value=input(),t=template(),before=structuredClone({value,t}),r=compose(value,{template:t})
+  assert.deepEqual({value,t},before)
+  assert.equal(r.report.sourceSlides,2);assert.equal(r.report.visualAcceptance,'not-verified')
+  assert.ok(r.create.slides.every(s=>s.elements.some(e=>e.id==='stripe')&&s.notes.includes('Source: material')))
+  for(const item of value.slides[0].visual.items){assert.ok(strings(r.create.slides).includes(item.label));assert.ok(strings(r.create.slides).includes(item.detail))}
+  const chart=r.create.slides.flatMap(s=>s.elements).find(e=>e.type==='chart').chart
+  assert.deepEqual(chart.categories,value.slides[1].visual.categories)
+  assert.deepEqual(chart.series.map(({name,values})=>({name,values})),value.slides[1].visual.series)
+  assert.deepEqual(r.create.style.pageSize,t.manifest.style.pageSize)
+  assert.ok(r.create.slides.every(s=>s.purpose==='content'))
+  const first=r.create.slides[0],labels=first.elements.filter(e=>/^gen-item-\d+-0$/.test(e.id)),details=first.elements.filter(e=>/^gen-item-\d+-1$/.test(e.id))
+  assert.equal(new Set(labels.map(e=>e.frame.y)).size,1)
+  assert.equal(new Set(details.map(e=>e.frame.y)).size,1)
+  for(const [i,detail]of details.entries()){
+    const card=first.elements.find(e=>e.id==='gen-card-'+i)
+    assert.ok(detail.frame.y+detail.frame.h<=card.frame.y+card.frame.h-155448)
+  }
+})
+
+test('visualSpec rejects unsupported types, coordinates, malformed facts and invalid source bindings',()=>{
+  for(const mutate of [
+    v=>v.frame={},v=>v.sources[0].extra=true,v=>v.sources[0].id='bad id',v=>v.sources[0].synthetic=true,
+    v=>v.slides[0].purpose='cover',v=>v.slides[0].visual.frame={},v=>v.slides[0].visual.type='process',
+    v=>v.slides[0].visual.items[0].iconId='unknown',v=>v.slides[0].visual.sourceRefs=['missing'],
+    v=>v.slides[0].visual.items[0].sourceRefs=['missing'],v=>v.slides[0].visual.items[1].id='alpha',
+    v=>v.slides.push(structuredClone(v.slides[0])),v=>v.slides[1].visual.series[0].values.pop(),
+    v=>v.slides[1].visual.kind='line',v=>v.slides[1].visual.kind='pie',
+    v=>{v.slides[1].visual.kind='pie';v.slides[1].visual.whole=true;v.slides[1].visual.series[0].values[0]=-1},
+    v=>v.slides=null,v=>v.slides[0]=null,v=>v.sources=null,v=>v.allowMoreSlides='true'
+  ]){const value=input();mutate(value);assert.throws(()=>compose(value))}
+  const line=input();line.slides[1].visual.kind='line';line.slides[1].visual.ordered=true
+  assert.ok(compose(line).create.slides.some(s=>s.elements.some(e=>e.type==='chart')))
+  const pie=input();pie.slides[1].visual.kind='pie';pie.slides[1].visual.whole=true
+  assert.ok(compose(pie).create.slides.some(s=>s.elements.some(e=>e.type==='chart')))
+})
+
+test('demo disclosures, verified hashes and explicit template choices keep ordinary create rules',()=>{
+  const value=input();value.mode='demo';value.sources[0].synthetic=true
+  value.contentHash=visualCreateContentHash(value)
+  assert.ok(compose(value).create.slides.every(s=>s.elements.some(e=>e.id==='gen-disclosure')))
+  const changed=structuredClone(value);changed.slides[0].visual.items[0].detail+=' '
+  assert.throws(()=>compose(changed),/Content hash mismatch/)
+  const ordered=structuredClone(value);ordered.slides[1].visual=Object.fromEntries(Object.entries(ordered.slides[1].visual).reverse())
+  assert.equal(visualCreateContentHash(ordered),value.contentHash)
+  assert.ok(compose(ordered).create.slides.length>0)
+  const explicit=input();explicit.slides[0].designLayout='missing'
+  assert.throws(()=>compose(explicit))
+  assert.throws(()=>compose(input(),{template:{manifest:{schemaVersion:1},assets:{}}}))
+})
+
+test('cards and chart pagination require permission and retain complete items and ordered data',()=>{
+  const value=input();value.slides=value.slides.slice(0,1);value.slides[0].visual.items=value.slides[0].visual.items.slice(0,2)
+  for(const item of value.slides[0].visual.items)item.detail=('Full public source description for '+item.id+'. ').repeat(14)
+  value.allowMoreSlides=false
+  assert.throws(()=>compose(value),{code:'component-capacity'})
+  value.allowMoreSlides=true
+  const made=compose(value)
+  assert.ok(made.report.slideCount>1)
+  for(const item of value.slides[0].visual.items)assert.ok(strings(made.create.slides).includes(item.detail))
+  assert.throws(()=>compose(value,{maxSlides:1}),{code:'component-slide-limit'})
+  const many=input();many.slides=many.slides.slice(1)
+  const chart=many.slides[0].visual;chart.categories=Array.from({length:24},(_,i)=>'Item '+i);chart.series[0].values=Array.from({length:24},(_,i)=>i+1)
+  const charts=compose(many).create.slides.flatMap(s=>s.elements.filter(e=>e.type==='chart').map(e=>e.chart))
+  assert.ok(charts.length>1);assert.deepEqual(charts.flatMap(c=>c.categories),chart.categories);assert.deepEqual(charts.flatMap(c=>c.series[0].values),chart.series[0].values)
+  chart.kind='pie';chart.whole=true;assert.throws(()=>compose(many),{code:'component-capacity'})
+})
+
+test('ppt_create publishes the exact cards/chart schema',()=>{
+  const schema=buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_create').parameters.properties.visualSpec
+  assert.deepEqual(schema.required,visualCreateSchema().required)
+  assert.deepEqual(schema.properties.slides.items.properties.visual.oneOf.map(v=>v.properties.type.const),['cards','chart'])
+})
+
+test('ordinary visualSpec exports native editable chart/cards with authorized session storage',async t=>{
+  const root=mkdtempSync(join(tmpdir(),'visual-create-'));t.after(()=>rmSync(root,{recursive:true,force:true}))
+  const store=new PptTemplateStore({root:join(root,'templates'),templatesModuleLoader:async()=>templates})
+  const identity={login:'alice',admin:false,local:false},record=template()
+  await store.save({manifest:record.manifest,assets:record.assets,identity})
+  const tools=createPptExecutors(resolvePptConfig({}),async()=>engine,{templateStore:store})
+  const exec={agent:{session:{header:{cwd:root,id:'normal-visual',owner:'alice'}}}}
+  const args={title:'Направления',templateId:'user:'+record.manifest.id,lang:'ru',visualSpec:input()}
+  const made=await tools.create(args,exec)
+  assert.ok(made.ok&&made.internalProject);assert.ok(made.outputDir.includes('session-'))
+  assert.equal(made.visualComposition.sourceSlides,2);assert.equal(made.tableComposition,undefined)
+  assert.equal(made.verification.visual,'not-verified')
+  assert.ok(existsSync(made.htmlPath)&&existsSync(made.pptxPath)&&existsSync(made.jsonPath))
+  const project=JSON.parse(readFileSync(made.jsonPath,'utf8'))
+  assert.ok(strings(project.slides).includes(args.visualSpec.slides[0].visual.items[0].detail))
+  assert.deepEqual(project.slides.flatMap(s=>s.elements).find(e=>e.type==='chart').chart.series[0].values,[17,9,5])
+  const parts=unzipSync(readFileSync(made.pptxPath)),chart=Object.keys(parts).find(p=>/^ppt\/charts\/chart\d+\.xml$/.test(p))
+  assert.ok(chart);assert.match(strFromU8(parts[chart]),/<c:v>17<\/c:v>/)
+  assert.match(strFromU8(parts['ppt/slides/slide1.xml']),/<p:cxnSp>/)
+  await assert.rejects(tools.create(args,{agent:{session:{header:{cwd:root,id:'other',owner:'bob'}}}}))
+})
+
+test('conflicts, invalid inputs, limits and cancellation do not export a draft or change legacy calls',async()=>{
+  let builds=0,captured
+  const tools=createPptExecutors(resolvePptConfig({}),async()=>({buildDeckAsync:async o=>{builds++;captured=o;return {ok:true}}}),{templateStore:{get:async()=>template()}})
+  const args={title:'Направления',templateId:'user:chosen',lang:'ru',visualSpec:input()}
+  for(const key of ['tableSpec','content','slides','deckPlan','generationPolicy','templateSelections','templateSamples','template','dataModel','assets','style','brand','theme'])await assert.rejects(tools.create({...args,[key]:{}}),/cannot be combined/)
+  await assert.rejects(tools.create({...args,templateId:''}),/requires/)
+  await assert.rejects(tools.create({...args,visualSpec:null}),/visualSpec/)
+  await assert.rejects(tools.create({...args,visualSpec:{...input(),contentHash:'0'.repeat(64)}}),/Content hash mismatch/)
+  const limited=createPptExecutors(resolvePptConfig({maxSlides:3}),async()=>({buildDeckAsync:async()=>{builds++;return {ok:true}}}),{templateStore:{get:async()=>template()}})
+  const four=input();four.slides.push(...structuredClone(four.slides).map(s=>({...s,id:s.id+'-copy'})))
+  await assert.rejects(limited.create({...args,visualSpec:four}),e=>e.code==='component-slide-limit')
+  const controller=new AbortController();controller.abort(new Error('cancelled'))
+  await assert.rejects(tools.create(args,{signal:controller.signal}),/cancelled/)
+  assert.equal(builds,0)
+  await tools.create({title:'Legacy',content:'## Facts\n- User fact'})
+  assert.equal(builds,1);assert.equal(captured.content,'## Facts\n- User fact')
+})

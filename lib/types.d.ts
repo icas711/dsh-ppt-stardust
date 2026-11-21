@@ -234,6 +234,47 @@ export interface PptConfig {
     /** 模板管理（公共模板导入/删除/发布）的备用管理员登录名列表；webAuth 可用时以宿主为准。 */
     admins?: string[];
 }
+export interface PptVisualCreateSpec {
+    version: 1;
+    mode: 'factual' | 'demo';
+    allowMoreSlides?: boolean;
+    contentHash?: string;
+    sources: Array<{
+        id: string;
+        text: string;
+        synthetic?: boolean;
+    }>;
+    slides: Array<{
+        id: string;
+        title: string;
+        notes?: string;
+        designLayout?: string;
+        visual: {
+            type: 'cards';
+            sourceRefs: string[];
+            caption?: string;
+            items: Array<{
+                id: string;
+                label: string;
+                detail?: string;
+                sourceRefs?: string[];
+                iconId?: 'check' | 'clock' | 'target' | 'trend';
+            }>;
+        } | {
+            type: 'chart';
+            sourceRefs: string[];
+            kind: 'column' | 'bar' | 'line' | 'pie';
+            unit: string;
+            categories: string[];
+            series: Array<{
+                name: string;
+                values: number[];
+            }>;
+            ordered?: boolean;
+            whole?: boolean;
+        };
+    }>;
+}
 export interface PptCreateArgs {
     title: string;
     /** Content-only native tables using an authorized schema 3 library template. */
@@ -241,6 +282,7 @@ export interface PptCreateArgs {
         version: 1;
         mode: 'factual' | 'demo';
         allowMoreSlides?: boolean;
+        contentHash?: string;
         sources: Array<{
             id: string;
             text: string;
@@ -256,6 +298,8 @@ export interface PptCreateArgs {
             rows: Array<Array<string | null>>;
         }>;
     };
+    /** Content-only native cards/charts using an authorized schema 3 template. */
+    visualSpec?: PptVisualCreateSpec;
     assets?: Record<string, {
         mime: string;
         width: number;
@@ -349,6 +393,7 @@ export interface PptCreateResult {
     quality?: PptQualityResult;
     generationReport?: PptGenerationReport;
     tableComposition?: Record<string, unknown>;
+    visualComposition?: Record<string, unknown>;
     verification?: PptVerification;
 }
 /** Library template manifest (schemaVersion 1) summary as shown in lists. */
