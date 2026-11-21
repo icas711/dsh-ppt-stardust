@@ -1,6 +1,6 @@
 // Defaults only for newly requested semantic charts; imported chart XML is untouched.
 import {colorContrast} from './deck-scene-quality.mjs'
-export function semanticChartDesign(chart,{accent,background,color,fontFamily,size=18}){
+export function semanticChartDesign(chart,{accent,background,color,fontFamily,size=18,unit,showPercent=false}){
  const out=structuredClone(chart),label={...(fontFamily?{font:fontFamily}:{}),sizePt:size,color}
  // Additional series use deterministic tones of the template accent, not Office blue.
  const tone=i=>{
@@ -24,7 +24,18 @@ export function semanticChartDesign(chart,{accent,background,color,fontFamily,si
  else out.legend={...out.legend,textStyle:{...label,...out.legend.textStyle}}
  if(out.dataLabels===undefined&&out.kind!=='area'&&out.categories.length<=12&&out.series.length<=4){
   out.dataLabels={showValue:true,...(out.kind==='doughnut'?{}:{position:pie?'outEnd':stacked?'ctr':out.kind==='line'?'t':'outEnd'}),...(pie?{showCategory:true,...(out.kind==='pie'?{showLeaderLines:true}:{})}:{}),textStyle:{...label}}
-  if(out.kind==='pie')Object.assign(out.dataLabels,{showValue:false,showPercent:true,numberFormat:'0%',separator:' — '})
+  if(out.kind==='pie'){
+   Object.assign(out.dataLabels,{showValue:true,separator:', '})
+   // Keep both the amount and its unit visible beside the share. Custom point
+   // text avoids applying a currency number format to the percentage as well.
+   const series=out.series[0]
+   if(unit&&series.dataLabels===undefined&&series.pointDataLabels===undefined){
+    const total=series.values.reduce((a,b)=>a+b,0)
+    out.dataLabels={...out.dataLabels,showValue:false,showPercent:false,showCategory:false}
+    series.dataLabels={...out.dataLabels}
+    series.pointDataLabels=series.values.map((value,i)=>({...out.dataLabels,text:`${out.categories[i]}: ${value} ${unit}${showPercent?` (${(value/total*100).toFixed(0)}%)`:''}`}))
+   }
+  }
   if(stacked)for(const series of out.series)if(series.dataLabels===undefined){
    const textColor=colorContrast(color,series.color)>=4.5?color:colorContrast('#FFFFFF',series.color)>colorContrast('#000000',series.color)?'#FFFFFF':'#000000'
    series.dataLabels={...out.dataLabels,textStyle:{...label,color:textColor}}

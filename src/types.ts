@@ -71,7 +71,7 @@ export interface PptVisualCreateSpec {
     | {type:'big_number';sourceRefs:string[];items:Array<{id:string;label:string;value:number;unit:string;detail?:string;sourceRefs?:string[]}>}
     | {type:'image';sourceRefs:string[];assetId:string;alt:string;caption?:string}
     | {type:'table';sourceRefs:string[];headers:string[];rows:Array<Array<string|null>>}
-    | {type:'chart';sourceRefs:string[];kind:'column'|'bar'|'line'|'pie';unit:string;categories:string[];series:Array<{name:string;values:number[]}>;ordered?:boolean;whole?:boolean}
+    | {type:'chart';sourceRefs:string[];kind:'column'|'bar'|'line'|'pie';unit:string;categories:string[];series:Array<{name:string;values:number[]}>;ordered?:boolean;whole?:boolean;showPercent?:boolean}
   }>
 }
 

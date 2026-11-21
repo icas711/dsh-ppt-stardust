@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=12
+export const GENERATION_COMPONENT_VERSION=13
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -354,7 +354,7 @@ function nativeChart(v,b,s){
   if(labelSpace>b.w*.42||n>(v.kind==='bar'?Math.floor(b.h/(size*PT*1.8)):v.kind==='pie'?10:Math.min(12,Math.floor(b.w/(size*PT*3)))))fail('component-capacity','Native chart labels need more space; pie/line charts cannot be paginated')
   if(v.kind!=='bar'&&labels.some(label=>estimateGenerationTextHeight(label,b.w/Math.max(1,n),s.styles.body)>b.h*.30))fail('component-capacity','Category labels are too long for this chart region')
   if(v.series.some(series=>estimateGenerationTextHeight(series.name,b.w,s.styles.body)>b.h*.15)||estimateGenerationTextHeight(v.unit,b.w,s.styles.body)>b.h*.15)fail('component-capacity','Chart legend or unit needs more space')
-  const data=semanticChartDesign({kind:v.kind,title:v.unit,categories:clone(v.categories),series:clone(v.series)},{accent:s.accent,background:s.background,color:s.styles.body.color,fontFamily:s.styles.body.fontFamily,size})
+  const data=semanticChartDesign({kind:v.kind,title:v.unit,categories:clone(v.categories),series:clone(v.series)},{accent:s.accent,background:s.background,color:s.styles.body.color,fontFamily:s.styles.body.fontFamily,size,unit:v.unit,showPercent:v.showPercent===true})
   return [{id:'gen-chart',type:'chart',frame:clone(b),chart:data}]
 }
 function chart(v,b,s){

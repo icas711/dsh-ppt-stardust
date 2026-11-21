@@ -20,7 +20,7 @@ const visuals = [
   visual('chart',{
     kind:{enum:['column','bar','line','pie']},unit:text(128),categories:array(text(256),1,24),
     series:array(object({name:text(256),values:array(number,1,24)}),1,4),
-    ordered:{type:'boolean'},whole:{type:'boolean'}
+    ordered:{type:'boolean'},whole:{type:'boolean'},showPercent:{type:'boolean',description:'Pie only. Add a percentage beside the original amount and unit. Default false.'}
   },['kind','unit','categories','series']),
   visual('table',{headers:array(text(500),1,8),rows:array(array(nullableText,1,8),1,30)}),
   visual('image',{assetId:identifier,alt:text(2000),caption:text(2000)},['assetId','alt'])
@@ -136,6 +136,7 @@ export function validateGenerationSpec(input,{sources,assetIds=[],iconIds=[]}={}
     if(v.type==='chart'){
       if(v.kind==='line'&&v.ordered!==true)error('chart-order',path+'.ordered','Line chart requires explicit category order')
       if(v.kind==='pie'&&v.whole!==true)error('chart-whole',path+'.whole','Pie chart requires explicit parts of one whole')
+      if(v.showPercent!==undefined&&v.kind!=='pie')error('chart-percent',path+'.showPercent','showPercent is only supported on pie charts')
     }
     try{const d=diagram(v);if(d)validateSemanticDiagram(d)}
     catch(e){error('generation-semantic',path,e.message)}

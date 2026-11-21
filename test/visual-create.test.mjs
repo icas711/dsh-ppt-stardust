@@ -22,6 +22,20 @@ const input=()=>({version:1,mode:'factual',allowMoreSlides:true,sources:[{id:'ma
   {id:'requests',title:'Количество заявок',visual:{type:'chart',sourceRefs:['material'],kind:'column',unit:'заявок',categories:['Север','Юг','Восток'],series:[{name:'Заявки',values:[17,9,5]}]}}
 ]})
 const compose=(value=input(),options={})=>composeVisualCreate(value,{title:'Проверка направлений',lang:'ru',template:template(),...options})
+test('ordinary pie always labels amounts and units; percentages require explicit opt-in',()=>{
+ for(const setting of [undefined,false,true]){
+  const visual={type:'chart',kind:'pie',unit:'тыс. ₽',sourceRefs:['material'],whole:true,categories:['Equipment','Licenses'],series:[{name:'Budget',values:[100,60]}],...(setting===undefined?{}:{showPercent:setting})}
+  const value={version:1,mode:'factual',sources:[{id:'material',text:'One whole budget: Equipment 100 and Licenses 60 thousand rubles.'}],slides:[{id:'budget',title:'Budget',visual}]}
+  value.contentHash=visualCreateContentHash(value)
+  const result=compose(value),chart=result.create.slides[0].elements.find(e=>e.type==='chart').chart
+  const text=chart.series[0].pointDataLabels[0].text
+  assert.equal(text,'Equipment: 100 тыс. ₽'+(setting===true?' (63%)':''))
+  const changed=structuredClone(value);changed.slides[0].visual.showPercent=setting!==true
+  assert.throws(()=>compose(changed),/Content hash mismatch/)
+ }
+ const value=input();value.slides=[{id:'wrong',title:'Wrong',visual:{type:'chart',kind:'column',unit:'₽',sourceRefs:['material'],categories:['A'],series:[{name:'Budget',values:[1]}],showPercent:true}}]
+ assert.throws(()=>compose(value),/showPercent is only supported on pie/)
+})
 const strings=slides=>slides.flatMap(s=>s.elements.filter(e=>e.type==='text').flatMap(e=>e.paragraphs.flatMap(p=>p.runs.map(r=>r.text??'')))).join('\n')
 const mixedInput=()=>{
   const value=input()

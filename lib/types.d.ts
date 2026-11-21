@@ -333,6 +333,7 @@ export interface PptVisualCreateSpec {
             }>;
             ordered?: boolean;
             whole?: boolean;
+            showPercent?: boolean;
         };
     }>;
 }
