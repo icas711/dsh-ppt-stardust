@@ -79,14 +79,14 @@ test('pie labels use shares of the actual total in HTML and native PPTX without 
   assert.deepEqual(raw,before);assert.deepEqual(chart.series[0].values,values)
   assert.equal(chart.dataLabels.showValue,false);assert.equal(chart.dataLabels.showPercent,false)
   const svg=renderSceneChartSvg(chart,theme),total=values.reduce((a,b)=>a+b,0)
-  for(const [i,v]of values.entries())assert.ok(svg.includes(chart.categories[i]+': '+v+' тыс. ₽ ('+(v/total*100).toFixed(0)+'%)'))
+  for(const [i,v]of values.entries())assert.ok(svg.includes(chart.categories[i]+': '+v+'\u00a0тыс.\u00a0₽ ('+(v/total*100).toFixed(0)+'%)'))
   slides.push({...diagramToScene({diagram:{version:2,kind:'chart',chart}},style),id:'pie-'+index})
  }
  const built=await buildDeckAsync({title:'Shares',slides,outputDir:dir,lang:'en'}),parts=unzipSync(readFileSync(built.pptxPath))
  for(let i=1;i<=4;i++){
   const xml=strFromU8(parts['ppt/charts/chart'+i+'.xml'])
   assert.match(xml,/<c:showPercent val="0"/);assert.match(xml,/<c:showVal val="0"/)
-  assert.ok(xml.includes('тыс. ₽ ('));assert.ok(!xml.includes(' — '))
+  assert.ok(xml.includes('\u00a0тыс.\u00a0₽ ('));assert.ok(!xml.includes(' — '))
   assert.match(xml,/<c:rich>[\s\S]*?<a:r><a:rPr sz="1800">[\s\S]*?<a:srgbClr val="F5F7FA"\/>/)
  }
  const explicit=semanticChartDesign({kind:'pie',categories:['A','B'],series:[{name:'S',values:[2,6]}],dataLabels:{showCategory:true,showValue:true,separator:': '}},style)
@@ -96,6 +96,6 @@ test('pie labels use shares of the actual total in HTML and native PPTX without 
  for(const extra of [{},{showPercent:false}]){
   const chart=semanticChartDesign({kind:'pie',categories:['A','B'],series:[{name:'S',values:[2,6]}]},{...style,unit:'₽',...extra})
   const svg=renderSceneChartSvg(chart,theme)
-  assert.ok(svg.includes('A: 2 ₽'));assert.doesNotMatch(svg,/>[^<]*%[^<]*<\/text>/)
+  assert.ok(svg.includes('A: 2\u00a0₽'));assert.doesNotMatch(svg,/>[^<]*%[^<]*<\/text>/)
  }
 })

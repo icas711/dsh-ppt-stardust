@@ -29,7 +29,7 @@ test('ordinary pie always labels amounts and units; percentages require explicit
   value.contentHash=visualCreateContentHash(value)
   const result=compose(value),chart=result.create.slides[0].elements.find(e=>e.type==='chart').chart
   const text=chart.series[0].pointDataLabels[0].text
-  assert.equal(text,'Equipment: 100 тыс. ₽'+(setting===true?' (63%)':''))
+  assert.equal(text,'Equipment: 100\u00a0тыс.\u00a0₽'+(setting===true?' (63%)':''))
   const changed=structuredClone(value);changed.slides[0].visual.showPercent=setting!==true
   assert.throws(()=>compose(changed),/Content hash mismatch/)
  }

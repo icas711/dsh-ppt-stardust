@@ -33,7 +33,8 @@ export function semanticChartDesign(chart,{accent,background,color,fontFamily,si
     const total=series.values.reduce((a,b)=>a+b,0)
     out.dataLabels={...out.dataLabels,showValue:false,showPercent:false,showCategory:false}
     series.dataLabels={...out.dataLabels}
-    series.pointDataLabels=series.values.map((value,i)=>({...out.dataLabels,text:`${out.categories[i]}: ${value} ${unit}${showPercent?` (${(value/total*100).toFixed(0)}%)`:''}`}))
+    const joinedUnit=unit.replace(/[ \t\r\n\u202f]+/g,'\u00a0')
+    series.pointDataLabels=series.values.map((value,i)=>({...out.dataLabels,text:`${out.categories[i]}: ${value}\u00a0${joinedUnit}${showPercent?` (${(value/total*100).toFixed(0)}%)`:''}`}))
    }
   }
   if(stacked)for(const series of out.series)if(series.dataLabels===undefined){
