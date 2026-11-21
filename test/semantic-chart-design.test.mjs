@@ -12,6 +12,49 @@ import {generationEvaluationCases} from './fixtures/generation-evaluation.mjs'
 import {semanticChartDesign} from '../skills/dsh-ppt/scripts/deck-chart-design.mjs'
 import {renderSceneChartSvg} from '../skills/dsh-ppt/scripts/deck-scene-chart-html.mjs'
 const data={kind:'column',categories:['A','B'],series:[{name:'Requests',values:[17,9]}]}
+test('compact chartValues updates preserve charts, reject invalid changes atomically and support undo',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'chart-values-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const style={accent:'#79C6FF',background:'#121826',color:'#F5F7FA',fontFamily:'Arial'}
+ const pie=semanticChartDesign({kind:'pie',categories:['Equipment','Licenses','Training'],series:[{name:'Budget',values:[100,60,40]}]},{...style,unit:'тыс. ₽',showPercent:true})
+ const column={kind:'column',categories:['A','B'],series:[{name:'First',values:[1,2]},{name:'Second',values:[3,4]}]}
+ const slides=[pie,column].map((chart,i)=>({...diagramToScene({title:'Budget',diagram:{version:2,kind:'chart',chart}},style),id:'chart-'+i}))
+ const made=await buildDeckAsync({title:'Compact edits',slides,outputDir:dir}),before=readDeckProject({deckPath:made.jsonPath}).manifest
+ const files=[made.jsonPath,made.pptxPath,made.htmlPath],bytes=files.map(p=>readFileSync(p))
+ const invalid=[
+  {id:'diagram-title',changes:{chartValues:[[1,2,3]]}},
+  {id:'diagram-chart',changes:{chartValues:null}},
+  {id:'diagram-chart',changes:{chartValues:[[1,2,3],[4,5,6]]}},
+  {id:'diagram-chart',changes:{chartValues:[1,2,3]}},
+  {id:'diagram-chart',changes:{chartValues:[[1,2]]}},
+  {id:'diagram-chart',changes:{chartValues:[[-1,60,40]]}},
+  {id:'diagram-chart',changes:{chartValues:[[0,0,0]]}},
+  {id:'diagram-chart',changes:{chartValues:[['80',60,60]]}},
+  {id:'diagram-chart',changes:{chartValues:[[80,60,60]],chart:pie}},
+ ]
+ for(const update of invalid){
+  await assert.rejects(editDeck({deckPath:made.jsonPath,expectedRevision:0,edits:[{slide:1,patch:{elementUpdates:[update]}}]}))
+  files.forEach((p,i)=>assert.deepEqual(readFileSync(p),bytes[i]))
+ }
+ const args={deckPath:made.jsonPath,expectedRevision:0,edits:[
+  {slide:1,patch:{elementUpdates:[{id:'diagram-chart',changes:{chartValues:[[80,60,60]]}}]}},
+  {slide:2,patch:{elementUpdates:[{id:'diagram-chart',changes:{chartValues:[[5,6],[7,8]]}}]}},
+ ]}
+ const edited=await editDeck(JSON.parse(JSON.stringify(args))),after=readDeckProject({deckPath:made.jsonPath}).manifest
+ assert.equal(edited.revision,1)
+ for(const [i,slide]of after.slides.entries()){
+  assert.deepEqual(slide.elements.find(e=>e.id==='diagram-title'),before.slides[i].elements.find(e=>e.id==='diagram-title'))
+  const chart=slide.elements.find(e=>e.type==='chart'),old=before.slides[i].elements.find(e=>e.type==='chart')
+  assert.deepEqual(chart.frame,old.frame);assert.equal(chart.chart.kind,old.chart.kind)
+  assert.deepEqual(chart.chart.categories,old.chart.categories);assert.equal(chart.chart.chartAreaFill,old.chart.chartAreaFill)
+  assert.ok(!Object.hasOwn(chart,'chartValues'))
+ }
+ const chart=after.slides[0].elements.find(e=>e.type==='chart').chart
+ assert.deepEqual(chart.amountLabels,pie.amountLabels);assert.equal(chart.series[0].pointDataLabels[0].text,'Equipment: 80\u00a0тыс.\u00a0₽ (40%)')
+ assert.deepEqual(after.slides[1].elements.find(e=>e.type==='chart').chart.series.map(s=>s.values),[[5,6],[7,8]])
+ const parts=unzipSync(readFileSync(edited.pptxPath));assert.ok(strFromU8(parts['ppt/charts/chart1.xml']).includes('80\u00a0тыс.\u00a0₽ (40%)'))
+ const noop=await editDeck({...args,expectedRevision:1});assert.equal(noop.changed,false);assert.equal(noop.revision,1)
+ await undoDeck({deckPath:made.jsonPath,expectedRevision:1});assert.deepEqual(readDeckProject({deckPath:made.jsonPath}).manifest.slides,before.slides)
+})
 test('editing bound pie values refreshes amounts and optional percentages; undo restores original chart',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'pie-edit-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
  const style={accent:'#79C6FF',background:'#121826',color:'#F5F7FA',fontFamily:'Arial',unit:'тыс. ₽'}

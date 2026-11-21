@@ -890,8 +890,16 @@ export async function editDeck(options = {}) {
           updates.set(update.id,update.changes)
         }
         patch.elements=next.slides[index].elements.map(e=>{
-          const changes=updates.get(e.id)
-          return changes?{...e,...changes,...(changes.textStyle?{textStyle:mergeSceneTextStyles(e.textStyle,changes.textStyle)}:{})}:e
+          const requested=updates.get(e.id)
+          if(!requested)return e
+          const {chartValues,...changes}=requested
+          if(Object.hasOwn(requested,'chartValues')){
+            if(e.type!=='chart')fail('chartValues requires an existing chart object: '+e.id)
+            if(Object.hasOwn(requested,'chart'))fail('Use either chartValues or a complete chart, not both: '+e.id)
+            if(!Array.isArray(chartValues)||chartValues.length!==e.chart.series.length||chartValues.some(row=>!Array.isArray(row)))fail('chartValues requires one numeric values array per existing series: '+e.id)
+            changes.chart={...clone(e.chart),series:e.chart.series.map((series,i)=>({...clone(series),values:[...chartValues[i]]}))}
+          }
+          return {...e,...changes,...(changes.textStyle?{textStyle:mergeSceneTextStyles(e.textStyle,changes.textStyle)}:{})}
         })
       }
       next.slides[index] = normalizeSceneSlide({...next.slides[index],...patch}, {assets:next.assets,path:`slides[${index}] (slide ${index+1})`})
