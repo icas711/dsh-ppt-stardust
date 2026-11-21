@@ -183,6 +183,46 @@ test('C repairs a register outline before spec, then paginates every row exactly
   assert.equal(valid.status,'composed');assert.equal(valid.corrections,0)
 })
 
+test('B repairs split logical tables before composition and keeps the shared correction budget',async()=>{
+  const c=compactCases().find(c=>c.id==='overload'),loaded=task('overload--portrait'),input=specification(c)
+  const split={...structuredClone(input),slides:[0,8,16,24].map((start,i)=>({...structuredClone(input.slides[0]),id:'part-'+i,visual:{...structuredClone(input.slides[0].visual),rows:c.rubric.visual.rows.slice(start,start+8)}}))}
+  const first=await processCompactRecording({mode:'B',...loaded,recording:{version:1,responses:[]}})
+  assert.equal(first.pending.planningConstraints.maxPlannedSlides,1)
+  assert.ok(first.pending.instructions.includes('keep the full register in one logical table'))
+  const rejected=await processCompactRecording({mode:'B',...loaded,recording:{version:1,responses:[response(split)]}})
+  assert.equal(rejected.pending.stage,'spec');assert.equal(rejected.pending.kind,'repair')
+  assert.ok(rejected.pending.diagnostics.some(d=>d.code==='spec-feasibility'))
+  // A whole-plan violation needs a full response so the model can merge slide IDs.
+  assert.equal(rejected.pending.slideIds,undefined)
+  let exported
+  const fixed=await processCompactRecording({mode:'B',...loaded,recording:{version:1,responses:[response(split),response(input,'spec','repair')]},exportDeck:async create=>{exported=create;return {ok:true}}})
+  assert.equal(fixed.status,'exported');assert.equal(fixed.calls,2);assert.equal(fixed.corrections,1)
+  assert.deepEqual(fixed.final,input);assert.ok(exported.slides.length>1)
+  const rows=exported.slides.flatMap(slide=>{
+    const t=slide.elements.find(e=>e.type==='table').table
+    return Array.from({length:t.rows.length-1},(_,row)=>[0,1].map(col=>t.cells.find(c=>c.row===row+1&&c.col===col).paragraphs.flatMap(p=>p.runs.map(r=>r.text??'')).join('')))
+  })
+  assert.deepEqual(rows,c.rubric.visual.rows)
+  const exhausted=await processCompactRecording({mode:'B',...loaded,recording:{version:1,responses:[response(split),response(split,'spec','repair'),response(split,'spec','repair')]}})
+  assert.equal(exhausted.status,'budget-exhausted');assert.equal(exhausted.corrections,2);assert.equal(exhausted.calls,3)
+})
+
+test('B and C spec enforce caller purpose and representation with full-plan repairs',async()=>{
+  const c=compactCases().find(c=>c.id==='overload'),loaded=task('overload--portrait'),input=specification(c)
+  const scenario={version:1,slides:[{id:'slide-1',purpose:'content',title:c.title,sourceRefs:['material']}]}
+  for(const mode of ['B','C'])for(const kind of ['purpose','type']){
+    const bad=structuredClone(input)
+    if(kind==='purpose')bad.slides[0].purpose='cover'
+    else bad.slides[0].visual={type:'cards',sourceRefs:['material'],items:[{id:'a',label:'Проекты'},{id:'b',label:'Статусы'}]}
+    const prefix=mode==='C'?[response(scenario,'scenario')]:[]
+    const rejected=await processCompactRecording({mode,...loaded,recording:{version:1,responses:[...prefix,response(bad)]}})
+    assert.ok(rejected.pending.diagnostics.some(d=>d.code==='spec-feasibility'))
+    assert.equal(rejected.pending.slideIds,undefined)
+    const fixed=await processCompactRecording({mode,...loaded,recording:{version:1,responses:[...prefix,response(bad),response(input,'spec','repair')]}})
+    assert.equal(fixed.status,'composed');assert.equal(fixed.corrections,1)
+  }
+})
+
 test('manual C emits scenario/spec and exact repair prompts with a shared budget, preserving evidence',async()=>{
   const id='pilot-1-chart--dark-C',c=compactCases().find(c=>c.id==='chart')
   const first=await advanceCompactEvaluation(kitDir,id)

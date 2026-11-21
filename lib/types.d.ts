@@ -450,6 +450,14 @@ export interface PptCreateResult {
     jsonPath: string;
     pdfPath?: string;
     pdfWarning?: string;
+    pdfRender?: {
+        sourceSha256: string;
+        pdfSha256: string;
+        backend?: string;
+        rendererVersion?: string;
+        missingFonts: string[];
+        visual: 'not-verified';
+    };
     internalProject?: boolean;
     deckId?: string;
     revision?: number;

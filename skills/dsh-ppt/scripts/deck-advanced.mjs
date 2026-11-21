@@ -613,9 +613,16 @@ async function finishDelivery(manifest, paths, signal, render = renderDeck) {
       const current = JSON.parse(readFileSync(paths.json, 'utf8'))
       if (current.revision !== manifest.revision || hash(readFileSync(paths.pptx)) !== rendered.sourceSha256) fail('Проект изменён во время экспорта PDF; повторите экспорт')
       const pdf = paths.pptx.slice(0, -5) + '.pdf'
-      commitDeckArtifacts([{ path: pdf, data: readFileSync(rendered.pdfPath) }])
+      const pdfBytes = readFileSync(rendered.pdfPath)
+      commitDeckArtifacts([{ path: pdf, data: pdfBytes }])
       value.pdfPath = pdf
       value.files.pdf = pdf
+      // Keep source/output identity and engine metadata in tool reports without
+      // exposing cache paths or claiming that a successful conversion is visual QA.
+      value.pdfRender = { sourceSha256: rendered.sourceSha256, pdfSha256: hash(pdfBytes),
+        ...(rendered.backend ? { backend: rendered.backend } : {}),
+        ...(rendered.rendererVersion ? { rendererVersion: rendered.rendererVersion } : {}),
+        missingFonts: rendered.missingFonts ?? [], visual: 'not-verified' }
     })
   } catch (error) {
     abort(signal)
