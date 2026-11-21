@@ -17,9 +17,11 @@
 
 ## Features
 
-- Generate HTML slides, editable PPTX and a project bundle.
+- Generate HTML slides, editable PPTX and PDF when a renderer is available. The editable project JSON remains internal by default.
 - Optionally edit text, images and slide order with undo.
 - Choose traceable data, live scenarios, AI review or rehearsal when needed.
+
+The ru.36 fork supports ordinary content-only `ppt_create.visualSpec` with eight visual types on an agreed schema 3 template. Server examples cover mixed decks, portrait A4, original PNG/JPEG assets, column/bar/line/pie and two-series column/line charts, plus title edits, pie label refresh and undo. Numeric-only edits use `elementUpdates:[{id,changes:{chartValues:[[80,60,60]]}}]` with the latest project path/revision. Pie labels retain original amounts and units; percentages are optional through `visual.showPercent:true`. Validation is scoped to the recorded cases, without a universal template guarantee or an A/B/C winner. See the [ordinary workflow reference](skills/dsh-ppt/references/visual-create.md) and [validation record](docs/FEATURE-PLAN-COMPACT-GENERATION-2026-11-20.md).
 
 <details>
 <summary>See a workbench example</summary>

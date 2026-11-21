@@ -55,6 +55,8 @@ By default, the render output directory is created next to the PPTX file; passin
 
 ## Safe scene editing and recovery
 
+Numeric chart edits on ru.36+: use `elementUpdates:[{id:"known-chart-id",changes:{chartValues:[[80,60,60]]}}]` with one numeric array for every existing series. The engine retains the current chart, categories, styles and amount-label binding, changing only values; bound labels refresh automatically. Do not retype a complete chart for numeric-only changes or combine `chartValues` with `chart`. Use the latest revision and known object ID; read the target slide only if state is missing/stale. See [ordinary visual creation and numeric editing](visual-create.md).
+
 Use the latest returned revision and known object data. If missing/stale, read `ppt_check {deckPath, slide:5}` for the complete `selectedSlide`. Prefer `ppt_edit {deckPath, expectedRevision, edits:[{slide:5, patch:{elementUpdates:[{id:"existing-id", changes:{paragraphs:[{runs:[{text:"Updated",style:{color:"#FFFFFF"}}]}]}}]}}]}`. This updates existing objects by ID, preserving other objects and frames. Object fields are replaced when supplied, except `textStyle`, which merges; preserve unchanged paragraphs/runs when editing text. IDs and types cannot change in this mode.
 
 `patch.elements` fully replaces the entire array, including decor; every element must be complete. Omitted objects are deleted. `designLayout` does not reinsert decor during editing. Do not combine `elements` with `elementUpdates`.
