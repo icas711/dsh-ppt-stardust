@@ -66,6 +66,15 @@ test('table creation rejects malformed data, unknown fields and sources, synthet
   assert.ok(compose(demo).create.slides.every(s=>s.elements.some(e=>e.id==='gen-disclosure')))
 })
 
+test('table creation identifies an omitted numeric version without changing the request or suggesting stringification',()=>{
+  const value=input();delete value.version
+  const before=structuredClone(value)
+  assert.throws(()=>compose(value),e=>e.code==='table-spec'&&e.message.includes('Missing required field tableSpec.version')&&e.message.includes('"version":1')&&e.diagnostics[0].path==='tableSpec.version')
+  assert.deepEqual(value,before)
+  for(const version of ['1',null,2]) assert.throws(()=>compose({...value,version}),/version must be the number 1/)
+  assert.throws(()=>compose(JSON.stringify({...value,version:1})),/JSON object, not a JSON string/)
+})
+
 test('automatic table reference selection avoids unnecessary row fragmentation',()=>{
   const t=template(),wide=structuredClone(t.manifest.style.layouts.find(l=>l.purpose==='content'))
   wide.id='wide-reference'
