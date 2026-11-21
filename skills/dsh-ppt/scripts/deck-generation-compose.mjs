@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=8
+export const GENERATION_COMPONENT_VERSION=9
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -198,7 +198,7 @@ function connected(v,b,s,vertical,offset){
       const x=b.x+i*(w+GAP),center=x+w/2,node=frame(center-gutter/2,b.y,gutter,gutter)
       if(i<n-1)out.push(line('gen-link-'+i,center+gutter/2,b.y+gutter/2,center+w+GAP-gutter/2,b.y+gutter/2,s.accent,v.type==='process'))
       out.push(shape('gen-node-'+i,node,s.accent,'ellipse'))
-      stack(out,'gen-item-'+i,[{value:v.type==='timeline'?item.date:String(offset+i+1),style:styled(s.styles.body,{bold:true,color:s.accent})},{value:item.label,style:styled(s.styles.body,{bold:true})},{value:item.detail,style:s.styles.body}],frame(x,b.y+gutter+GAP,w,b.h-gutter-GAP))
+      stack(out,'gen-item-'+i,[{value:v.type==='timeline'?item.date:String(offset+i+1),style:styled(s.styles.body,{bold:true,color:s.accent})},{value:item.label,style:styled(s.styles.body,{bold:true})},{value:item.detail,style:s.styles.body}].map(part=>({...part,align:'center'})),frame(x,b.y+gutter+GAP,w,b.h-gutter-GAP))
     })
   }
   return out
