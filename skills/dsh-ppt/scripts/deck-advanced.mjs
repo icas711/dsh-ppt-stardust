@@ -1,4 +1,5 @@
 import {transformedBounds} from './deck-geometry.mjs'
+import {preserveSignedChartFills} from './deck-chart-export.mjs'
 import {pptxFontName} from './deck-pptx.mjs'
 import {validateDeckPlan,generationFingerprint} from './deck-generation.mjs'
 import {normalizeSceneTemplate,remapSceneLayout} from './deck-template-scene.mjs'
@@ -485,7 +486,7 @@ async function exportPptx(manifest, theme, language, signal) {
         lib.setShapeZIndex(chart,at)
       }
     }
-    return embedPptxFonts(Buffer.from(await lib.savePresentation(presentation)),manifest)
+    return embedPptxFonts(preserveSignedChartFills(Buffer.from(await lib.savePresentation(presentation))),manifest)
   }
   const hasBackgrounds = (Array.isArray(manifest.style?.backgrounds) && manifest.style.backgrounds.some(bg => manifest.assets?.[bg.assetId]?.data)) || Boolean(manifest.style?.layouts?.length)
   if (!manifest.brand?.logoAssetId && !manifest.brand?.footer && !hasBackgrounds && !manifest.slides.some(s => s.image || s.chart)) return embedPptxFonts(base, manifest)

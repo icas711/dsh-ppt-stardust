@@ -8,7 +8,32 @@ import {diagramToScene} from '../skills/dsh-ppt/scripts/deck-diagrams.mjs'
 import {buildDeckAsync} from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 import {templateCreateOptions} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {generationEvaluationCases} from './fixtures/generation-evaluation.mjs'
+import {semanticChartDesign} from '../skills/dsh-ppt/scripts/deck-chart-design.mjs'
 const data={kind:'column',categories:['A','B'],series:[{name:'Requests',values:[17,9]}]}
+test('signed bars keep category labels outside the plot and negative point fills in native PPTX',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'signed-chart-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const style={accent:'#79C6FF',background:'#121826',color:'#F5F7FA',fontFamily:'Arial'}
+ const slides=['bar','column'].map(kind=>{
+  const input={kind,categories:['Negative','Zero','Positive'],series:[{name:'Deviation',values:[-12,0,20]}]},before=structuredClone(input)
+  const chart=semanticChartDesign(input,style)
+  assert.deepEqual(input,before)
+  assert.equal(chart.categoryAxisTickLabelPos,'low')
+  assert.equal(chart.series[0].color,'#79C6FF')
+  const scene=diagramToScene({diagram:{version:2,kind:'chart',chart}},style)
+  return {...scene,id:kind,backgroundColor:style.background}
+ })
+ const built=await buildDeckAsync({title:'Signed chart',slides,outputDir:dir,lang:'en'}),parts=unzipSync(readFileSync(built.pptxPath))
+ for(let i=1;i<=2;i++){
+  const xml=strFromU8(parts['ppt/charts/chart'+i+'.xml'])
+  assert.match(xml,/<c:tickLblPos val="low"/)
+  assert.match(xml,/<c:invertIfNegative val="0"\/>/)
+  assert.ok(xml.includes('79C6FF'))
+  assert.match(xml,/<c:v>-12<\/c:v>/);assert.match(xml,/<c:v>0<\/c:v>/)
+ }
+ const explicit=semanticChartDesign({kind:'bar',categories:['A','B'],categoryAxisTickLabelPos:'high',series:[{name:'X',values:[-1,2],pointColors:['#FF0000','#00FF00']}]},style)
+ assert.equal(explicit.categoryAxisTickLabelPos,'high');assert.deepEqual(explicit.series[0].pointColors,['#FF0000','#00FF00'])
+ assert.equal(semanticChartDesign(data,style).series[0].pointColors,undefined)
+})
 test('semantic chart inherits template style, exposes metric and values, and retains original source',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'semantic-chart-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
  const fixture=generationEvaluationCases().find(c=>c.id==='categories'),before=JSON.stringify(fixture.referencePlan)

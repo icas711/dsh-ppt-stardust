@@ -10,6 +10,10 @@ export function semanticChartDesign(chart,{accent,background,color,fontFamily,si
  }
  out.series=out.series.map((s,i)=>({...s,color:s.color??tone(i)}))
  const pie=['pie','doughnut'].includes(out.kind),stacked=['stacked','percentStacked'].includes(out.grouping)
+ // Keep signed bars clear of category labels at the zero axis.
+ if(['bar','column'].includes(out.kind)&&out.series.some(s=>s.values.some(v=>v<0))){
+  if(out.categoryAxisTickLabelPos===undefined)out.categoryAxisTickLabelPos='low'
+ }
  if(pie&&chart.series[0].color===undefined&&out.series[0].pointColors===undefined&&out.varyColors!==false)out.series[0].pointColors=out.categories.map((_,i)=>tone(i))
  if(out.title===undefined&&out.series.length===1)out.title=out.series[0].name
  out.titleStyle={...label,bold:true,...out.titleStyle}
