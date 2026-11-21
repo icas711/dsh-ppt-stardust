@@ -1,4 +1,5 @@
 // Pure structured objects shared by server and browser.
+import {refreshAmountLabels} from './deck-chart-labels.mjs'
 function fail(code,path,message) { const e=new Error(`dsh-ppt: ${code} at ${path}: ${message}`); e.code=code;e.path=path;throw e }
 const object=(v,p,keys)=>{if(!v||typeof v!=='object'||Array.isArray(v))fail('invalid-object',p,'Expected object');for(const k of Object.keys(v))if(!keys.includes(k))fail('unknown-field',p+'.'+k,k)}
 const number=(v,p,min,max)=>{if(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max)fail('invalid-number',p,'Out of range');return v}
@@ -22,7 +23,7 @@ function labels(v,p){
  return out
 }
 export function normalizeSceneChart(v,p='chart') {
- object(v,p,['kind','categories','series','title','titleStyle','chartAreaFill','plotAreaFill','legend','dataLabels','valueAxis','categoryAxisLabelStyle','valueAxisLabelStyle','grouping','holeSizePct','firstSliceAngleDeg','valueAxisMajorGridlines','valueAxisMinorGridlines','categoryAxisOrientation','valueAxisOrientation','valueAxisCrosses','varyColors','dispBlanksAs','language','plotAreaLayout','gapWidthPct','overlapPct','categoryAxisHidden','valueAxisHidden','valueAxisMajorTickMark','valueAxisMinorTickMark','valueAxisTickLabelPos','categoryAxisMajorTickMark','categoryAxisMinorTickMark','categoryAxisTickLabelPos','categoryAxisLabelAlign','valueAxisCrossBetween'])
+ object(v,p,['kind','categories','series','title','titleStyle','chartAreaFill','plotAreaFill','legend','dataLabels','valueAxis','categoryAxisLabelStyle','valueAxisLabelStyle','grouping','holeSizePct','firstSliceAngleDeg','valueAxisMajorGridlines','valueAxisMinorGridlines','categoryAxisOrientation','valueAxisOrientation','valueAxisCrosses','varyColors','dispBlanksAs','language','plotAreaLayout','gapWidthPct','overlapPct','categoryAxisHidden','valueAxisHidden','valueAxisMajorTickMark','valueAxisMinorTickMark','valueAxisTickLabelPos','categoryAxisMajorTickMark','categoryAxisMinorTickMark','categoryAxisTickLabelPos','categoryAxisLabelAlign','valueAxisCrossBetween','amountLabels'])
  const out={kind:choice(v.kind,p+'.kind',SCENE_CHART_KINDS)}
  if(!Array.isArray(v.categories)||!v.categories.length||v.categories.length>256)fail('chart-categories',p+'.categories','Expected 1–256 categories')
  out.categories=Array.from(v.categories,(s,i)=>string(s,`${p}.categories[${i}]`))
@@ -47,6 +48,15 @@ export function normalizeSceneChart(v,p='chart') {
  for(const k of ['language'])if(v[k]!==undefined)out[k]=string(v[k],p+'.'+k)
  for(const [k,values]of Object.entries({dispBlanksAs:['gap','zero','span'],valueAxisMajorTickMark:['cross','in','out','none'],valueAxisMinorTickMark:['cross','in','out','none'],categoryAxisMajorTickMark:['cross','in','out','none'],categoryAxisMinorTickMark:['cross','in','out','none'],categoryAxisTickLabelPos:['high','low','nextTo','none'],valueAxisTickLabelPos:['high','low','nextTo','none'],categoryAxisLabelAlign:['ctr','l','r'],valueAxisCrossBetween:['between','midCat']}))if(v[k]!==undefined)out[k]=choice(v[k],p+'.'+k,values)
  if(v.plotAreaLayout!==undefined){object(v.plotAreaLayout,p+'.plotAreaLayout',['x','y','w','h','target']);out.plotAreaLayout={};for(const k of ['x','y','w','h'])out.plotAreaLayout[k]=number(v.plotAreaLayout[k],p+'.plotAreaLayout.'+k,k==='x'||k==='y'?-1:0,1);if(v.plotAreaLayout.target!==undefined)out.plotAreaLayout.target=choice(v.plotAreaLayout.target,p+'.plotAreaLayout.target',['inner','outer'])}
+ if(v.amountLabels!==undefined){
+  object(v.amountLabels,p+'.amountLabels',['unit','showPercent'])
+  if(out.kind!=='pie')fail('chart-amount-labels',p+'.amountLabels','Amount label binding requires pie')
+  const unit=string(v.amountLabels.unit,p+'.amountLabels.unit')
+  if(!unit.trim()||unit.length>128)fail('chart-amount-labels',p+'.amountLabels.unit','Expected a non-empty unit up to 128 characters')
+  if(v.amountLabels.showPercent!==undefined&&typeof v.amountLabels.showPercent!=='boolean')fail('invalid-boolean',p+'.amountLabels.showPercent','Expected boolean')
+  out.amountLabels={unit,showPercent:v.amountLabels.showPercent??false}
+  refreshAmountLabels(out)
+ }
  return out
 }
 export function normalizeSceneTable(v,p,normalizeText) {

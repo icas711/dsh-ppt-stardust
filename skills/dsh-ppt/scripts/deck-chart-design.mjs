@@ -1,5 +1,6 @@
 // Defaults only for newly requested semantic charts; imported chart XML is untouched.
 import {colorContrast} from './deck-scene-quality.mjs'
+import {refreshAmountLabels} from './deck-chart-labels.mjs'
 export function semanticChartDesign(chart,{accent,background,color,fontFamily,size=18,unit,showPercent=false}){
  const out=structuredClone(chart),label={...(fontFamily?{font:fontFamily}:{}),sizePt:size,color}
  // Additional series use deterministic tones of the template accent, not Office blue.
@@ -30,11 +31,9 @@ export function semanticChartDesign(chart,{accent,background,color,fontFamily,si
    // text avoids applying a currency number format to the percentage as well.
    const series=out.series[0]
    if(unit&&series.dataLabels===undefined&&series.pointDataLabels===undefined){
-    const total=series.values.reduce((a,b)=>a+b,0)
     out.dataLabels={...out.dataLabels,showValue:false,showPercent:false,showCategory:false}
-    series.dataLabels={...out.dataLabels}
-    const joinedUnit=unit.replace(/[ \t\r\n\u202f]+/g,'\u00a0')
-    series.pointDataLabels=series.values.map((value,i)=>({...out.dataLabels,text:`${out.categories[i]}: ${value}\u00a0${joinedUnit}${showPercent?` (${(value/total*100).toFixed(0)}%)`:''}`}))
+    out.amountLabels={unit,showPercent}
+    refreshAmountLabels(out)
    }
   }
   if(stacked)for(const series of out.series)if(series.dataLabels===undefined){

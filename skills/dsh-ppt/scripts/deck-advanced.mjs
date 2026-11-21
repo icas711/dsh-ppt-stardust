@@ -478,7 +478,8 @@ async function exportPptx(manifest, theme, language, signal) {
         if (!marker) fail('Missing native chart placeholder '+e.id)
         const at = lib.getShapeZIndex(marker), placement = scenePptxPlacement(e)
         lib.removeShape(marker)
-        const spec=e.chart.legend?.position==='none'?{...e.chart,legend:undefined}:e.chart
+        const {amountLabels,...nativeChart}=e.chart
+        const spec=nativeChart.legend?.position==='none'?{...nativeChart,legend:undefined}:nativeChart
         const chart = lib.addSlideChart(slide,{name:e.name ?? e.id,x:placement.x,y:placement.y,w:placement.w,h:placement.h,spec})
         lib.setShapeRotation(chart,placement.rotation/60000)
         if(e.hidden)lib.setShapeHidden(chart,true)

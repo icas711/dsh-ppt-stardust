@@ -5,12 +5,44 @@ import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {unzipSync,strFromU8} from 'fflate'
 import {diagramToScene} from '../skills/dsh-ppt/scripts/deck-diagrams.mjs'
-import {buildDeckAsync} from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
+import {buildDeckAsync,editDeck,undoDeck,readDeckProject} from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
+import {normalizeSceneChart} from '../skills/dsh-ppt/scripts/deck-structured.mjs'
 import {templateCreateOptions} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {generationEvaluationCases} from './fixtures/generation-evaluation.mjs'
 import {semanticChartDesign} from '../skills/dsh-ppt/scripts/deck-chart-design.mjs'
 import {renderSceneChartSvg} from '../skills/dsh-ppt/scripts/deck-scene-chart-html.mjs'
 const data={kind:'column',categories:['A','B'],series:[{name:'Requests',values:[17,9]}]}
+test('editing bound pie values refreshes amounts and optional percentages; undo restores original chart',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'pie-edit-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const style={accent:'#79C6FF',background:'#121826',color:'#F5F7FA',fontFamily:'Arial',unit:'тыс. ₽'}
+ const slides=[false,true].map((showPercent,i)=>({...diagramToScene({diagram:{version:2,kind:'chart',chart:semanticChartDesign({kind:'pie',categories:['Equipment','Licenses','Training'],series:[{name:'Budget',values:[100,60,40]}]},{...style,showPercent})}},style),id:'budget-'+i}))
+ const made=await buildDeckAsync({title:'Editable amounts',slides,outputDir:dir}),before=readDeckProject({deckPath:made.jsonPath}).manifest
+ const edits=before.slides.map((slide,i)=>{
+  const element=slide.elements.find(e=>e.type==='chart'),chart=structuredClone(element.chart)
+  chart.series[0].values=[80,60,60]
+  return {slide:i+1,patch:{elementUpdates:[{id:element.id,changes:{chart}}]}}
+ })
+ const edited=await editDeck({deckPath:made.jsonPath,expectedRevision:made.revision,edits}),after=readDeckProject({deckPath:made.jsonPath}).manifest,parts=unzipSync(readFileSync(edited.pptxPath))
+ for(const [i,slide]of after.slides.entries()){
+  const element=slide.elements.find(e=>e.type==='chart'),old=before.slides[i].elements.find(e=>e.type==='chart')
+  assert.deepEqual(element.frame,old.frame);assert.deepEqual(element.chart.series[0].values,[80,60,60])
+  const expected=['Equipment: 80\u00a0тыс.\u00a0₽','Licenses: 60\u00a0тыс.\u00a0₽','Training: 60\u00a0тыс.\u00a0₽'].map((s,j)=>s+(i?' ('+[40,30,30][j]+'%)':''))
+  assert.deepEqual(element.chart.series[0].pointDataLabels.map(l=>l.text),expected)
+  const xml=strFromU8(parts['ppt/charts/chart'+(i+1)+'.xml'])
+  for(const text of expected)assert.ok(xml.includes(text))
+  assert.match(xml,/<c:v>80<\/c:v>/)
+  const book=unzipSync(parts['ppt/embeddings/Microsoft_Excel_Worksheet'+(i+1)+'.xlsx'])
+  assert.ok(strFromU8(book['xl/worksheets/sheet1.xml']).includes('<v>80</v>'))
+  const normalized=normalizeSceneChart(element.chart);assert.deepEqual(normalized,element.chart)
+ }
+ const restored=await undoDeck({deckPath:made.jsonPath,expectedRevision:edited.revision})
+ assert.equal(restored.revision,2);assert.deepEqual(readDeckProject({deckPath:made.jsonPath}).manifest.slides,before.slides)
+ const custom={kind:'pie',categories:['A','B'],series:[{name:'Custom',values:[2,6],dataLabels:{showValue:false},pointDataLabels:[{text:'Manual A'},{text:'Manual B'}]}]}
+ assert.equal(normalizeSceneChart(custom).series[0].pointDataLabels[0].text,'Manual A')
+ assert.throws(()=>normalizeSceneChart({...custom,amountLabels:{unit:'',showPercent:true}}),/non-empty unit/)
+ assert.throws(()=>normalizeSceneChart({...custom,amountLabels:{unit:'₽',showPercent:'yes'}}),/Expected boolean/)
+ assert.throws(()=>normalizeSceneChart({...custom,kind:'column',amountLabels:{unit:'₽'}}),/requires pie/)
+})
 test('signed bars keep category labels outside the plot and negative point fills in native PPTX',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'signed-chart-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
  const style={accent:'#79C6FF',background:'#121826',color:'#F5F7FA',fontFamily:'Arial'}
