@@ -24,6 +24,7 @@ export function semanticChartDesign(chart,{accent,background,color,fontFamily,si
  else out.legend={...out.legend,textStyle:{...label,...out.legend.textStyle}}
  if(out.dataLabels===undefined&&out.kind!=='area'&&out.categories.length<=12&&out.series.length<=4){
   out.dataLabels={showValue:true,...(out.kind==='doughnut'?{}:{position:pie?'outEnd':stacked?'ctr':out.kind==='line'?'t':'outEnd'}),...(pie?{showCategory:true,...(out.kind==='pie'?{showLeaderLines:true}:{})}:{}),textStyle:{...label}}
+  if(out.kind==='pie')Object.assign(out.dataLabels,{showValue:false,showPercent:true,numberFormat:'0%',separator:' — '})
   if(stacked)for(const series of out.series)if(series.dataLabels===undefined){
    const textColor=colorContrast(color,series.color)>=4.5?color:colorContrast('#FFFFFF',series.color)>colorContrast('#000000',series.color)?'#FFFFFF':'#000000'
    series.dataLabels={...out.dataLabels,textStyle:{...label,color:textColor}}

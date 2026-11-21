@@ -9,6 +9,7 @@ import {buildDeckAsync} from '../skills/dsh-ppt/scripts/deck-advanced.mjs'
 import {templateCreateOptions} from '../skills/dsh-ppt/scripts/deck-templates.mjs'
 import {generationEvaluationCases} from './fixtures/generation-evaluation.mjs'
 import {semanticChartDesign} from '../skills/dsh-ppt/scripts/deck-chart-design.mjs'
+import {renderSceneChartSvg} from '../skills/dsh-ppt/scripts/deck-scene-chart-html.mjs'
 const data={kind:'column',categories:['A','B'],series:[{name:'Requests',values:[17,9]}]}
 test('signed bars keep category labels outside the plot and negative point fills in native PPTX',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'signed-chart-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
@@ -67,5 +68,26 @@ test('all eight confirmed semantic chart variants export with supported label de
  const slides=CONFIRMED_CHART_VARIANTS.map((v,i)=>({...diagramToScene({diagram:{version:2,kind:'chart',chart:selectSceneChartVariant(data,v)}},{accent:'#7C3AED',background:'#FFFFFF',color:'#242424'}),id:'chart-'+i,backgroundColor:'#FFFFFF'}))
  const built=await buildDeckAsync({title:'Chart matrix',slides,outputDir:dir,lang:'en'}),parts=unzipSync(readFileSync(built.pptxPath))
  assert.equal(Object.keys(parts).filter(p=>/^ppt\/charts\/chart\d+\.xml$/.test(p)).length,8)
- for(let i=1;i<=8;i++){const xml=strFromU8(parts['ppt/charts/chart'+i+'.xml']);assert.match(xml,/<c:title[ >]/);if(CONFIRMED_CHART_VARIANTS[i-1]!=='area')assert.match(xml,/<c:showVal val="1"/);assert.ok(xml.includes('7C3AED'))}
+ for(let i=1;i<=8;i++){const xml=strFromU8(parts['ppt/charts/chart'+i+'.xml']);assert.match(xml,/<c:title[ >]/);if(CONFIRMED_CHART_VARIANTS[i-1]==='pie'){assert.match(xml,/<c:showPercent val="1"/);assert.match(xml,/<c:showVal val="0"/)}else if(CONFIRMED_CHART_VARIANTS[i-1]!=='area')assert.match(xml,/<c:showVal val="1"/);assert.ok(xml.includes('7C3AED'))}
+})
+test('pie labels use shares of the actual total in HTML and native PPTX without changing data',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'pie-percent-'));t.after(()=>rmSync(dir,{recursive:true,force:true}))
+ const style={accent:'#79C6FF',background:'#121826',color:'#F5F7FA',fontFamily:'Arial'},theme={palette:{accent:style.accent,bg:style.background,fg:style.color}}
+ const slides=[]
+ for(const [index,values]of [[50,30,20],[100,60,40],[0,1,3],[1,1,1]].entries()){
+  const raw={kind:'pie',categories:['Equipment','Licenses','Training'],series:[{name:'Budget',values}]},before=structuredClone(raw),chart=semanticChartDesign(raw,style)
+  assert.deepEqual(raw,before);assert.deepEqual(chart.series[0].values,values)
+  assert.equal(chart.dataLabels.showValue,false);assert.equal(chart.dataLabels.showPercent,true)
+  const svg=renderSceneChartSvg(chart,theme),total=values.reduce((a,b)=>a+b,0)
+  for(const [i,v]of values.entries())assert.ok(svg.includes(chart.categories[i]+' — '+(v/total*100).toFixed(0)+'%'))
+  slides.push({...diagramToScene({diagram:{version:2,kind:'chart',chart}},style),id:'pie-'+index})
+ }
+ const built=await buildDeckAsync({title:'Shares',slides,outputDir:dir,lang:'en'}),parts=unzipSync(readFileSync(built.pptxPath))
+ for(let i=1;i<=4;i++){
+  const xml=strFromU8(parts['ppt/charts/chart'+i+'.xml'])
+  assert.match(xml,/<c:showPercent val="1"/);assert.match(xml,/<c:showVal val="0"/)
+  assert.match(xml,/<c:separator> — <\/c:separator>/);assert.match(xml,/formatCode="0%"/)
+ }
+ const explicit=semanticChartDesign({kind:'pie',categories:['A','B'],series:[{name:'S',values:[2,6]}],dataLabels:{showCategory:true,showValue:true,separator:': '}},style)
+ assert.equal(explicit.dataLabels.showPercent,undefined);assert.ok(renderSceneChartSvg(explicit,theme).includes('A: 2'))
 })

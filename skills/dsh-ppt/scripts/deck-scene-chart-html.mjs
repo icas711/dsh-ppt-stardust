@@ -6,8 +6,23 @@ export function renderSceneChartSvg(c,theme) {
  const out=[`<rect width="1000" height="600" fill="${c.chartAreaFill??theme.palette.bg}"/>`]
  const text=(x,y,s,anchor='middle')=>`<text x="${x}" y="${y}" text-anchor="${anchor}" fill="${theme.palette.fg}" font-family="${esc(c.titleStyle?.font??'sans-serif')}" font-size="18">${esc(s)}</text>`
  if(c.title)out.push(text(500,30,c.title))
+ const circularLabel=(i,value,total)=>{
+  const series=c.series[0],base=series.dataLabels??c.dataLabels
+  if(!base)return c.categories[i]+': '+value
+  const labels={...base,...series.pointDataLabels?.[i]}
+  if(labels.text!==undefined)return labels.text
+  const parts=[]
+  if(labels.showSeriesName)parts.push(series.name)
+  if(labels.showCategory)parts.push(c.categories[i])
+  if(labels.showValue)parts.push(String(value))
+  if(labels.showPercent){
+   const format=labels.numberFormat??'0%',decimals=/\.(0+)[#0]*%/.exec(format)?.[1].length??0
+   parts.push((total?value/total*100:0).toFixed(Math.min(decimals,10))+'%')
+  }
+  return parts.join(labels.separator??'; ')
+ }
  if(circular){const values=c.series[0].values,total=values.reduce((a,b)=>a+b,0);let a=(c.firstSliceAngleDeg??0)*Math.PI/180-Math.PI/2
- values.forEach((v,i)=>{const b=a+v/total*Math.PI*2,col=c.series[0].pointColors?.[i]??[theme.palette.accent,theme.palette.accent2,'#55B5AA','#A580D3'][i%4],r=200,cx=370,cy=280;if(v===total)out.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}"/>`);else if(v>0)out.push(`<path d="M ${cx} ${cy} L ${cx+r*Math.cos(a)} ${cy+r*Math.sin(a)} A ${r} ${r} 0 ${b-a>Math.PI?1:0} 1 ${cx+r*Math.cos(b)} ${cy+r*Math.sin(b)} Z" fill="${col}"/>`);out.push(text(650,90+i*28,c.categories[i]+': '+v,'start'));a=b})
+ values.forEach((v,i)=>{const b=a+v/total*Math.PI*2,col=c.series[0].pointColors?.[i]??[theme.palette.accent,theme.palette.accent2,'#55B5AA','#A580D3'][i%4],r=200,cx=370,cy=280;if(v===total)out.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}"/>`);else if(v>0)out.push(`<path d="M ${cx} ${cy} L ${cx+r*Math.cos(a)} ${cy+r*Math.sin(a)} A ${r} ${r} 0 ${b-a>Math.PI?1:0} 1 ${cx+r*Math.cos(b)} ${cy+r*Math.sin(b)} Z" fill="${col}"/>`);const label=circularLabel(i,v,total);if(label)out.push(text(650,90+i*28,label,'start'));a=b})
  if(c.kind==='doughnut')out.push(`<circle cx="370" cy="280" r="${200*(c.holeSizePct??50)/100}" fill="${c.plotAreaFill??c.chartAreaFill??theme.palette.bg}"/>`)
  }else{
  const stacked=['stacked','percentStacked'].includes(c.grouping),percent=c.grouping==='percentStacked',totals=c.categories.map((_,i)=>c.series.reduce((a,s)=>a+Math.max(0,s.values[i]),0)),negative=c.categories.map((_,i)=>c.series.reduce((a,s)=>a+Math.min(0,s.values[i]),0))
