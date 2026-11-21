@@ -32,22 +32,24 @@ export function composeTableCreate(value,{title,lang,template,maxSlides=120,sign
   const checked=validateGenerationSpec(spec,context)
   if(!checked.valid)fail(checked.diagnostics.map(d=>`${d.path}: ${d.message}`).join('; '),checked.diagnostics)
   const options={template,context,allowMoreSlides:value.allowMoreSlides===true,maxSlides,signal}
-  // Imported templates may classify a sparse title page as content. Choose a
-  // fitting content reference in this same template, never override an explicit ID.
+  // Imported templates may classify a sparse title page as content. Prefer the
+  // fitting reference requiring fewer pages, never override an explicit ID.
   for(const slide of spec.slides){
     if(slide.designLayout)continue
-    let lastError
+    let lastError,best
     for(const layout of template?.manifest?.style?.layouts??[]){
       if(layout.purpose!=='content')continue
       try{
-        composeGenerationSpec({...spec,slides:[{...slide,designLayout:layout.id}]},options)
-        slide.designLayout=layout.id;break
+        const candidate=composeGenerationSpec({...spec,slides:[{...slide,designLayout:layout.id}]},options)
+        const pages=candidate.report.slideCount,space=Math.min(...candidate.report.placements.map(p=>p.region.w*p.region.h))
+        if(!best||pages<best.pages||pages===best.pages&&space>best.space)best={id:layout.id,pages,space}
       }catch(e){
         if(!['component-capacity','component-slide-limit'].includes(e.code))throw e
         lastError=e
       }
     }
-    if(!slide.designLayout&&lastError)throw lastError
+    if(best)slide.designLayout=best.id
+    else if(lastError)throw lastError
   }
   return composeGenerationSpec(spec,options)
 }

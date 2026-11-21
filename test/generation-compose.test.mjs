@@ -89,6 +89,53 @@ test('unfittable single items fail without shrinking fonts or dropping facts',()
   assert.throws(()=>compose(input,{allowMoreSlides:true}),e=>e.code==='component-capacity'&&e.itemIndex===0)
 })
 
+test('oversized table rows continue with exact cell ranges, stable columns and explicit row labels',()=>{
+  const rows=[['1','Short opening','0,00'],[null,('Long source paragraph with 50\u00a0000 units and emoji 😀. \n\n').repeat(35)+'Trailing spaces  ','12,50%'],['3','Short ending',null]]
+  const input=spec([{type:'table',sourceRefs,headers:['№','Description','Amount'],rows}]),before=structuredClone(input)
+  const r=compose(input,{allowMoreSlides:true})
+  assert.deepEqual(input,before)
+  const recovered=rows.map(row=>row.map(v=>v===null?null:'')),widths=[]
+  for(const [i,placement]of r.report.placements.entries()){
+    const slide=r.create.slides[i],table=slide.elements.find(e=>e.type==='table').table
+    widths.push(table.columns)
+    const value=(row,col)=>table.cells.find(c=>c.row===row&&c.col===col).paragraphs.flatMap(p=>p.runs.map(r=>r.text??'')).join('')
+    assert.deepEqual(table.cells.filter(c=>c.row===0).map(c=>c.paragraphs[0].runs[0].text),input.slides[0].visual.headers)
+    for(let row=placement.rowStart;row<=placement.rowEnd;row++)for(let col=0;col<3;col++){
+      if(rows[row-1][col]!==null)recovered[row-1][col]+=value(row-placement.rowStart+1,col)
+    }
+    if(placement.rowContinuation){
+      const continued=placement.rowContinuation
+      assert.equal(continued.sourceRow,2)
+      assert.ok(slide.elements.some(e=>e.id==='gen-table-continuation'&&e.paragraphs[0].runs[0].text.includes(`${continued.part}/${continued.parts}`)))
+      assert.ok(slide.notes.includes('Empty continuation cells'))
+      for(let col=0;col<3;col++){
+        const range=continued.cellRanges[col]
+        if(range)assert.equal(value(1,col),rows[1][col].slice(range.start,range.end))
+        else assert.equal(value(1,col),continued.part===1?'—':'')
+      }
+    }
+    assert.ok(table.cells.every(c=>c.textStyle.size===18))
+  }
+  assert.ok(r.report.placements.filter(p=>p.rowContinuation).length>1)
+  assert.deepEqual(recovered,rows)
+  assert.ok(widths.every(w=>JSON.stringify(w)===JSON.stringify(widths[0])))
+  assert.throws(()=>compose(input),{code:'component-capacity'})
+  assert.throws(()=>compose(input,{allowMoreSlides:true,maxSlides:2}),{code:'component-slide-limit'})
+  const single=spec([{type:'table',sourceRefs,headers:['№','Description','Amount'],rows:[rows[1]]}])
+  assert.ok(compose(single,{allowMoreSlides:true}).report.slideCount>1)
+})
+
+test('empty index columns stay compact beside long table paragraphs',()=>{
+  const r=compose(spec([{type:'table',sourceRefs,headers:['№','Description','Notes'],rows:[[null,'Descriptive project name','Long note '.repeat(25)]]}]),{allowMoreSlides:true})
+  const table=r.create.slides[0].elements.find(e=>e.type==='table').table
+  assert.ok(table.columns[0]<table.columns[2]/3)
+})
+
+test('row continuation still rejects a header that leaves no room for a fragment',()=>{
+  const input=spec([{type:'table',sourceRefs,headers:['Long heading '.repeat(38),'Value'],rows:[[null,'Unchanged source value']]}])
+  assert.throws(()=>compose(input,{allowMoreSlides:true}),e=>e.code==='component-capacity'&&e.itemIndex===0)
+})
+
 test('pie and line graphs are not divided into misleading partial charts',()=>{
   const v={type:'chart',sourceRefs,kind:'pie',whole:true,unit:'share',categories:Array.from({length:24},(_,i)=>'Category '+i),series:[{name:'Share',values:Array(24).fill(1)}]}
   assert.throws(()=>compose(spec([v]),{allowMoreSlides:true}),{code:'component-capacity'})

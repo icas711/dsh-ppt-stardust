@@ -66,6 +66,22 @@ test('table creation rejects malformed data, unknown fields and sources, synthet
   assert.ok(compose(demo).create.slides.every(s=>s.elements.some(e=>e.id==='gen-disclosure')))
 })
 
+test('automatic table reference selection avoids unnecessary row fragmentation',()=>{
+  const t=template(),wide=structuredClone(t.manifest.style.layouts.find(l=>l.purpose==='content'))
+  wide.id='wide-reference'
+  const narrow=structuredClone(wide);narrow.id='narrow-reference'
+  const page=t.manifest.style.pageSize
+  narrow.elements.push({id:'side-artwork',role:'decor',type:'shape',preset:'ellipse',frame:{x:Math.round(page.width*.45),y:Math.round(page.height*.25),w:Math.round(page.width*.5),h:Math.round(page.height*.65)},fill:{color:'#112233'}})
+  t.manifest.style.layouts=[narrow,wide]
+  const value=input();value.tables[0].rows=[['Long source paragraph '.repeat(50),'Ready']]
+  value.tables[0].designLayout=narrow.id
+  const cramped=compose(value,{template:t})
+  delete value.tables[0].designLayout
+  const selected=compose(value,{template:t})
+  assert.ok(selected.report.slideCount<cramped.report.slideCount)
+  assert.ok(selected.create.slides.every(s=>s.designLayout===wide.id))
+})
+
 test('ppt_create tool publishes the full portable table contract',()=>{
   const definition=buildPptTools(resolvePptConfig({})).find(t=>t.name==='ppt_create')
   assert.deepEqual(definition.parameters.properties.tableSpec.required,tableCreateSchema().required)

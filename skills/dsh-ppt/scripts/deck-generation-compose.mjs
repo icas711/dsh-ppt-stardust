@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto'
 
 const EMU=914400,PT=12700,GAP=Math.round(.14*EMU),PAD=Math.round(.17*EMU)
 const clone=v=>JSON.parse(JSON.stringify(v))
-export const GENERATION_COMPONENT_VERSION=5
+export const GENERATION_COMPONENT_VERSION=6
 export const GENERATION_ICON_IDS=Object.freeze(['check','clock','target','trend'])
 function fail(code,message,extra={}){const e=new Error('dsh-ppt: '+message);e.code=code;Object.assign(e,extra);throw e}
 const frame=(x,y,w,h)=>Object.fromEntries(Object.entries({x,y,w,h}).map(([k,v])=>[k,Math.round(v)]))
@@ -212,18 +212,80 @@ function tableData(v,lang){
   const detail=v.items.some(i=>i.detail!==undefined)
   return {headers:[lang==='ru'?'Критерий':lang==='zh'?'标准':'Criterion',...v.items.map(i=>i.label)],rows:[...v.criteria.map((c,i)=>[c,...v.items.map(item=>item.values[i])]),...(detail?[[lang==='ru'?'Пояснение':lang==='zh'?'说明':'Detail',...v.items.map(i=>i.detail??null)]]:[])]}
 }
-function nativeTable(v,b,s,lang){
-  const {headers,rows}=tableData(v,lang),matrix=[headers,...rows],count=headers.length
-  const weights=headers.map((_,col)=>Math.max(6,Math.min(30,Math.max(...matrix.map(row=>Math.sqrt([...String(row[col]??'—')].length)*4)))))
-  // A minimum column share prevents one long value from starving all neighbours.
-  const sum=weights.reduce((a,b)=>a+b,0),columns=weights.map(w=>Math.floor(b.w*(.45/count+.55*w/sum)))
+function tableWeights(headers,rows){
+  const weights=headers.map((_,col)=>Math.sqrt(Math.max(...rows.map(row=>[...String(row[col]??'')].length))))
+  return weights.some(w=>w>0)?weights:weights.map(()=>1)
+}
+function tableMetrics(v,b,s,lang){
+  const {headers,rows}=tableData(v,lang),matrix=[headers,...rows]
+  const weights=v.columnWeights??tableWeights(headers,rows)
+  // Reserve readable headings, then give long data more room. An empty index
+  // column must not consume the same minimum share as a paragraph column.
+  const minima=headers.map(label=>Math.max(.5*EMU,Math.min(1.5*EMU,[...label].reduce((w,c)=>w+glyphWidth(c,s.styles.body.size),0)+2*PAD+4*PT)))
+  const minimumSum=minima.reduce((a,b)=>a+b,0),scale=Math.min(1,b.w*.6/minimumSum),available=b.w-minimumSum*scale
+  const sum=weights.reduce((a,b)=>a+b,0),columns=weights.map((w,col)=>Math.floor(minima[col]*scale+available*w/sum))
   columns[columns.length-1]+=b.w-columns.reduce((a,b)=>a+b,0)
   const styles=matrix.map((_,i)=>i===0?styled(s.styles.body,{bold:true,color:ink(s.accent)}):s.styles.body)
   const heights=matrix.map((row,i)=>Math.ceil(Math.max(...row.map((value,col)=>estimateGenerationTextHeight(value??'—',columns[col]-2*PAD,styles[i])))+2*PAD))
+  return {matrix,columns,styles,heights}
+}
+function nativeTable(v,b,s,lang){
+  const {matrix,columns,styles,heights}=tableMetrics(v,b,s,lang)
   const height=heights.reduce((a,b)=>a+b,0)
   if(height>b.h)fail('component-capacity','Table requires more vertical space')
   const cells=matrix.flatMap((row,r)=>row.map((value,col)=>({row:r,col,paragraphs:[{runs:[{text:String(value??'—')}]}],textStyle:clone(styles[r]),textFrame:{anchor:'center',margins:{left:PAD,right:PAD,top:PAD,bottom:PAD}},fill:r===0?s.accent:r%2?s.surface:s.background})))
   return [{id:'gen-table',type:'table',frame:frame(b.x,b.y,b.w,height),table:{columns,rows:heights,cells}}]
+}
+
+// Split only a row that cannot fit whole, and only under the caller's explicit
+// pagination policy. Offsets retain every source character, including whitespace.
+function fittingPrefix(value,width,height,style){
+  const chars=[...value]
+  let low=0,high=chars.length
+  while(low<high){
+    const mid=Math.ceil((low+high)/2)
+    if(estimateGenerationTextHeight(chars.slice(0,mid).join(''),width,style)<=height)low=mid
+    else high=mid-1
+  }
+  if(!low)return ''
+  const prefix=chars.slice(0,low).join('')
+  if(low===chars.length)return prefix
+  // Keep words together where possible, preserving the separator in this part.
+  const breaks=[...prefix.matchAll(/[^\S\u00a0\u202f]+/gu)]
+  const last=breaks.at(-1)
+  return last?prefix.slice(0,last.index+last[0].length):prefix
+}
+function splitTableRow(v,rowIndex,s,lang,{maxParts,signal}){
+  const row=v.rows[rowIndex]
+  for(const region of [...s.regions].sort((a,b)=>b.w-a.w||area(b)-area(a))){
+    const chunks=[],remaining=row.map(value=>value??''),offsets=row.map(()=>0)
+    const caption=part=>lang==='ru'?`Строка ${rowIndex+1} · часть ${part}`:lang==='zh'?`第 ${rowIndex+1} 行 · 第 ${part} 部分`:`Row ${rowIndex+1} · part ${part}`
+    const captionHeight=estimateGenerationTextHeight(caption('120/120'),region.w,s.styles.body)
+    const box=frame(region.x,region.y+captionHeight+GAP,region.w,region.h-captionHeight-GAP)
+    if(box.h<=0)continue
+    const metrics=tableMetrics({...v,rows:[row]},box,s,lang),cellHeight=box.h-metrics.heights[0]-2*PAD
+    if(estimateGenerationTextHeight('',Math.min(...metrics.columns)-2*PAD,s.styles.body)>cellHeight)continue
+    let failed=false
+    do{
+      signal?.throwIfAborted()
+      const pieces=remaining.map((value,col)=>fittingPrefix(value,metrics.columns[col]-2*PAD,cellHeight,s.styles.body))
+      if(!pieces.some(value=>value.length)){failed=true;break}
+      if(chunks.length>=maxParts)fail('component-slide-limit','Row continuation exceeds the allowed slide count',{itemIndex:rowIndex})
+      const cellRanges=pieces.map((piece,col)=>row[col]===null?null:{start:offsets[col],end:offsets[col]+piece.length})
+      const fragment=pieces.map((piece,col)=>row[col]===null&&!chunks.length?null:piece)
+      const elements=nativeTable({...v,rows:[fragment]},box,s,lang)
+      chunks.push({elements,region,composition:'table-row-continuation',start:rowIndex,end:rowIndex+1,rowContinuation:{sourceRow:rowIndex+1,part:chunks.length+1,cellRanges}})
+      pieces.forEach((piece,col)=>{offsets[col]+=piece.length;remaining[col]=remaining[col].slice(piece.length)})
+    }while(remaining.some(value=>value.length))
+    if(failed)continue
+    for(const chunk of chunks){
+      chunk.rowContinuation.parts=chunks.length
+      const captionBox=frame(region.x,region.y,region.w,captionHeight)
+      chunk.elements.unshift(shape('gen-table-continuation-bg',captionBox,s.background,'rect'),text('gen-table-continuation',caption(`${chunk.rowContinuation.part}/${chunks.length}`),captionBox,s.styles.body))
+    }
+    return chunks
+  }
+  return null
 }
 function nativeChart(v,b,s){
   const size=s.styles.body.size,labels=v.categories,n=labels.length
@@ -326,7 +388,9 @@ export function composeGenerationSpec(input,{template,context,assets={},allowMor
     catch(e){
       if(e.code!=='component-capacity')throw e
       const n=count(source.visual)
-      if(!allowMoreSlides||n<2||source.visual.type==='chart'&&!['column','bar'].includes(source.visual.kind))fail('component-capacity','Slide cannot fit without changing content or typography',{slideId:source.id,path:`spec.slides[${index}].visual`})
+      if(!allowMoreSlides||(n<2&&source.visual.type!=='table')||(source.visual.type==='chart'&&!['column','bar'].includes(source.visual.kind)))fail('component-capacity','Slide cannot fit without changing content or typography',{slideId:source.id,path:`spec.slides[${index}].visual`})
+      // Freeze the full table's column proportions across physical pages.
+      const visual=source.visual.type==='table'?{...source.visual,columnWeights:tableWeights(source.visual.headers,source.visual.rows)}:source.visual
       let start=0
       while(start<n){
         signal?.throwIfAborted();let chosen
@@ -335,10 +399,18 @@ export function composeGenerationSpec(input,{template,context,assets={},allowMor
         const alternatives=source.visual.type==='table'?[...s.regions].sort((a,b)=>b.w-a.w||area(b)-area(a)).map(region=>({...s,regions:[region]})):[s]
         for(const composition of alternatives){
           for(let end=n;end>start;end--){
-            try{chosen={...render(slice(source.visual,start,end),composition,input.lang,start),start,end};break}
+            try{chosen={...render(slice(visual,start,end),composition,input.lang,start),start,end};break}
             catch(err){if(err.code!=='component-capacity')throw err}
           }
           if(chosen)break
+        }
+        if(!chosen&&visual.type==='table'){
+          const continued=splitTableRow(visual,start,s,input.lang,{maxParts:maxSlides-slides.length-chunks.length,signal})
+          if(continued){
+            chunks.push(...continued)
+            diagnostics.push({severity:'info',code:'table-row-paginated',path:`spec.slides[${index}].visual.rows[${start}]`,slideId:source.id,message:`Source row ${start+1} retained across ${continued.length} slides; blank continuation cells contain no further text`})
+            start++;continue
+          }
         }
         if(!chosen)fail('component-capacity','One source item cannot fit; no facts were removed',{slideId:source.id,path:`spec.slides[${index}].visual`,itemIndex:start})
         chunks.push(chosen);start=chosen.end
@@ -351,10 +423,10 @@ export function composeGenerationSpec(input,{template,context,assets={},allowMor
       let id=source.id
       if(part){let suffix=part+1;do{id=source.id.slice(0,90)+'-part-'+suffix++}while(reserved.has(id));reserved.add(id)}
       const sourceRefs=[...new Set([...source.visual.sourceRefs,...(source.visual.items??[]).flatMap(i=>i.sourceRefs??[])])]
-      const notes=[source.notes,...sourceRefs.map(ref=>'Source: '+ref),...(chunks.length>1?[`Continuation ${part+1}/${chunks.length}; items ${chunk.start+1}–${chunk.end}/${count(source.visual)}`]:[])].filter(Boolean).join('\n')
+      const notes=[source.notes,...sourceRefs.map(ref=>'Source: '+ref),...(chunks.length>1?[`Continuation ${part+1}/${chunks.length}; items ${chunk.start+1}–${chunk.end}/${count(source.visual)}`]:[]),...(chunk.rowContinuation?[`Source row ${chunk.rowContinuation.sourceRow}; fragment ${chunk.rowContinuation.part}/${chunk.rowContinuation.parts}. Empty continuation cells have no further text; unknown values are shown as an em dash in the first fragment.`]:[])].filter(Boolean).join('\n')
       const elements=[clone(s.title),...chunk.elements,...(s.footerBackdrop?[clone(s.footerBackdrop)]:[]),...(s.footer?[clone(s.footer)]:[])]
       slides.push(normalizeSceneSlide({id,layout:'scene',purpose:source.purpose,designLayout:layout.id,label:source.title,notes,elements},{assets}))
-      placements.push({slideId:id,sourceSlideId:source.id,component:source.visual.type,composition:chunk.composition,region:clone(chunk.region),part:part+1,parts:chunks.length})
+      placements.push({slideId:id,sourceSlideId:source.id,component:source.visual.type,composition:chunk.composition,region:clone(chunk.region),part:part+1,parts:chunks.length,...(source.visual.type==='table'?{rowStart:chunk.start+1,rowEnd:chunk.end}:{}),...(chunk.rowContinuation?{rowContinuation:clone(chunk.rowContinuation)}:{})})
     })
   }
   signal?.throwIfAborted()
